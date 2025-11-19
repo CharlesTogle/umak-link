@@ -259,7 +259,7 @@ export default function FraudReport () {
               <IonRefresherContent />
             </IonRefresher>
 
-            <div>
+            <div className={`${hasMore ? 'mb-25' : 'mb-30'}`}>
               {filteredReports.map(report => (
                 <FraudReportCard
                   key={report.report_id}

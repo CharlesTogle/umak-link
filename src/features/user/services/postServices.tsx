@@ -265,7 +265,8 @@ export const postServices = {
           p_last_seen_hours: lastSeenHours,
           p_last_seen_minutes: lastSeenMinutes,
           p_location_path: locationPath,
-          p_item_status: 'unclaimed',
+          p_item_status:
+            postData.item.type === 'found' ? 'unclaimed' : 'missing',
           p_category: postData.category,
           p_post_status: 'pending',
           p_is_anonymous: postData.anonymous

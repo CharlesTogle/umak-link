@@ -7,14 +7,14 @@ import {
   IonList
 } from '@ionic/react'
 import { logOut } from 'ionicons/icons'
-import { useUser } from '@/features/auth/contexts/UserContext'
 import { useNavigation } from '@/shared/hooks/useNavigation'
 import { useAuth } from '@/features/auth/hooks/useAuth'
+import { useUser } from '@/features/auth/contexts/UserContext'
 
 export default function Logout () {
-  const { clearUser } = useUser()
   const { navigate } = useNavigation()
   const { logout } = useAuth()
+  const { clearUser } = useUser()
 
   const handleLogout = async () => {
     await logout()

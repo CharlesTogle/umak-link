@@ -181,7 +181,7 @@ export default function PostRecords () {
   }
 
   const handlePostClick = (postId: string) => {
-    navigate(`/staff/post/view/${postId}`)
+    navigate(`/staff/post-record/view/${postId}`)
   }
 
   const handleActionSheetClick = async (
@@ -194,7 +194,7 @@ export default function PostRecords () {
 
     switch (action) {
       case 'view':
-        navigate(`/staff/post/view/${id}`)
+        navigate(`/staff/post-record/view/${id}`)
         break
       case 'share':
         const result = await sharePost(id, 'user')

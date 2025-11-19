@@ -171,7 +171,15 @@ const Auth: React.FC = () => {
         return
       }
       await refreshUser(user?.user_id || '')
-      navigate('/user/home', 'auth')
+      const getRouteByUserType = (userType: string): string => {
+        const type = userType.toLowerCase()
+        const routeMap: Record<string, string> = {
+          admin: '/admin/dashboard',
+          staff: '/staff/home'
+        }
+        return routeMap[type] || '/user/home'
+      }
+      navigate(getRouteByUserType(user.user_type), 'auth')
       setGoogleLoading(false)
     } catch (error) {
       console.error('Google sign-in error:', error)

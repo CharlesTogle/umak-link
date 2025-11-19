@@ -60,7 +60,7 @@ const PostSkeleton = () => (
   </IonCard>
 )
 
-type ItemTypeFilter = 'all' | 'found' | 'lost'
+type ItemTypeFilter = 'all' | 'found' | 'missing'
 
 export default function Home () {
   const PAGE_SIZE = 5
@@ -113,7 +113,7 @@ export default function Home () {
   const filterOptions: FilterOption<ItemTypeFilter>[] = [
     { value: 'all', label: 'All Items' },
     { value: 'found', label: 'Found Items' },
-    { value: 'lost', label: 'Missing Items' }
+    { value: 'missing', label: 'Missing Items' }
   ]
 
   const sortOptions: SortOption[] = [

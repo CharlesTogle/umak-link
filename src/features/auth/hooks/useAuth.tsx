@@ -1,10 +1,10 @@
 import { authServices, type GoogleProfile } from '../services/authServices'
-
 /**
  * Hook to access auth services.
  * Wraps authServices to provide a cleaner API for components.
  */
 export function useAuth () {
+
   /**
    * Get or register an account using Google authentication
    */

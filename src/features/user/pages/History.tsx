@@ -124,7 +124,7 @@ export default function History () {
         sortModalTitle='Sort display order by'
         sortButtonLabel={sortDir === 'desc' ? 'Recent Upload' : 'Oldest Upload'}
       />
-      <div>
+      <div className='h-full'>
         <PostList
           posts={posts}
           fetchPosts={fetchPosts}

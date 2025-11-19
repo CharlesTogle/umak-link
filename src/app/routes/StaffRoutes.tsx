@@ -4,6 +4,7 @@ import Home from '../../features/staff/pages/Home'
 import PostRecords from '../../features/staff/pages/PostRecords'
 import FraudReport from '../../features/staff/pages/FraudReports'
 import ExpandedFraudReport from '../../features/staff/pages/ExpandedFraudReport'
+import ExpandedPostRecord from '../../features/staff/pages/ExpandedPostRecord'
 import Settings from '../../features/staff/pages/Settings'
 import ClaimItem from '../../features/staff/pages/ClaimItem'
 import Toolbar from '@/app/components/Toolbar'
@@ -34,6 +35,11 @@ export default function StaffRoutes () {
           exact
           path='/staff/post-records'
           render={() => <PostRecords />}
+        />
+        <Route
+          exact
+          path='/staff/post-record/view/:postId'
+          render={() => <ExpandedPostRecord />}
         />
         <Route
           exact

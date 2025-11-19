@@ -83,9 +83,9 @@ const Post: React.FC<CatalogPostProps> = ({
           <div className='font-semibold text-umak-blue pl-3 flex items-center gap-2'>
             <p>{username}</p>
             {showAnonIndicator && (
-              <IonChip color='medium' className='ml-2 text-xs px-2 py-0 h-6'>
+              <span className='text-xs font-normal bg-gray-200 text-gray-700 px-2 py-0.5 rounded'>
                 Anonymous
-              </IonChip>
+              </span>
             )}
           </div>
         </IonLabel>

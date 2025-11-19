@@ -121,6 +121,19 @@ function Header ({
   const handleProfileClick = useCallback(() => {
     navigate('/account')
   }, [navigate])
+  const handleLogoClick = useCallback(() => {
+    if (!user?.user_type) {
+      navigate('/home')
+      return
+    }
+
+    const userType = user.user_type.toLowerCase()
+    if (userType === 'admin') {
+      navigate('/admin/dashboard')
+    } else {
+      navigate(`/${userType}/home`)
+    }
+  }, [navigate, user?.user_type])
   const notificationIconClass = isNotificationPage
     ? 'text-amber-500 '
     : 'text-white'
@@ -129,7 +142,7 @@ function Header ({
       <IonToolbar style={toolbarStyle}>
         <IonButtons slot='start'>
           {logoShown && (
-            <IonButton>
+            <IonButton onClick={handleLogoClick}>
               <IonIcon
                 icon={ohsoIcon}
                 slot='icon-only'

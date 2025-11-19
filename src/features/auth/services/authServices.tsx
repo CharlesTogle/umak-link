@@ -5,7 +5,6 @@ import type { User } from '@/features/auth/contexts/UserContext'
 import { saveCachedImage } from '@/shared/utils/fileUtils'
 import { makeThumb } from '@/shared/utils/imageUtils'
 import { registerForPushNotifications } from '@/features/auth/services/registerForPushNotifications'
-import { useUser } from '@/features/auth/contexts/UserContext'
 
 export interface GoogleProfile {
   googleIdToken: string
@@ -151,10 +150,9 @@ export const authServices = {
    */
   Logout: async (): Promise<{ error: string | null }> => {
     try {
+      console.log('[authServices] Logout called')
       // 1. Sign out from Supabase
       const { error: supabaseError } = await supabase.auth.signOut()
-      const { clearUser } = useUser()
-      clearUser()
 
       if (supabaseError) {
         console.error('[authServices] Logout supabase error:', supabaseError)
