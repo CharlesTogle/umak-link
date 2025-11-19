@@ -18,19 +18,7 @@ import { useNavigation } from '@/shared/hooks/useNavigation'
 import { sharePost } from '@/shared/utils/shareUtils'
 import { useUser } from '@/features/auth/contexts/UserContext'
 
-export default function PostList ({
-  posts,
-  children,
-  ref,
-  fetchPosts,
-  hasMore,
-  loadMorePosts,
-  ionFabButton,
-  fetchNewPosts,
-  onClick,
-  variant = 'user',
-  handleRefresh: customHandleRefresh
-}: {
+interface PostListProps {
   ref?: React.RefObject<HTMLIonContentElement | null>
   posts: PublicPost[]
   children?: React.ReactNode
@@ -45,9 +33,24 @@ export default function PostList ({
   sortDirection?: 'asc' | 'desc'
   pageSize: number
   onClick?: (postId: string) => void | undefined
-  variant?: 'user' | 'staff' | 'search'
+  variant?: 'user' | 'staff' | 'search' | 'staff-pending'
   handleRefresh?: (event: CustomEvent) => Promise<void>
-}) {
+}
+
+export default function PostList ({
+  posts,
+  children,
+  ref,
+  fetchPosts,
+  hasMore,
+  loadMorePosts,
+  ionFabButton,
+  fetchNewPosts,
+  onClick,
+  variant = 'user',
+  handleRefresh: customHandleRefresh,
+  setPosts
+}: PostListProps) {
   const [isRefreshingContent, setRefreshingContent] = useState<boolean>(false)
   const [showActions, setShowActions] = useState(false)
   const [activePostId, setActivePostId] = useState<string | null>(null)
@@ -107,8 +110,8 @@ export default function PostList ({
   )
 
   return (
-    <IonContent ref={ref} className='mb-16 bg-default-bg'>
-      <div className='pb-6'>
+    <IonContent ref={ref} className='bg-default-bg'>
+      <div className={`pb-6 ${hasMore ? 'mb-16' : 'mb-25'}`}>
         <IonRefresher slot='fixed' onIonRefresh={handleRefresh}>
           <IonRefresherContent />
         </IonRefresher>
@@ -155,6 +158,9 @@ export default function PostList ({
                   variant={variant}
                   is_anonymous={post.is_anonymous}
                   showAnonIndicator={showAnonIndicator}
+                  item_type={post.item_type}
+                  setPosts={setPosts}
+                  user_id={post.user_id}
                 />
               )
             })}
@@ -173,7 +179,7 @@ export default function PostList ({
         ) : (
           !loading &&
           !hasMore && (
-            <p className='mb-10 h-15 flex justify-center items-center text-gray-400'>
+            <p className='mb-10 py-4 flex justify-center items-center text-gray-400'>
               You're all caught up!
             </p>
           )

@@ -257,7 +257,6 @@ export async function listPendingPosts (
     `
     )
     .order('submission_date', { ascending: false })
-    .eq('item_type', 'found')
     .eq('post_status', 'pending')
 
   if (excludeIds && excludeIds.length > 0) {

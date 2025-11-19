@@ -14,9 +14,17 @@ import {
   IonSpinner
 } from '@ionic/react'
 import { ellipsisVertical, personCircle } from 'ionicons/icons'
-import { usePostActions } from '@/features/user/hooks/usePostActions'
 import { formatTimestamp } from '@/shared/utils/formatTimeStamp'
 import { ChoiceModal } from './ChoiceModal'
+import { useUser } from '@/features/auth/contexts/UserContext'
+import {
+  handleMatch as performMatch,
+  handleDeleteSubmit,
+  handleRejectSubmit,
+  handleAccept,
+  deleteReasons,
+  rejectReasons
+} from '@/features/staff/utils/catalogPostHandlers'
 
 export type CatalogPostProps = {
   username?: string
@@ -31,9 +39,12 @@ export type CatalogPostProps = {
   itemStatus?: string | null
   onClick?: (postId: string) => void | undefined
   postId?: string
-  variant?: 'user' | 'staff' | 'search' | 'postRecords'
+  variant?: 'user' | 'staff' | 'search' | 'postRecords' | 'staff-pending'
   is_anonymous?: boolean
   showAnonIndicator?: boolean
+  item_type?: string | null
+  setPosts?: React.Dispatch<React.SetStateAction<any[]>>
+  user_id?: string
 }
 
 const CatalogPost: React.FC<CatalogPostProps> = ({
@@ -51,7 +62,10 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
   postId,
   variant = 'user',
   is_anonymous = false,
-  showAnonIndicator = false
+  showAnonIndicator = false,
+  item_type = null,
+  setPosts,
+  user_id
 }) => {
   const normalizedStatus = (itemStatus || '').toLowerCase()
   const statusColorClass =
@@ -61,7 +75,7 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
       ? 'text-green-600'
       : ''
 
-  const { acceptPost, rejectPost } = usePostActions()
+  const { user } = useUser()
   const [isProcessing, setIsProcessing] = useState(false)
   const [toast, setToast] = useState<{
     show: boolean
@@ -72,41 +86,39 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
     message: '',
     color: 'success'
   })
-  const [showChoiceModal, setShowChoiceModal] = useState(false)
-
-  const rejectChoices = [
-    'Item is not identified in storage.',
-    "Details don't match the item in question.",
-    'This is a spam or malicious post.',
-    'There is more than 1 instance of this post.'
-  ]
+  const [showRejectModal, setShowRejectModal] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
 
   // Staff action handlers
-  const handleReject = (e: React.MouseEvent) => {
+  const handleRejectClick = (e: React.MouseEvent) => {
     e.stopPropagation()
     if (!postId || isProcessing) return
-    // Open choice modal to select rejection reason
-    setShowChoiceModal(true)
+    setShowRejectModal(true)
   }
 
-  const handleRejectSubmit = async (choice: string) => {
-    if (!postId || isProcessing) return
-    setShowChoiceModal(false)
+  const handleRejectChoice = async (choice: string) => {
+    if (!postId || isProcessing || !user_id || !user?.user_id) return
+    setShowRejectModal(false)
     setIsProcessing(true)
-    const result = await rejectPost(postId, itemName, choice)
+
+    const result = await handleRejectSubmit(
+      postId,
+      user_id,
+      itemName,
+      choice,
+      user.user_id
+    )
+
     setIsProcessing(false)
     if (result.success) {
+      if (setPosts) {
+        setPosts((prev: any[]) => prev.filter((p: any) => p.post_id !== postId))
+      }
       setToast({
         show: true,
         message: 'Post rejected successfully',
         color: 'success'
       })
-      // Dispatch custom event for post status change and include reason
-      window.dispatchEvent(
-        new CustomEvent('post:statusChanged', {
-          detail: { postId, newStatus: 'rejected', reason: choice }
-        })
-      )
     } else {
       setToast({
         show: true,
@@ -116,29 +128,99 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
     }
   }
 
-  const handleAccept = async (e: React.MouseEvent) => {
+  const handleAcceptClick = async (e: React.MouseEvent) => {
     e.stopPropagation()
-    if (!postId || isProcessing) return
+    if (!postId || isProcessing || !user_id || !user?.user_id) return
 
     setIsProcessing(true)
-    const result = await acceptPost(postId, itemName)
+    const result = await handleAccept(postId, user_id, itemName, user.user_id)
     setIsProcessing(false)
+
     if (result.success) {
+      if (setPosts) {
+        setPosts((prev: any[]) => prev.filter((p: any) => p.post_id !== postId))
+      }
       setToast({
         show: true,
         message: 'Post accepted successfully',
         color: 'success'
       })
-      // Dispatch custom event for post status change
-      window.dispatchEvent(
-        new CustomEvent('post:statusChanged', {
-          detail: { postId, newStatus: 'accepted' }
-        })
-      )
     } else {
       setToast({
         show: true,
         message: result.error || 'Failed to accept post',
+        color: 'danger'
+      })
+    }
+  }
+
+  // Staff-pending variant handlers for Match and Delete
+  const handleMatchClick = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!postId || isProcessing || !user_id) return
+
+    setIsProcessing(true)
+    const result = await performMatch(
+      postId,
+      itemName,
+      description,
+      imageUrl || null,
+      user_id
+    )
+    setIsProcessing(false)
+
+    if (result.success) {
+      const matchCount = result.total_matches || 0
+      setToast({
+        show: true,
+        message:
+          matchCount > 0
+            ? `Found ${matchCount} potential match${matchCount > 1 ? 'es' : ''}`
+            : 'No matches found',
+        color: matchCount > 0 ? 'success' : 'warning'
+      })
+    } else {
+      setToast({
+        show: true,
+        message: result.error || 'Failed to find matches',
+        color: 'danger'
+      })
+    }
+  }
+
+  const handleDeleteClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!postId || isProcessing) return
+    setShowDeleteModal(true)
+  }
+
+  const handleDeleteChoice = async (choice: string) => {
+    if (!postId || !user_id || !user?.user_id) return
+    setShowDeleteModal(false)
+    setIsProcessing(true)
+
+    const result = await handleDeleteSubmit(
+      postId,
+      user_id,
+      itemName,
+      choice,
+      user.user_id
+    )
+
+    setIsProcessing(false)
+    if (result.success) {
+      if (setPosts) {
+        setPosts((prev: any[]) => prev.filter((p: any) => p.post_id !== postId))
+      }
+      setToast({
+        show: true,
+        message: 'Post deleted successfully',
+        color: 'success'
+      })
+    } else {
+      setToast({
+        show: true,
+        message: result.error || 'Failed to delete post',
         color: 'danger'
       })
     }
@@ -234,7 +316,7 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
           {variant === 'staff' && (
             <div className='flex justify-between h-7 w-full gap-4 mt-4 font-default-font'>
               <button
-                onClick={handleReject}
+                onClick={handleRejectClick}
                 disabled={isProcessing}
                 className='h-full flex-1 bg-[var(--color-umak-red)] text-white py-4 px-4 rounded-sm! hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center'
               >
@@ -245,7 +327,7 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
                 )}
               </button>
               <button
-                onClick={handleAccept}
+                onClick={handleAcceptClick}
                 disabled={isProcessing}
                 className='flex-1 bg-green-500 text-white py-4 px-4 rounded-sm! hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center'
               >
@@ -257,23 +339,96 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
               </button>
             </div>
           )}
+
+          {/* Staff-Pending Variant - Different buttons based on item_type */}
+          {variant === 'staff-pending' && (
+            <div className='flex justify-between h-7 w-full gap-4 mt-4 font-default-font'>
+              {item_type === 'found' ? (
+                // Found items: Accept and Reject
+                <>
+                  <button
+                    onClick={handleRejectClick}
+                    disabled={isProcessing}
+                    className='h-full flex-1 bg-[var(--color-umak-red)] text-white py-4 px-4 rounded-sm! hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center'
+                  >
+                    {isProcessing ? (
+                      <IonSpinner name='crescent' className='w-5 h-5' />
+                    ) : (
+                      'REJECT'
+                    )}
+                  </button>
+                  <button
+                    onClick={handleAcceptClick}
+                    disabled={isProcessing}
+                    className='flex-1 bg-green-500 text-white py-4 px-4 rounded-sm! hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center'
+                  >
+                    {isProcessing ? (
+                      <IonSpinner name='crescent' className='w-5 h-5' />
+                    ) : (
+                      'ACCEPT'
+                    )}
+                  </button>
+                </>
+              ) : (
+                // Missing items: Match and Delete
+                <>
+                  <button
+                    onClick={handleDeleteClick}
+                    disabled={isProcessing}
+                    className='flex-1 bg-[var(--color-umak-red)] text-white py-4 px-4 rounded-sm! hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center'
+                  >
+                    {isProcessing ? (
+                      <IonSpinner name='crescent' className='w-5 h-5' />
+                    ) : (
+                      'DELETE'
+                    )}
+                  </button>
+                  <button
+                    onClick={handleMatchClick}
+                    disabled={isProcessing}
+                    className='h-full flex-1 bg-blue-500 text-white py-4 px-4 rounded-sm! hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center'
+                  >
+                    {isProcessing ? (
+                      <IonSpinner name='crescent' className='w-5 h-5' />
+                    ) : (
+                      'MATCH'
+                    )}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
         </IonCardContent>
       </IonCard>
+
+      {/* Reject Modal */}
+      <ChoiceModal
+        isOpen={showRejectModal}
+        header='Reject Post'
+        subheading1='Select a reason to reject the post.'
+        subheading2='Uploader will be notified upon submission.'
+        choices={Array.from(rejectReasons)}
+        onSubmit={handleRejectChoice}
+        onDidDismiss={() => setShowRejectModal(false)}
+      />
+
+      {/* Delete Modal */}
+      <ChoiceModal
+        isOpen={showDeleteModal}
+        header='Delete Post'
+        subheading1='Select a reason to delete the post.'
+        subheading2='Uploader will be notified upon submission.'
+        choices={Array.from(deleteReasons)}
+        onSubmit={handleDeleteChoice}
+        onDidDismiss={() => setShowDeleteModal(false)}
+      />
+
       <IonToast
         isOpen={toast.show}
         onDidDismiss={() => setToast({ ...toast, show: false })}
         message={toast.message}
         duration={2000}
         color={toast.color}
-      />
-      <ChoiceModal
-        isOpen={showChoiceModal}
-        header='Reject Post'
-        subheading1='Select a reason to reject the post.'
-        subheading2='Uploader will be notified upon submission.'
-        choices={rejectChoices}
-        onSubmit={handleRejectSubmit}
-        onDidDismiss={() => setShowChoiceModal(false)}
       />
     </>
   )

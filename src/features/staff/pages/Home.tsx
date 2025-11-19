@@ -1,13 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   IonToast,
-  IonContent,
   IonSkeletonText,
   IonCard,
   IonCardContent
 } from '@ionic/react'
+import { listOutline, arrowDownOutline, arrowUpOutline } from 'ionicons/icons'
 import { useNavigation } from '@/shared/hooks/useNavigation'
 import Header from '@/shared/components/Header'
+import FilterSortBar from '@/shared/components/FilterSortBar'
+import type {
+  FilterOption,
+  SortOption
+} from '@/shared/components/FilterSortBar'
 import PostList from '@/shared/components/PostList'
 import { refreshStaffPosts } from '@/features/posts/data/postsRefresh'
 import { usePostFetching } from '@/shared/hooks/usePostFetching'
@@ -55,11 +60,19 @@ const PostSkeleton = () => (
   </IonCard>
 )
 
+type ItemTypeFilter = 'all' | 'found' | 'lost'
+
 export default function Home () {
   const PAGE_SIZE = 5
   const [showToast, setShowToast] = useState(false)
   const [toastMessage, setToastMessage] = useState('')
-  const [toastColor, setToastColor] = useState<'success' | 'danger'>('success')
+  const [toastColor, setToastColor] = useState<
+    'success' | 'danger' | 'warning'
+  >('success')
+  const [activeFilters, setActiveFilters] = useState<Set<ItemTypeFilter>>(
+    new Set(['all'])
+  )
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const contentRef = useRef<HTMLIonContentElement | null>(null)
   const { navigate } = useNavigation()
 
@@ -93,13 +106,41 @@ export default function Home () {
       setToastMessage('Fetching posts failed')
       setToastColor('danger')
       setShowToast(true)
-    },
-    filterPosts: posts => {
-      return posts.filter(
-        post => post.item_type === 'found' && post.post_status === 'pending'
-      )
     }
   })
+
+  // Filter configuration for FilterSortBar
+  const filterOptions: FilterOption<ItemTypeFilter>[] = [
+    { value: 'all', label: 'All Items' },
+    { value: 'found', label: 'Found Items' },
+    { value: 'lost', label: 'Missing Items' }
+  ]
+
+  const sortOptions: SortOption[] = [
+    { value: 'desc', label: 'Newest First', icon: arrowDownOutline },
+    { value: 'asc', label: 'Oldest First', icon: arrowUpOutline }
+  ]
+
+  // Filter and sort posts
+  const filteredAndSortedPosts = posts
+    .filter(post => {
+      const filterArray = Array.from(activeFilters)
+      const matchesType =
+        filterArray.includes('all') ||
+        activeFilters.size === 0 ||
+        filterArray.includes(post.item_type as ItemTypeFilter)
+      const isPending = post.post_status === 'pending'
+      return matchesType && isPending
+    })
+    .sort((a, b) => {
+      const dateA = new Date(a.submission_date || 0).getTime()
+      const dateB = new Date(b.submission_date || 0).getTime()
+      return sortDir === 'desc' ? dateB - dateA : dateA - dateB
+    })
+
+  const handlePostClick = (postId: string) => {
+    navigate(`/staff/post/view/${postId}`)
+  }
 
   useEffect(() => {
     fetchPosts()
@@ -122,9 +163,6 @@ export default function Home () {
       event.detail.complete()
     }
   }
-
-  const handlePostClick = (postId: string) =>
-    navigate(`/staff/post/view/${postId}`)
 
   // scrollToTop event - fetch newest posts
   useEffect(() => {
@@ -151,29 +189,6 @@ export default function Home () {
       window.removeEventListener('app:scrollToTop', handler as EventListener)
   }, [fetchNewPosts])
 
-  // Handle post status changes
-  useEffect(() => {
-    const handlePostStatusChange = async (event: Event) => {
-      const { postId, newStatus } = (
-        event as CustomEvent<{ postId: string; newStatus: string }>
-      ).detail
-      // Remove post from state - cache will be updated by hook
-      setPosts(prev => prev.filter(p => p.post_id !== postId))
-
-      setToastMessage(
-        `Post ${
-          newStatus === 'accepted' ? 'accepted' : 'rejected'
-        } successfully`
-      )
-      setToastColor('success')
-      setShowToast(true)
-    }
-
-    window.addEventListener('post:statusChanged', handlePostStatusChange)
-    return () =>
-      window.removeEventListener('post:statusChanged', handlePostStatusChange)
-  }, [])
-
   return (
     <>
       <Header logoShown={true} isProfileAndNotificationShown={true} />
@@ -185,40 +200,53 @@ export default function Home () {
         position='top'
         color={toastColor}
       />
-      <IonContent>
-        {loading ? (
-          <div className='p-4'>
-            {/* Post skeletons */}
-            {[...Array(3)].map((_, index) => (
-              <PostSkeleton key={index} />
-            ))}
-          </div>
-        ) : posts.length === 0 ? (
-          <div className='flex justify-center items-center h-full text-gray-400'>
-            <p>No pending posts at the moment</p>
-          </div>
-        ) : (
-          <PostList
-            posts={posts}
-            fetchPosts={fetchPosts}
-            hasMore={hasMore}
-            setPosts={setPosts}
-            loadedIdsRef={loadedIdsRef}
-            fetchNewPosts={fetchNewPosts}
-            loadMorePosts={handleLoadMore}
-            handleRefresh={handleRefresh}
-            ref={contentRef}
-            sortDirection={'desc'}
-            cacheKeys={{
-              loadedKey: 'LoadedPosts:staff:home',
-              cacheKey: 'CachedPublicPosts:staff:home'
-            }}
-            onClick={handlePostClick}
-            pageSize={PAGE_SIZE}
-            variant='staff'
-          />
-        )}
-      </IonContent>
+
+      {/* Filter and Sort Bar */}
+      <FilterSortBar
+        title='Pending Posts'
+        icon={listOutline}
+        filterOptions={filterOptions}
+        activeFilters={activeFilters}
+        onFilterChange={setActiveFilters}
+        filterSelectionType='single'
+        filterModalTitle='Filter by Item Type'
+        sortOptions={sortOptions}
+        activeSort={sortDir}
+        onSortChange={sort => setSortDir(sort as 'asc' | 'desc')}
+        sortModalTitle='Sort by Submission Date'
+      />
+
+      {loading ? (
+        <div className='p-4'>
+          {[...Array(3)].map((_, index) => (
+            <PostSkeleton key={index} />
+          ))}
+        </div>
+      ) : filteredAndSortedPosts.length === 0 ? (
+        <div className='flex justify-center items-center h-full text-gray-400'>
+          <p>No pending posts at the moment</p>
+        </div>
+      ) : (
+        <PostList
+          posts={filteredAndSortedPosts}
+          fetchPosts={fetchPosts}
+          hasMore={hasMore}
+          setPosts={setPosts}
+          loadedIdsRef={loadedIdsRef}
+          fetchNewPosts={fetchNewPosts}
+          loadMorePosts={handleLoadMore}
+          handleRefresh={handleRefresh}
+          ref={contentRef}
+          sortDirection={sortDir}
+          cacheKeys={{
+            loadedKey: 'LoadedPosts:staff:home',
+            cacheKey: 'CachedPublicPosts:staff:home'
+          }}
+          onClick={handlePostClick}
+          pageSize={PAGE_SIZE}
+          variant='staff-pending'
+        />
+      )}
     </>
   )
 }

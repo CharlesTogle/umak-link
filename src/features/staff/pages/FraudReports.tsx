@@ -236,65 +236,68 @@ export default function FraudReport () {
           </div>
         </IonContent>
       ) : (
-        <IonContent ref={contentRef} className='mb-16 bg-default-bg'>
-          <IonRefresher slot='fixed' onIonRefresh={handleRefresh}>
-            <IonRefresherContent />
-          </IonRefresher>
+        <>
+          <FilterSortBar
+            title='Fraud Reports'
+            icon={shieldCheckmarkOutline}
+            filterOptions={FILTER_OPTIONS}
+            activeFilters={activeFilters}
+            onFilterChange={setActiveFilters}
+            filterSelectionType='single'
+            filterModalTitle='Filter Reports'
+            filterModalSubtitle='Select a report status'
+            hasFilterClear={false}
+            hasFilterEnter={false}
+            sortOptions={SORT_OPTIONS}
+            activeSort={sortDir}
+            onSortChange={handleSortChange}
+            sortModalTitle='Sort by date reported'
+            sortButtonLabel={sortDir === 'desc' ? 'Recent' : 'Oldest'}
+          />
+          <IonContent ref={contentRef} className='mb-16 bg-default-bg'>
+            <IonRefresher slot='fixed' onIonRefresh={handleRefresh}>
+              <IonRefresherContent />
+            </IonRefresher>
 
-          <div>
-            <FilterSortBar
-              title='Fraud Reports'
-              icon={shieldCheckmarkOutline}
-              filterOptions={FILTER_OPTIONS}
-              activeFilters={activeFilters}
-              onFilterChange={setActiveFilters}
-              filterSelectionType='single'
-              filterModalTitle='Filter Reports'
-              filterModalSubtitle='Select a report status'
-              hasFilterClear={false}
-              hasFilterEnter={false}
-              sortOptions={SORT_OPTIONS}
-              activeSort={sortDir}
-              onSortChange={handleSortChange}
-              sortModalTitle='Sort by date reported'
-              sortButtonLabel={sortDir === 'desc' ? 'Recent' : 'Oldest'}
-            />
+            <div>
+              {filteredReports.map(report => (
+                <FraudReportCard
+                  key={report.report_id}
+                  reportId={report.report_id}
+                  posterName={report.poster_name || undefined}
+                  posterProfilePictureUrl={report.poster_profile_picture_url}
+                  reporterName={report.reporter_name || undefined}
+                  reporterProfilePictureUrl={
+                    report.reporter_profile_picture_url
+                  }
+                  itemName={report.item_name || undefined}
+                  itemDescription={report.item_description || undefined}
+                  lastSeenAt={report.last_seen_at || undefined}
+                  reasonForReporting={report.reason_for_reporting || undefined}
+                  dateReported={report.date_reported || undefined}
+                  itemImageUrl={report.item_image_url || undefined}
+                  reportStatus={report.report_status}
+                  onClick={handleReportClick}
+                />
+              ))}
 
-            {filteredReports.map(report => (
-              <FraudReportCard
-                key={report.report_id}
-                reportId={report.report_id}
-                posterName={report.poster_name || undefined}
-                posterProfilePictureUrl={report.poster_profile_picture_url}
-                reporterName={report.reporter_name || undefined}
-                reporterProfilePictureUrl={report.reporter_profile_picture_url}
-                itemName={report.item_name || undefined}
-                itemDescription={report.item_description || undefined}
-                lastSeenAt={report.last_seen_at || undefined}
-                reasonForReporting={report.reason_for_reporting || undefined}
-                dateReported={report.date_reported || undefined}
-                itemImageUrl={report.item_image_url || undefined}
-                reportStatus={report.report_status}
-                onClick={handleReportClick}
-              />
-            ))}
+              {hasMore && (
+                <IonInfiniteScroll
+                  onIonInfinite={handleLoadMore}
+                  threshold='100px'
+                >
+                  <IonInfiniteScrollContent loadingText='Loading more reports...' />
+                </IonInfiniteScroll>
+              )}
 
-            {hasMore && (
-              <IonInfiniteScroll
-                onIonInfinite={handleLoadMore}
-                threshold='100px'
-              >
-                <IonInfiniteScrollContent loadingText='Loading more reports...' />
-              </IonInfiniteScroll>
-            )}
-
-            {!hasMore && filteredReports.length > 0 && (
-              <div className='text-center text-gray-500 pb-16'>
-                You're all caught up!
-              </div>
-            )}
-          </div>
-        </IonContent>
+              {!hasMore && filteredReports.length > 0 && (
+                <div className='text-center text-gray-500 pb-16'>
+                  You're all caught up!
+                </div>
+              )}
+            </div>
+          </IonContent>
+        </>
       )}
     </>
   )

@@ -1,6 +1,4 @@
-import { IonContent } from '@ionic/react'
 import { documentTextOutline, createOutline } from 'ionicons/icons'
-import UserCard from '@/shared/components/UserCard'
 import Header from '@/shared/components/Header'
 import PostList from '@/shared/components/PostList'
 import FilterSortBar from '@/shared/components/FilterSortBar'
@@ -109,7 +107,24 @@ export default function History () {
   return (
     <>
       <Header logoShown={true} isProfileAndNotificationShown={true} />
-      <IonContent>
+      <FilterSortBar
+        title='Post History'
+        icon={createOutline}
+        filterCategories={filterCategories}
+        activeFilters={activeFilters}
+        onFilterChange={setActiveFilters}
+        filterSelectionType='single-per-category'
+        filterModalTitle='Filter Posts'
+        filterModalSubtitle='Select post statuses to be displayed.'
+        hasFilterClear={true}
+        hasFilterEnter={true}
+        sortOptions={sortOptions}
+        activeSort={sortDir}
+        onSortChange={value => setSortDir(value as SortDirection)}
+        sortModalTitle='Sort display order by'
+        sortButtonLabel={sortDir === 'desc' ? 'Recent Upload' : 'Oldest Upload'}
+      />
+      <div>
         <PostList
           posts={posts}
           fetchPosts={fetchPosts}
@@ -136,31 +151,8 @@ export default function History () {
           }}
           fetchNewPosts={fetchNewPosts}
           ref={contentRef}
-        >
-          <UserCard className='mb-3' />
-
-          {/* FilterSortBar component */}
-          <FilterSortBar
-            title='Post History'
-            icon={createOutline}
-            filterCategories={filterCategories}
-            activeFilters={activeFilters}
-            onFilterChange={setActiveFilters}
-            filterSelectionType='single-per-category'
-            filterModalTitle='Filter Posts'
-            filterModalSubtitle='Select post statuses to be displayed.'
-            hasFilterClear={true}
-            hasFilterEnter={true}
-            sortOptions={sortOptions}
-            activeSort={sortDir}
-            onSortChange={value => setSortDir(value as SortDirection)}
-            sortModalTitle='Sort display order by'
-            sortButtonLabel={
-              sortDir === 'desc' ? 'Recent Upload' : 'Oldest Upload'
-            }
-          />
-        </PostList>
-      </IonContent>
+        />
+      </div>
     </>
   )
 }

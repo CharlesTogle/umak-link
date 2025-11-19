@@ -318,84 +318,84 @@ export default function PostRecords () {
           </div>
         </IonContent>
       ) : (
-        <IonContent ref={contentRef} className='mb-16 bg-default-bg'>
-          {!loading && (
-            <IonRefresher slot='fixed' onIonRefresh={handleRefresh}>
-              <IonRefresherContent />
-            </IonRefresher>
-          )}
+        <>
+          {/* FilterSortBar component */}
+          <FilterSortBar
+            title='Post Records'
+            icon={listOutline}
+            filterCategories={filterCategories}
+            activeFilters={activeFilters}
+            onFilterChange={setActiveFilters}
+            filterSelectionType='single-per-category'
+            filterModalTitle='Filter Posts'
+            filterModalSubtitle='Select multiple post statuses to be displayed.'
+            hasFilterClear={true}
+            hasFilterEnter={true}
+            sortOptions={sortOptions}
+            activeSort={sortDir}
+            onSortChange={value => setSortDir(value as SortDirection)}
+            sortModalTitle='Sort display order by'
+            sortButtonLabel={
+              sortDir === 'desc' ? 'Recent Upload' : 'Oldest Upload'
+            }
+          />
+          <IonContent ref={contentRef} className='bg-default-bg'>
+            <div className={`${hasMore ? 'mb-35' : 'mb-45'}`}>
+              {!loading && (
+                <IonRefresher slot='fixed' onIonRefresh={handleRefresh}>
+                  <IonRefresherContent />
+                </IonRefresher>
+              )}
+              {filteredPosts.length === 0 ? (
+                <div className='flex justify-center items-center h-64 text-gray-400'>
+                  <p>No posts match the selected filters</p>
+                </div>
+              ) : (
+                <>
+                  {/* Posts */}
+                  {filteredPosts.map(post => (
+                    <div className='w-full h-full mb-4' key={post.post_id}>
+                      <CatalogPost
+                        postId={post.post_id}
+                        username={post.username}
+                        user_profile_picture_url={post.profilepicture_url}
+                        itemName={post.item_name}
+                        description={post.item_description || ''}
+                        lastSeen={post.submission_date || ''}
+                        imageUrl={post.item_image_url || ''}
+                        locationLastSeenAt={post.last_seen_location || ''}
+                        itemStatus={post.item_status}
+                        onClick={() => handlePostClick(post.post_id)}
+                        onKebabButtonClick={() => {
+                          setSelectedPostId(post.post_id)
+                          setShowActions(true)
+                        }}
+                        variant='postRecords'
+                        showAnonIndicator={post.is_anonymous}
+                      />
+                    </div>
+                  ))}
 
-          <div>
-            {/* FilterSortBar component */}
-            <FilterSortBar
-              title='Post Records'
-              icon={listOutline}
-              filterCategories={filterCategories}
-              activeFilters={activeFilters}
-              onFilterChange={setActiveFilters}
-              filterSelectionType='single-per-category'
-              filterModalTitle='Filter Posts'
-              filterModalSubtitle='Select multiple post statuses to be displayed.'
-              hasFilterClear={true}
-              hasFilterEnter={true}
-              sortOptions={sortOptions}
-              activeSort={sortDir}
-              onSortChange={value => setSortDir(value as SortDirection)}
-              sortModalTitle='Sort display order by'
-              sortButtonLabel={
-                sortDir === 'desc' ? 'Recent Upload' : 'Oldest Upload'
-              }
-            />
+                  {hasMore && (
+                    <IonInfiniteScroll
+                      onIonInfinite={handleLoadMore}
+                      threshold='100px'
+                      className='my-2'
+                    >
+                      <IonInfiniteScrollContent loadingSpinner='crescent' />
+                    </IonInfiniteScroll>
+                  )}
 
-            {filteredPosts.length === 0 ? (
-              <div className='flex justify-center items-center h-64 text-gray-400'>
-                <p>No posts match the selected filters</p>
-              </div>
-            ) : (
-              <>
-                {/* Posts */}
-                {filteredPosts.map(post => (
-                  <div className='w-full h-full mb-4' key={post.post_id}>
-                    <CatalogPost
-                      postId={post.post_id}
-                      username={post.username}
-                      user_profile_picture_url={post.profilepicture_url}
-                      itemName={post.item_name}
-                      description={post.item_description || ''}
-                      lastSeen={post.submission_date || ''}
-                      imageUrl={post.item_image_url || ''}
-                      locationLastSeenAt={post.last_seen_location || ''}
-                      itemStatus={post.item_status}
-                      onClick={() => handlePostClick(post.post_id)}
-                      onKebabButtonClick={() => {
-                        setSelectedPostId(post.post_id)
-                        setShowActions(true)
-                      }}
-                      variant='postRecords'
-                      showAnonIndicator={post.is_anonymous}
-                    />
-                  </div>
-                ))}
-
-                {hasMore && (
-                  <IonInfiniteScroll
-                    onIonInfinite={handleLoadMore}
-                    threshold='100px'
-                    className='my-2'
-                  >
-                    <IonInfiniteScrollContent loadingSpinner='crescent' />
-                  </IonInfiniteScroll>
-                )}
-
-                {!hasMore && !loading && filteredPosts.length > 0 && (
-                  <div className='text-center text-gray-500 py-4'>
-                    You're all caught up!
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </IonContent>
+                  {!hasMore && !loading && filteredPosts.length > 0 && (
+                    <div className='text-center text-gray-500 '>
+                      You're all caught up!
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </IonContent>
+        </>
       )}
 
       {/* Custom Action Sheet for Post Records */}
