@@ -1,0 +1,19 @@
+div.google-login-button {
+  div > div{
+    background-color: var(--color-umak-blue) !important;
+    font: var(--font-default-font) !important;
+  };
+}
+
+div.google-login-button {
+  padding: 0.5rem !important;
+  background-color: var(--color-umak-blue) !important;
+}
+
+div.google-login-button > div > div > div > div > div > div > div {
+  background-color: white  !important;
+}
+
+div.google-login-button > div > div > div > div > div > div {
+  background-color: white  !important;
+}

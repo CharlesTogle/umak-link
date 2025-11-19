@@ -1,0 +1,150 @@
+import {
+  useEffect,
+  useRef,
+  memo,
+  useState,
+  useCallback,
+  type MouseEventHandler
+} from 'react'
+import { IonSearchbar } from '@ionic/react'
+import { Keyboard } from '@capacitor/keyboard'
+import { usePostFetching } from '@/shared/hooks/usePostFetching'
+import { useSearchContext } from '@/shared/contexts/SearchContext'
+import { useNavigation } from '@/shared/hooks/useNavigation'
+import { refreshByIds } from '@/features/posts/data/postsRefresh'
+import { listPostsByIds } from '@/features/posts/data/posts'
+import { createPostCache } from '@/features/posts/data/postsCache'
+import Header from '@/shared/components/Header'
+import PostList from '@/shared/components/PostList'
+import CatalogPostSkeleton from '@/features/user/components/home/CatalogPostSkeleton'
+import type { PublicPost } from '@/features/posts/types/post'
+
+const CatalogHeader = memo(
+  ({ handleClick }: { handleClick: MouseEventHandler }) => {
+    const searchRef = useRef<HTMLIonSearchbarElement>(null)
+    return (
+      <Header logoShown={true}>
+        <IonSearchbar
+          ref={searchRef}
+          onClick={handleClick}
+          placeholder='Search'
+          showClearButton='never'
+          style={
+            {
+              ['--border-radius']: '0.5rem'
+            } as React.CSSProperties
+          }
+        />
+      </Header>
+    )
+  }
+)
+
+export default function SearchResults () {
+  const { searchResultPostIds: postIds, setSearchResults } = useSearchContext()
+  const { navigate } = useNavigation()
+  const [loading, setLoading] = useState(true)
+  const listFn = async (
+    excludeIds: string[] = [],
+    limit = 5
+  ): Promise<PublicPost[]> => {
+    const remaining = postIds.filter(id => !excludeIds.includes(id))
+    const idsToFetch = remaining.slice(0, limit)
+    const posts = await listPostsByIds(() => postIds)(excludeIds, limit)
+
+    const returnedIds = new Set(posts.map(p => p.post_id))
+    const cleaned = postIds.filter(
+      id => !idsToFetch.includes(id) || returnedIds.has(id)
+    )
+
+    if (cleaned.length !== postIds.length) {
+      setSearchResults(cleaned)
+    }
+
+    return posts
+  }
+
+  const {
+    posts,
+    setPosts,
+    hasMore,
+    fetchPosts,
+    loadMorePosts,
+    fetchNewPosts,
+    refreshPosts,
+    loadedIdsRef
+  } = usePostFetching({
+    fetchFunction: listFn,
+    refreshPostFunction: refreshByIds(),
+    cacheKeys: {
+      loadedKey: 'SearchResultsLoaded',
+      cacheKey: 'SearchResultsCached'
+    },
+    pageSize: 5
+  })
+
+  const refreshSearchResults = useCallback(async () => {
+    setLoading(true)
+    const cache = createPostCache({
+      loadedKey: 'SearchResultsLoaded',
+      cacheKey: 'SearchResultsCached'
+    })
+
+    try {
+      await cache.clearPostsCache()
+      await fetchPosts()
+    } catch (err) {
+      console.error('Error fetching search results:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [postIds, fetchPosts])
+
+  useEffect(() => {
+    refreshSearchResults()
+  }, [])
+
+  const handleLoadMore = async (event: CustomEvent<void>) => {
+    const target = event.target as HTMLIonInfiniteScrollElement | null
+    if (!target) return
+    await loadMorePosts()
+    target.complete()
+  }
+
+  const handleSearchBarClick = () => {
+    Keyboard.hide()
+    navigate('/user/search')
+  }
+
+  return (
+    <>
+      <CatalogHeader handleClick={handleSearchBarClick} />
+      {loading ? (
+        <div className='flex flex-col gap-4 px-4 py-2'>
+          {[...Array(3)].map((_, index) => (
+            <CatalogPostSkeleton key={index} />
+          ))}
+        </div>
+      ) : (
+        <PostList
+          posts={posts}
+          fetchPosts={fetchPosts}
+          hasMore={hasMore}
+          setPosts={setPosts}
+          loadedIdsRef={loadedIdsRef}
+          loadMorePosts={handleLoadMore}
+          handleRefresh={refreshPosts}
+          fetchNewPosts={fetchNewPosts}
+          onClick={postId => navigate(`/user/post/view/${postId}`)}
+          pageSize={5}
+          variant='search'
+          children={
+            <div className='px-4 py-2 text-sm text-gray-600'>
+              Showing all search results
+            </div>
+          }
+        />
+      )}
+    </>
+  )
+}

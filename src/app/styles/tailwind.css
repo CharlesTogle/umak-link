@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+@theme {
+  --color-toolbar-bg: #E2E8F0;
+  --color-amber-400: #FFB900;
+  --color-inactive-button: #314158;
+  --color-umak-blue: #1D2981;
+  --color-umak-red: #DF0020;
+  --font-default-font: 'Roboto', sans-serif;
+  --color-slate-900: #0F172B;
+  --color-default-bg: #F1F5F9;
+}
+
+.report-btn {
+  @apply text-umak-red;
+}
+
+ion-datetime-button::part(native) {
+  background-color: transparent !important;
+  color: var(--color-umak-blue) !important;
+  border: 2px solid var(--color-umak-blue) !important;
+  margin-right: 5px !important;
+  border-radius: 0.25rem;
+}
+
+ion-datetime-button.date-time-claim::part(native) {
+  background-color: transparent !important;
+  color: black !important;
+  border: 2px solid var(--color-gray-300) !important;
+  margin-right: 5px !important;
+  border-radius: 0.25rem;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.2s ease-out;
+}

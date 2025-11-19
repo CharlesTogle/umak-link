@@ -1,0 +1,7 @@
+ion-datetime.md::part(calendar-day active) {
+  background-color: var(--color-umak-blue) !important;
+}
+
+ion-datetime::part(wheel-item active) {
+  color: var(--color-umak-blue) !important;
+}
