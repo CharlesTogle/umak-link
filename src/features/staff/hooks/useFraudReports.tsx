@@ -2,7 +2,6 @@ import { useState, useRef, useCallback } from 'react'
 import { Network } from '@capacitor/network'
 import { supabase } from '@/shared/lib/supabase'
 import createCache from '@/shared/lib/cache'
-import { sendEmail } from '@/shared/lib/sendEmail'
 import { useAuditLogs } from '@/shared/hooks/useAuditLogs'
 import useNotifications from '@/features/user/hooks/useNotifications'
 
@@ -43,6 +42,7 @@ export interface FraudReportPublic {
   claimer_school_email: string | null
   claimer_contact_num: string | null
   claimed_at: string | null
+  claim_id: string | null
 
   // staff who processed the claim
   claim_processed_by_name: string | null
@@ -61,6 +61,7 @@ export interface FraudReportPublic {
   poster_profile_picture_url: string | null
 
   // users: staff who reviewed the fraud report
+  fraud_reviewer_id: string | null
   fraud_reviewer_name: string | null
   fraud_reviewer_email: string | null
   fraud_reviewer_profile_picture_url: string | null
@@ -446,18 +447,12 @@ export function useFraudReports ({
 
   const acceptReport = async ({
     reportId,
-    postId,
     postTitle,
-    reporterId,
-    claimerEmail,
-    claimerName
+    reporterId
   }: {
     reportId: string
-    postId: string
     postTitle: string
-    reporterId?: string
-    claimerEmail?: string
-    claimerName?: string
+    reporterId?: string | null
   }) => {
     try {
       const {
@@ -491,18 +486,13 @@ export function useFraudReports ({
 
       const { error: reportError } = await supabase
         .from('fraud_reports_table')
-        .update({ report_status: 'verified' })
+        .update({
+          report_status: 'open',
+          processed_by_staff_id: user.id
+        })
         .eq('report_id', reportId)
 
       if (reportError) throw reportError
-
-      // Update post status to fraud
-      const { error: postError } = await supabase
-        .from('post_table')
-        .update({ status: 'fraud' })
-        .eq('post_id', postId)
-
-      if (postError) throw postError
 
       // Add audit trail with correct structure
 
@@ -512,10 +502,10 @@ export function useFraudReports ({
         details: {
           message: `${
             userData?.user_name || 'Staff'
-          } set the status of report on ${postTitle} as Verified`,
+          } set the status of report on ${postTitle} as Open`,
           post_title: postTitle,
           old_status: oldStatus,
-          new_status: 'verified'
+          new_status: 'open'
         }
       })
 
@@ -523,70 +513,20 @@ export function useFraudReports ({
       if (reporterId) {
         await sendNotification({
           userId: reporterId,
-          title: 'Fraud Report Verified',
-          message: `Your report on "${postTitle}" has been verified. Thank you for helping keep UMatch safe.`,
+          title: 'Fraud Report Opened',
+          message: `Your report on "${postTitle}" has been opened and is being investigated. Thank you for helping keep UMatch safe.`,
           data: { link: `/user/reports` },
           type: 'acceptance'
         })
       }
 
-      // Send email to claimer if email is available
-      if (claimerEmail) {
-        try {
-          const emailHtml = `
-          <!DOCTYPE html>
-          <html>
-            <head>
-              <style>
-                body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif; }
-                .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-                .header { background-color: #1e3a8a; color: white; padding: 20px; border-radius: 8px 8px 0 0; }
-                .content { background-color: #f8f9fa; padding: 20px; border-radius: 0 0 8px 8px; }
-                .footer { color: #6b7280; font-size: 12px; margin-top: 20px; }
-              </style>
-            </head>
-            <body>
-              <div class="container">
-                <div class="header">
-                  <h1>Important Notice Regarding Your Claimed Item</h1>
-                </div>
-                <div class="content">
-                  <p>Hi ${claimerName || 'there'},</p>
+      // Email notification removed - resend implementation deleted
 
-                  <p>The item you recently claimed has been reported for further verification. To complete the investigation process, you are advised to proceed to the <strong>UMak Security Office behind the Oval Stadium</strong>.</p>
-
-                  <p>Please appear within the provided timeframe. Failure to appear may result in the case being forwarded to the <strong>Center for Student Formation and Discipline (CSFD)</strong> for further action.</p>
-
-                  <p>Thank you for your cooperation.</p>
-
-                  <p>Best regards,<br/>The UMatch Team</p>
-
-                  <div class="footer">
-                    <p>This is an automated message. Please do not reply to this email.</p>
-                    <p>UMatch © 2024. All rights reserved.</p>
-                  </div>
-                </div>
-              </div>
-            </body>
-          </html>
-          `
-
-          await sendEmail({
-            to: claimerEmail,
-            subject: 'Your Item Report Has Been Verified',
-            html: emailHtml
-          })
-        } catch (emailError) {
-          console.error('Failed to send email to claimer:', emailError)
-          // Don't fail the entire operation if email fails
-        }
-      }
-
-      // Update local state - change report status to verified
+      // Update local state - change report status to open
       setReports(prev => {
         const updated = prev.map(report =>
           report.report_id === reportId
-            ? { ...report, report_status: 'verified' }
+            ? { ...report, report_status: 'open' }
             : report
         )
         // Update cache in background
@@ -653,7 +593,10 @@ export function useFraudReports ({
       // Update report status to rejected
       const { error: reportError } = await supabase
         .from('fraud_reports_table')
-        .update({ report_status: 'rejected' })
+        .update({
+          report_status: 'rejected',
+          processed_by_staff_id: user.id
+        })
         .eq('report_id', reportId)
 
       const { error: updateStatusError } = await supabase
@@ -716,6 +659,119 @@ export function useFraudReports ({
     }
   }
 
+  const closeReport = async ({
+    reportId,
+    postTitle,
+    deleteClaim = false,
+    itemId
+  }: {
+    reportId: string
+    postTitle: string
+    deleteClaim?: boolean
+    itemId?: string | null
+  }) => {
+    try {
+      const {
+        data: { user }
+      } = await supabase.auth.getUser()
+      if (!user) throw new Error('User not authenticated')
+
+      // Get user details for audit log
+      const { data: userData, error: userError } = await supabase
+        .from('user_table')
+        .select('user_name')
+        .eq('user_id', user.id)
+        .single()
+
+      if (userError) {
+        console.error('Error fetching user data:', userError)
+      }
+
+      // Get claim_id from the report to delete it
+      const { data: reportData, error: reportFetchError } = await supabase
+        .from('fraud_reports_public_v')
+        .select('claim_id')
+        .eq('report_id', reportId)
+        .single()
+
+      if (reportFetchError) {
+        console.error('Error fetching report claim_id:', reportFetchError)
+      }
+
+      // Delete claim record and update item status if deleteClaim is true
+      if (deleteClaim && reportData?.claim_id) {
+        // Delete claim record
+        const { error: claimDeleteError } = await supabase
+          .from('claim_table')
+          .delete()
+          .eq('claim_id', reportData.claim_id)
+
+        if (claimDeleteError) {
+          console.error('Error deleting claim record:', claimDeleteError)
+          throw claimDeleteError
+        }
+
+        // Update item status to unclaimed
+        if (itemId) {
+          const { error: itemUpdateError } = await supabase
+            .from('item_table')
+            .update({ status: 'unclaimed' })
+            .eq('item_id', itemId)
+
+          if (itemUpdateError) {
+            console.error('Error updating item status:', itemUpdateError)
+            throw itemUpdateError
+          }
+        }
+      }
+
+      // Update report status to resolved
+      const { error: reportError } = await supabase
+        .from('fraud_reports_table')
+        .update({ report_status: 'resolved' })
+        .eq('report_id', reportId)
+
+      if (reportError) throw reportError
+
+      // Add audit trail
+      await insertAuditLog({
+        user_id: user.id,
+        action_type: 'closed_report',
+        details: {
+          message: `${
+            userData?.user_name || 'Staff'
+          } closed the report on ${postTitle}`,
+          post_title: postTitle,
+          old_status: 'verified',
+          new_status: 'resolved'
+        }
+      })
+
+      // Update local state - change report status to resolved
+      setReports(prev => {
+        const updated = prev.map(report =>
+          report.report_id === reportId
+            ? { ...report, report_status: 'resolved' }
+            : report
+        )
+        // Update cache in background
+        ;(async () => {
+          try {
+            await cache.saveCache(updated)
+          } catch (e) {
+            console.error('Failed to update cache after close:', e)
+          }
+        })()
+        return updated
+      })
+
+      return { success: true }
+    } catch (error) {
+      console.error('Error closing fraud report:', error)
+      return { success: false, error }
+    }
+  }
+
   const isLoading = reports.length === 0 && isFetching
 
   return {
@@ -730,6 +786,7 @@ export function useFraudReports ({
     loading: isLoading,
     getSingleReport,
     acceptReport,
-    rejectReport
+    rejectReport,
+    closeReport
   }
 }

@@ -1,25 +1,44 @@
-import { IonCard, IonCardContent, IonImg, IonSkeletonText } from '@ionic/react'
+import {
+  IonCard,
+  IonCardContent,
+  IonImg,
+  IonSkeletonText,
+  IonIcon
+} from '@ionic/react'
 import { useState } from 'react'
-import CardHeader from '@/shared/components/CardHeader'
 import { personCircle } from 'ionicons/icons'
 
 export default function PostCard ({
   imgUrl,
   title,
   description,
-  owner
+  owner,
+  owner_profile_picture_url
 }: {
   imgUrl: string
   title: string
   description: string
   owner: string
+  owner_profile_picture_url?: string | null
 }) {
   const [imageLoaded, setImageLoaded] = useState(false)
 
   return (
     <IonCard className='rounded-2xl mt-4'>
       <IonCardContent>
-        <CardHeader title={owner} icon={personCircle} hasLineBelow={false} />
+        <div className='flex items-center space-x-2'>
+          {owner_profile_picture_url ? (
+            <img
+              src={owner_profile_picture_url}
+              className='w-8 h-8 rounded-full'
+            />
+          ) : (
+            <IonIcon icon={personCircle} className='text-[32px]'></IonIcon>
+          )}
+          <div className='text-umak-blue font-default-font font-semibold'>
+            {owner}
+          </div>
+        </div>{' '}
         <div className='flex justify-start items-center mt-3'>
           <div className='aspect-[16/13] overflow-hidden rounded-xl max-w-30 border-2 border-slate-900 relative'>
             {!imageLoaded && (

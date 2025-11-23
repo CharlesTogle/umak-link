@@ -116,7 +116,7 @@ export default function useNotifications (): UseNotificationsReturn {
       const { data, error } = await supabase
         .from('notification_view')
         .select(
-          'notification_id, type, description, is_read, data, created_at, sent_to, sent_by, item_id, image_url'
+          'notification_id, type, title, description, is_read, data, created_at, sent_to, sent_by, item_id, image_url'
         )
         .eq('sent_to', userId)
         .order('created_at', { ascending: false })
@@ -134,6 +134,7 @@ export default function useNotifications (): UseNotificationsReturn {
       const mapped: NotificationData[] = (data ?? []).map((r: any) => ({
         notification_id: r.notification_id,
         type: r.type,
+        title: r.title,
         description: r.description,
         is_read: r.is_read,
         created_at: r.created_at,

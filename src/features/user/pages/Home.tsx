@@ -159,6 +159,8 @@ export default function Home () {
         }}
         onClick={handlePostClick}
         pageSize={5}
+        marginBottom='0'
+        enableReportForClaimed={true}
         ionFabButton={
           <IonFab
             slot='fixed'

@@ -6,6 +6,8 @@ type LazyImageProps = {
   className?: string
   /** show a subtle dark overlay over the skeleton while loading */
   overlay?: boolean
+  /** callback when image finishes loading */
+  onLoad?: () => void
 }
 
 // A small image component that shows a local skeleton until the image is loaded.
@@ -13,9 +15,15 @@ export default function LazyImage ({
   src,
   alt = '',
   className = '',
-  overlay = true
+  overlay = true,
+  onLoad
 }: LazyImageProps) {
   const [loaded, setLoaded] = useState(false)
+
+  const handleLoad = () => {
+    setLoaded(true)
+    onLoad?.()
+  }
 
   return (
     <div className={`relative overflow-hidden ${className}`}>
@@ -36,7 +44,7 @@ export default function LazyImage ({
         <img
           src={src}
           alt={alt}
-          onLoad={() => setLoaded(true)}
+          onLoad={handleLoad}
           className={`w-full h-full object-cover rounded-xl ${
             loaded ? 'block' : 'hidden'
           }`}

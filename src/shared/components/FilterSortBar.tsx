@@ -53,6 +53,8 @@ interface FilterSortBarProps<T = string> {
 
   // Optional className for styling
   className?: string
+  breakpoints?: number[]
+  initialBreakpoint?: number
 }
 
 export default function FilterSortBar<T extends string = string> ({
@@ -65,14 +67,16 @@ export default function FilterSortBar<T extends string = string> ({
   filterSelectionType = 'multiple',
   filterModalTitle = 'Filter',
   filterModalSubtitle,
-  hasFilterClear = true,
-  hasFilterEnter = true,
+  hasFilterClear = false,
+  hasFilterEnter = false,
   sortOptions,
   activeSort,
   onSortChange,
   sortModalTitle = 'Sort',
   sortButtonLabel,
-  className = ''
+  className = '',
+  breakpoints,
+  initialBreakpoint
 }: FilterSortBarProps<T>) {
   const [isFilterOpen, setIsFilterOpen] = useState(false)
   const [isSortOpen, setIsSortOpen] = useState(false)
@@ -84,8 +88,6 @@ export default function FilterSortBar<T extends string = string> ({
     : filterOptions || []
 
   // For single selection, hasEnter/hasClear are ignored and modal auto-closes on selection
-  const showClear = filterSelectionType === 'multiple' && hasFilterClear
-  const showEnter = filterSelectionType === 'multiple' && hasFilterEnter
 
   const handleFilterClick = (value: T, categoryName?: string) => {
     if (filterSelectionType === 'single') {
@@ -129,6 +131,7 @@ export default function FilterSortBar<T extends string = string> ({
 
   const handleClearFilters = () => {
     onFilterChange(new Set())
+    setIsFilterOpen(false)
   }
 
   const handleApplyFilters = () => {
@@ -212,13 +215,13 @@ export default function FilterSortBar<T extends string = string> ({
         isOpen={isFilterOpen}
         onDidDismiss={() => setIsFilterOpen(false)}
         backdropDismiss={true}
-        initialBreakpoint={0.5}
-        breakpoints={[0, 0.5, 0.75]}
+        initialBreakpoint={initialBreakpoint || 0.55}
+        breakpoints={breakpoints || [0, 0.55, 0.75]}
         className='font-default-font'
         style={{ '--border-radius': '2rem' }}
       >
         <div className='flex flex-col items-center pb-6'>
-          <p className='my-4 text-base font-medium'>{filterModalTitle}</p>
+          <p className='my-4 text-base font-semibold'>{filterModalTitle}</p>
           {filterModalSubtitle && (
             <p className='-mt-2 mb-4 text-sm text-gray-500'>
               {filterModalSubtitle}
@@ -227,7 +230,8 @@ export default function FilterSortBar<T extends string = string> ({
 
           {/* Render categorized or flat filters */}
           {usingCategories ? (
-            <div className='w-full px-4'>
+            <div className='w-full px-4 '>
+              <div className='w-full bg-black h-px mb-4' />
               {filterCategories!.map((category, idx) => (
                 <div key={idx} className='mb-4'>
                   <p className='text-sm font-semibold text-gray-700 mb-2'>
@@ -253,9 +257,9 @@ export default function FilterSortBar<T extends string = string> ({
             </div>
           )}
 
-          {(showClear || showEnter) && (
-            <div className='mt-4 flex gap-2'>
-              {showClear && (
+          {(hasFilterClear || hasFilterEnter) && (
+            <div className='ml-auto mr-5 gap-2'>
+              {hasFilterClear && (
                 <IonButton
                   fill='clear'
                   onClick={handleClearFilters}
@@ -264,7 +268,7 @@ export default function FilterSortBar<T extends string = string> ({
                   Clear filters
                 </IonButton>
               )}
-              {showEnter && (
+              {hasFilterEnter && (
                 <IonButton
                   onClick={handleApplyFilters}
                   style={{

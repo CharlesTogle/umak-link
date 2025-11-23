@@ -1,5 +1,15 @@
 // types/notifications.ts
-export type NotificationType = 'info' | 'found' | 'resolved' | 'progress'
+export type NotificationType =
+  | 'match'
+  | 'success'
+  | 'info'
+  | 'message'
+  | 'rejection'
+  | 'post_accepted'
+  | 'global_announcement'
+  | 'progress'
+  | 'found'
+  | 'resolved'
 
 /**
  * Shape mapped from DB `notification_table`.
@@ -8,6 +18,7 @@ export type NotificationType = 'info' | 'found' | 'resolved' | 'progress'
 export interface NotificationData {
   notification_id: string
   type: NotificationType | string
+  title?: string | null
   description?: string | null
   is_read?: boolean | null
   created_at?: string | null

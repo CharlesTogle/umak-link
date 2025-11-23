@@ -21,8 +21,10 @@ interface AdvancedSearchProps {
   date: string
   time: string
   meridian: 'AM' | 'PM'
+  hasSelectedDate: boolean
   toISODate: (date: string, time: string, meridian: 'AM' | 'PM') => string
   handleDateChange: (e: CustomEvent) => void
+  handleClearDate: () => void
   locationDetails: LocationDetails
   setLocationDetails: Dispatch<SetStateAction<LocationDetails>>
   image: File | null
@@ -33,19 +35,20 @@ interface AdvancedSearchProps {
 }
 
 export default function AdvancedSearch ({
-
   date,
   time,
   meridian,
+  hasSelectedDate,
   toISODate,
   handleDateChange,
+  handleClearDate,
   locationDetails,
   setLocationDetails,
   image,
   setImage,
   selectedCategories,
   setSelectedCategories,
-  handleSearch,
+  handleSearch
 }: AdvancedSearchProps) {
   const [showCategoryModal, setShowCategoryModal] = useState(false)
   const handleCategorySelect = (category: string) => {
@@ -67,6 +70,8 @@ export default function AdvancedSearch ({
         <LastSeenModal
           date={toISODate(date, time, meridian)}
           handleDateChange={handleDateChange}
+          hasSelectedDate={hasSelectedDate}
+          onClear={handleClearDate}
         />
         <LocationDetailsSelector
           locationDetails={locationDetails}

@@ -14,18 +14,23 @@ interface LastSeenModalProps {
   handleDateChange: (e: CustomEvent) => void
   isRequired?: boolean
   showTime?: boolean
+  hasSelectedDate?: boolean
+  onClear?: () => void
 }
 
 const LastSeenModal: React.FC<LastSeenModalProps> = ({
   date,
   handleDateChange,
   isRequired = false,
-  showTime = true
+  showTime = true,
+  hasSelectedDate = false,
+  onClear
 }) => {
   const datetime = useRef<null | HTMLIonDatetimeElement>(null)
   const modalRef = useRef<null | HTMLIonModalElement>(null)
   const reset = () => {
     datetime.current?.reset()
+    onClear?.()
     modalRef.current?.dismiss()
   }
   const cancel = () => {
@@ -43,37 +48,68 @@ const LastSeenModal: React.FC<LastSeenModalProps> = ({
       <div className='flex flex-col space-x-3'>
         {/* Date & Time Picker */}
         <div className='flex flex-row justify-start space-x-5 items-center'>
-          <IonDatetimeButton datetime='datetime' />
-          <IonModal keepContentsMounted={true} ref={modalRef}>
-            <IonDatetime
-              id='datetime'
-              presentation={showTime ? 'date-time' : 'date'}
-              value={date}
-              onIonChange={handleDateChange}
-              ref={datetime}
-              formatOptions={
-                showTime
-                  ? {
-                      date: { month: 'short', day: '2-digit', year: 'numeric' },
-                      time: { hour: '2-digit', minute: '2-digit' }
-                    }
-                  : {
-                      date: { month: 'short', day: '2-digit', year: 'numeric' }
-                    }
-              }
+          {hasSelectedDate ? (
+            <IonDatetimeButton datetime='datetime' />
+          ) : (
+            <button
+              onClick={() => modalRef.current?.present()}
+              className='px-4! py-2! text-umak-blue! border! border-umak-blue! rounded-md!'
             >
-              <IonButtons slot='buttons'>
-                <IonButton color='danger' onClick={reset}>
-                  Reset
-                </IonButton>
-                <IonButton color='primary' onClick={cancel}>
-                  Never mind
-                </IonButton>
-                <IonButton color='primary' onClick={confirm}>
-                  All Set
-                </IonButton>
-              </IonButtons>
-            </IonDatetime>
+              Select Date
+            </button>
+          )}
+          <IonModal
+            keepContentsMounted={true}
+            ref={modalRef}
+            style={{
+              '--ion-background-color': '#0000085'
+            }}
+          >
+            <div className='flex justify-center items-center h-full'>
+              <div
+                className='w-full h-full bg-transparent z-1 absolute! top-0!'
+                onClick={() => modalRef.current?.dismiss()}
+              />
+              <IonDatetime
+                id='datetime'
+                presentation={showTime ? 'date-time' : 'date'}
+                value={date}
+                max={new Date().toISOString()}
+                onIonChange={handleDateChange}
+                className='z-2'
+                ref={datetime}
+                formatOptions={
+                  showTime
+                    ? {
+                        date: {
+                          month: 'short',
+                          day: '2-digit',
+                          year: 'numeric'
+                        },
+                        time: { hour: '2-digit', minute: '2-digit' }
+                      }
+                    : {
+                        date: {
+                          month: 'short',
+                          day: '2-digit',
+                          year: 'numeric'
+                        }
+                      }
+                }
+              >
+                <IonButtons slot='buttons'>
+                  <IonButton color='danger' onClick={reset}>
+                    {hasSelectedDate ? 'Clear' : 'Reset'}
+                  </IonButton>
+                  <IonButton color='primary' onClick={cancel}>
+                    Never mind
+                  </IonButton>
+                  <IonButton color='primary' onClick={confirm}>
+                    All Set
+                  </IonButton>
+                </IonButtons>
+              </IonDatetime>
+            </div>
           </IonModal>
         </div>
       </div>

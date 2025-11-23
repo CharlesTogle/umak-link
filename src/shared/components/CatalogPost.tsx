@@ -19,10 +19,8 @@ import { ChoiceModal } from './ChoiceModal'
 import { useUser } from '@/features/auth/contexts/UserContext'
 import {
   handleMatch as performMatch,
-  handleDeleteSubmit,
   handleRejectSubmit,
   handleAccept,
-  deleteReasons,
   rejectReasons
 } from '@/features/staff/utils/catalogPostHandlers'
 
@@ -45,6 +43,8 @@ export type CatalogPostProps = {
   item_type?: string | null
   setPosts?: React.Dispatch<React.SetStateAction<any[]>>
   user_id?: string
+  category?: string
+  submittedOn?: string
 }
 
 const CatalogPost: React.FC<CatalogPostProps> = ({
@@ -65,15 +65,29 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
   showAnonIndicator = false,
   item_type = null,
   setPosts,
-  user_id
+  user_id,
+  category,
+  submittedOn = 'MM/DD/YYYY 00:00 AM/PM'
 }) => {
   const normalizedStatus = (itemStatus || '').toLowerCase()
-  const statusColorClass =
-    normalizedStatus === 'unclaimed'
-      ? 'text-red-600'
-      : normalizedStatus === 'claimed'
-      ? 'text-green-600'
-      : ''
+  const statusColorClass = getStatusColorClass(normalizedStatus)
+
+  function getStatusColorClass (status: string) {
+    switch (status) {
+      case 'unclaimed':
+        return 'text-red-600'
+      case 'claimed':
+        return 'text-green-600'
+      case 'lost':
+        return 'text-red-600'
+      case 'returned':
+        return 'text-green-600'
+      case 'missing':
+        return 'text-amber-600'
+      case 'found':
+        return 'text-umak-blue'
+    }
+  }
 
   const { user } = useUser()
   const [isProcessing, setIsProcessing] = useState(false)
@@ -87,7 +101,6 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
     color: 'success'
   })
   const [showRejectModal, setShowRejectModal] = useState(false)
-  const [showDeleteModal, setShowDeleteModal] = useState(false)
 
   // Staff action handlers
   const handleRejectClick = (e: React.MouseEvent) => {
@@ -133,7 +146,14 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
     if (!postId || isProcessing || !user_id || !user?.user_id) return
 
     setIsProcessing(true)
-    const result = await handleAccept(postId, user_id, itemName, user.user_id)
+    const result = await handleAccept(
+      postId,
+      user_id,
+      itemName,
+      description,
+      imageUrl || null,
+      user.user_id
+    )
     setIsProcessing(false)
 
     if (result.success) {
@@ -170,57 +190,19 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
     setIsProcessing(false)
 
     if (result.success) {
-      const matchCount = result.total_matches || 0
-      setToast({
-        show: true,
-        message:
-          matchCount > 0
-            ? `Found ${matchCount} potential match${matchCount > 1 ? 'es' : ''}`
-            : 'No matches found',
-        color: matchCount > 0 ? 'success' : 'warning'
-      })
-    } else {
-      setToast({
-        show: true,
-        message: result.error || 'Failed to find matches',
-        color: 'danger'
-      })
-    }
-  }
-
-  const handleDeleteClick = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (!postId || isProcessing) return
-    setShowDeleteModal(true)
-  }
-
-  const handleDeleteChoice = async (choice: string) => {
-    if (!postId || !user_id || !user?.user_id) return
-    setShowDeleteModal(false)
-    setIsProcessing(true)
-
-    const result = await handleDeleteSubmit(
-      postId,
-      user_id,
-      itemName,
-      choice,
-      user.user_id
-    )
-
-    setIsProcessing(false)
-    if (result.success) {
+      // Remove post from home page immediately
       if (setPosts) {
         setPosts((prev: any[]) => prev.filter((p: any) => p.post_id !== postId))
       }
       setToast({
         show: true,
-        message: 'Post deleted successfully',
+        message: 'Post scheduled for matching',
         color: 'success'
       })
     } else {
       setToast({
         show: true,
-        message: result.error || 'Failed to delete post',
+        message: result.error || 'Failed to schedule matching',
         color: 'danger'
       })
     }
@@ -235,7 +217,8 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
         {/* Header with avatar + username + kebab menu */}
         <IonItem lines='none' className='py-2 -mx-2'>
           <IonAvatar slot='start'>
-            {!is_anonymous && user_profile_picture_url ? (
+            {user_profile_picture_url &&
+            (!is_anonymous || showAnonIndicator) ? (
               <img
                 src={user_profile_picture_url}
                 alt={username}
@@ -250,7 +233,9 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
           </IonAvatar>
           <IonLabel>
             <div className='font-semibold text-umak-blue pl-3 flex items-center gap-2'>
-              <p>{is_anonymous ? 'Anonymous' : username}</p>
+              <p>
+                {is_anonymous && !showAnonIndicator ? 'Anonymous' : username}
+              </p>
               {showAnonIndicator && (
                 <span className='text-xs font-normal bg-gray-200 text-gray-700 px-2 py-0.5 rounded'>
                   Anonymous
@@ -300,6 +285,13 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
 
           <div className='flex items-center gap-2 mt-3 text-xs text-gray-500'>
             <IonText>
+              <strong>Category:</strong>
+            </IonText>
+            <IonText>{category}</IonText>
+          </div>
+
+          <div className='flex items-center gap-2 mt-3 text-xs text-gray-500'>
+            <IonText>
               <strong>Last seen:</strong>
             </IonText>
             <IonText>{formatTimestamp(lastSeen)}</IonText>
@@ -311,6 +303,14 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
             </IonText>
             <IonText>{locationLastSeenAt}</IonText>
           </div>
+          {variant !== 'user' && (
+            <div className='flex items-center gap-2 mt-3 text-xs text-gray-500'>
+              <IonText>
+                <strong>Submitted On:</strong>
+              </IonText>
+              <IonText>{formatTimestamp(submittedOn)}</IonText>
+            </div>
+          )}
 
           {/* Staff Action Buttons */}
           {variant === 'staff' && (
@@ -370,17 +370,17 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
                   </button>
                 </>
               ) : (
-                // Missing items: Match and Delete
+                // Missing items: Reject and Match
                 <>
                   <button
-                    onClick={handleDeleteClick}
+                    onClick={handleRejectClick}
                     disabled={isProcessing}
                     className='flex-1 bg-[var(--color-umak-red)] text-white py-4 px-4 rounded-sm! hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center'
                   >
                     {isProcessing ? (
                       <IonSpinner name='crescent' className='w-5 h-5' />
                     ) : (
-                      'DELETE'
+                      'REJECT'
                     )}
                   </button>
                   <button
@@ -410,17 +410,6 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
         choices={Array.from(rejectReasons)}
         onSubmit={handleRejectChoice}
         onDidDismiss={() => setShowRejectModal(false)}
-      />
-
-      {/* Delete Modal */}
-      <ChoiceModal
-        isOpen={showDeleteModal}
-        header='Delete Post'
-        subheading1='Select a reason to delete the post.'
-        subheading2='Uploader will be notified upon submission.'
-        choices={Array.from(deleteReasons)}
-        onSubmit={handleDeleteChoice}
-        onDidDismiss={() => setShowDeleteModal(false)}
       />
 
       <IonToast

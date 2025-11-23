@@ -15,6 +15,8 @@ import ExpandedPost from '@/features/posts/pages/ExpandedPost'
 import ReportPost from '@/features/posts/pages/ReportPost'
 import Notifications from '@/features/user/pages/Notifications'
 import ExpandedHistoryPost from '@/features/user/pages/ExpandedHistoryPost'
+import Matches from '@/features/user/pages/Matches'
+import EditPost from '@/features/user/pages/EditPost'
 
 const HistoryFallback = () => <div className='p-4'>Loading History…</div>
 const NewPostFallback = () => <div className='p-4'>Preparing form…</div>
@@ -25,6 +27,8 @@ export default function UserRoutes () {
     <IonTabs>
       <IonRouterOutlet>
         <Route path='/user/notifications' render={() => <Notifications />} />
+        <Route path='/user/matches' render={() => <Matches />} />
+        <Route path='/user/post/edit/:postId' render={() => <EditPost />} />
         <Route path='/user/post/view/:postId' render={() => <ExpandedPost />} />
         <Route path='/user/post/report/:postId' render={() => <ReportPost />} />
         <Route

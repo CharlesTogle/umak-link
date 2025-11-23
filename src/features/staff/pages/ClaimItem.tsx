@@ -9,10 +9,12 @@ import FormSectionHeader from '@/shared/components/FormSectionHeader'
 import { HeaderWithButtons } from '@/shared/components/HeaderVariants'
 import { ConfirmationModal } from '@/shared/components/ConfirmationModal'
 import PostCard from '@/features/posts/components/PostCard'
-import { getPost } from '@/features/posts/data/posts'
-import type { PublicPost } from '@/features/posts/types/post'
+import {
+  getPostFull,
+  type PostRecordDetails
+} from '@/features/posts/data/posts'
 import { useStaffSearch } from '@/features/admin/hooks/useStaffSearch'
-import { Network } from '@capacitor/network'
+import { isConnected } from '@/shared/utils/networkCheck'
 import ClaimerEmailSearch from '@/features/staff/components/claim-item/ClaimerEmailSearch'
 import SelectedUserCard from '@/features/staff/components/claim-item/SelectedUserCard'
 import ClaimFormFields from '@/features/staff/components/claim-item/ClaimFormFields'
@@ -45,7 +47,7 @@ export default function ClaimItem () {
   const initialDateTime = initializeDateTimeState()
 
   // Post state
-  const [post, setPost] = useState<PublicPost | null>(null)
+  const [post, setPost] = useState<PostRecordDetails | null>(null)
   const [loading, setLoading] = useState(true)
 
   // Lost item post validation hook
@@ -110,8 +112,8 @@ export default function ClaimItem () {
       setLoading(true)
 
       // Check network connectivity
-      const status = await Network.getStatus()
-      if (!status.connected) {
+      const connected = await isConnected()
+      if (!connected) {
         setToast({
           show: true,
           message: 'No internet connection. Please check your network.',
@@ -121,7 +123,7 @@ export default function ClaimItem () {
         return
       }
 
-      const fetchedPost = await getPost(postId)
+      const fetchedPost = await getPostFull(postId)
       if (!fetchedPost) {
         setToast({
           show: true,
@@ -218,16 +220,29 @@ export default function ClaimItem () {
   const handleSubmit = async () => {
     if (!postId || !selectedUser || !post || !user) return
 
+    // Check network connectivity before submitting
+    const connected = await isConnected()
+    if (!connected) {
+      setToast({
+        show: true,
+        message: 'Failed to claim item - no internet connection',
+        color: 'danger'
+      })
+      setShowConfirmModal(false)
+      return
+    }
+
     await submit(
       {
-        postId,
-        selectedUser,
-        contactNumber: formData.contactNumber,
-        post,
-        currentUser: {
-          user_id: user.user_id,
-          user_name: user.user_name
-        },
+        foundPostId: postId,
+        claimerName: selectedUser.name,
+        claimerEmail: selectedUser.email,
+        claimerContactNumber: formData.contactNumber,
+        posterName: post.is_anonymous ? 'Anonymous' : post.poster_name,
+        posterUserId: post.poster_id,
+        itemType: post.item_type,
+        staffId: user.user_id,
+        staffName: user.user_name,
         missingPostId: lostItemPost?.post_id || null
       },
       message => {
@@ -284,7 +299,10 @@ export default function ClaimItem () {
             imgUrl={post.item_image_url || ''}
             title={post.item_name || 'Item'}
             description={post.item_description || ''}
-            owner={post.is_anonymous ? 'Anonymous' : post.username || 'Unknown'}
+            owner={
+              post.is_anonymous ? 'Anonymous' : post.poster_name || 'Unknown'
+            }
+            owner_profile_picture_url={post.poster_profile_picture_url || null}
           />
         </div>
 

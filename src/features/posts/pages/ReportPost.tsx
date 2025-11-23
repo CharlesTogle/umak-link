@@ -4,8 +4,7 @@ import {
   IonButton,
   IonContent,
   IonSpinner,
-  IonToast,
-  
+  IonToast
 } from '@ionic/react'
 import { useIonViewWillLeave } from '@ionic/react'
 import CardHeader from '@/shared/components/CardHeader'
@@ -127,7 +126,13 @@ export default function ReportPost () {
           postId,
           concern: concern === 'Others' ? customConcernText : concern,
           additionalDetails,
-          proofImage: image
+          proofImage: image,
+          claimerName: post?.claimed_by_name,
+          claimerEmail: post?.claimed_by_email,
+          claimerContact: post?.claimed_by_contact,
+          claimedAt: post?.claimed_at,
+          claimProcessedByStaffId: post?.claim_processed_by_staff_id,
+          claimId: post?.claim_id
         })
 
         if (result.error) {

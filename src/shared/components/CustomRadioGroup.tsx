@@ -84,7 +84,7 @@ export default function CustomRadioGroup ({
                   onChange={() => handleRadioChange(opt)}
                   aria-label={opt.label}
                 />
-                <span className='text-md text-gray-800 cursor-pointer'>
+                <span className='text-md ml-2 text-gray-800 cursor-pointer'>
                   {opt.label}
                 </span>
               </div>
@@ -115,7 +115,7 @@ export default function CustomRadioGroup ({
               />
               <span
                 className={`text-md text-[#0F172B] ${
-                  gap ? `ml-${gap}` : 'ml-2'
+                  gap ? `ml-${gap}` : 'ml-2!'
                 } tracking-tight`}
               >
                 {opt.label}

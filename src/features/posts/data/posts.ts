@@ -1,18 +1,45 @@
 import { supabase } from '@/shared/lib/supabase'
 import type { PublicPost } from '@/features/posts/types/post'
 import { createPostCache } from '@/features/posts/data/postsCache'
+import { formatTimestamp } from '@/shared/utils/formatTimeStamp'
 
-const fmtManila = (iso: string | null) => {
-  if (!iso) return null
-  return new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Manila',
-    month: '2-digit',
-    day: '2-digit',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true
-  }).format(new Date(iso))
+export interface PostRecordDetails {
+  // Post details
+  post_id: string
+  poster_id: string
+  post_status: string
+  item_id: string
+  is_anonymous: boolean
+  submitted_on_date_local: string | null
+  rejection_reason: string | null
+  accepted_on_date_local: string | null
+  last_seen_date: string | null
+  last_seen_time: string | null
+  last_seen_at: string | null
+  last_seen_location: string | null
+
+  // Item details
+  item_name: string
+  item_description: string | null
+  image_id: string | null
+  item_image_url: string | null
+  item_status: string
+  item_type: string
+  category: string | null
+
+  // Poster details
+  poster_name: string
+  poster_email: string
+  poster_profile_picture_url: string | null
+
+  // Claim details
+  claimer_name: string | null
+  claimer_school_email: string | null
+  claimer_contact_num: string | null
+  claimed_at: string | null
+  claim_processed_by_name: string | null
+  claim_processed_by_email: string | null
+  claim_processed_by_profile_picture_url: string | null
 }
 
 export async function getTotalPostsCount (): Promise<number | null> {
@@ -47,7 +74,13 @@ export async function getPost (postId: string): Promise<PublicPost | null> {
       is_anonymous,
       submission_date,
       item_type,
-      post_status
+      post_status,
+      claimed_by_name,
+      claimed_by_email,
+      claimed_by_contact,
+      claimed_at,
+      claim_processed_by_staff_id,
+      claim_id
     `
     )
     .eq('post_id', postId)
@@ -85,13 +118,47 @@ export async function getPost (postId: string): Promise<PublicPost | null> {
     item_description: r.item_description,
     item_status: r.item_status,
     category: r.category,
-    last_seen_at: fmtManila(r.last_seen_at),
+    last_seen_at: formatTimestamp(r.last_seen_at),
     last_seen_location: r.last_seen_location,
     is_anonymous: r.is_anonymous,
     post_id: r.post_id,
     submission_date: r.submission_date,
     item_type: r.item_type,
-    post_status: r.post_status
+    post_status: r.post_status,
+    accepted_by_staff_name: r.accepted_by_staff_name,
+    accepted_by_staff_email: r.accepted_by_staff_email,
+    claimed_by_name: r.claimed_by_name,
+    claimed_by_email: r.claimed_by_email,
+    claimed_by_contact: r.claimed_by_contact,
+    claimed_at: r.claimed_at,
+    claim_processed_by_staff_id: r.claim_processed_by_staff_id,
+    claim_id: r.claim_id
+  }
+}
+
+export async function getPostFull (
+  postId: string
+): Promise<PostRecordDetails | null> {
+  if (!postId) return null
+
+  try {
+    const { data, error } = await supabase
+      .from('v_post_records_details')
+      .select('*')
+      .eq('post_id', postId)
+      .single()
+
+    if (error) {
+      console.error('Error fetching post record details:', error)
+      return null
+    }
+
+    if (!data) return null
+
+    return data as PostRecordDetails
+  } catch (error) {
+    console.error('Exception in getPostFull:', error)
+    return null
   }
 }
 
@@ -155,13 +222,21 @@ export async function listOwnPosts ({
       item_status: r.item_status,
       accepted_on_date: r.accepted_on_date,
       category: r.category,
-      last_seen_at: fmtManila(r.last_seen_at),
+      last_seen_at: formatTimestamp(r.last_seen_at),
       last_seen_location: r.last_seen_location,
       is_anonymous: r.is_anonymous,
       post_id: r.post_id,
       submission_date: r.submission_date,
       item_type: r.item_type,
-      post_status: r.post_status
+      post_status: r.post_status,
+      accepted_by_staff_name: r.accepted_by_staff_name,
+      accepted_by_staff_email: r.accepted_by_staff_email,
+      claimed_by_name: r.claimed_by_name,
+      claimed_by_email: r.claimed_by_email,
+      claimed_by_contact: r.claimed_by_contact,
+      claimed_at: r.claimed_at,
+      claim_processed_by_staff_id: r.claim_processed_by_staff_id,
+      claim_id: r.claim_id
     })),
     count: totalCount
   }
@@ -217,13 +292,21 @@ export async function listPublicPosts (
     accepted_on_date: r.accepted_on_date,
     item_status: r.item_status,
     category: r.category,
-    last_seen_at: fmtManila(r.last_seen_at),
+    last_seen_at: formatTimestamp(r.last_seen_at),
     last_seen_location: r.last_seen_location,
     is_anonymous: r.is_anonymous,
     post_id: r.post_id,
     submission_date: r.submission_date,
     item_type: r.item_type,
-    post_status: r.post_status
+    post_status: r.post_status,
+    accepted_by_staff_name: r.accepted_by_staff_name,
+    accepted_by_staff_email: r.accepted_by_staff_email,
+    claimed_by_name: r.claimed_by_name,
+    claimed_by_email: r.claimed_by_email,
+    claimed_by_contact: r.claimed_by_contact,
+    claimed_at: r.claimed_at,
+    claim_processed_by_staff_id: r.claim_processed_by_staff_id,
+    claim_id: r.claim_id
   }))
 }
 
@@ -279,13 +362,21 @@ export async function listPendingPosts (
     item_status: r.item_status,
     accepted_on_date: r.accepted_on_date,
     category: r.category,
-    last_seen_at: fmtManila(r.last_seen_at),
+    last_seen_at: formatTimestamp(r.last_seen_at),
     last_seen_location: r.last_seen_location,
     is_anonymous: r.is_anonymous,
     post_id: r.post_id,
     submission_date: r.submission_date,
     item_type: r.item_type,
-    post_status: r.post_status
+    post_status: r.post_status,
+    accepted_by_staff_name: r.accepted_by_staff_name,
+    accepted_by_staff_email: r.accepted_by_staff_email,
+    claimed_by_name: r.claimed_by_name,
+    claimed_by_email: r.claimed_by_email,
+    claimed_by_contact: r.claimed_by_contact,
+    claimed_at: r.claimed_at,
+    claim_processed_by_staff_id: r.claim_processed_by_staff_id,
+    claim_id: r.claim_id
   }))
 }
 
@@ -336,13 +427,21 @@ export async function listStaffPosts (
     item_status: r.item_status,
     accepted_on_date: r.accepted_on_date,
     category: r.category,
-    last_seen_at: fmtManila(r.last_seen_at),
+    last_seen_at: formatTimestamp(r.last_seen_at),
     last_seen_location: r.last_seen_location,
     is_anonymous: r.is_anonymous,
     post_id: r.post_id,
     submission_date: r.submission_date,
     item_type: r.item_type,
-    post_status: r.post_status
+    post_status: r.post_status,
+    accepted_by_staff_name: r.accepted_by_staff_name,
+    accepted_by_staff_email: r.accepted_by_staff_email,
+    claimed_by_name: r.claimed_by_name,
+    claimed_by_email: r.claimed_by_email,
+    claimed_by_contact: r.claimed_by_contact,
+    claimed_at: r.claimed_at,
+    claim_processed_by_staff_id: r.claim_processed_by_staff_id,
+    claim_id: r.claim_id
   }))
 }
 
@@ -406,13 +505,21 @@ export function listPostsByIds (getPostIds: () => string[]) {
         accepted_on_date: r.accepted_on_date,
         item_status: r.item_status,
         category: r.category,
-        last_seen_at: fmtManila(r.last_seen_at),
+        last_seen_at: formatTimestamp(r.last_seen_at),
         last_seen_location: r.last_seen_location,
         is_anonymous: r.is_anonymous,
         post_id: r.post_id,
         submission_date: r.submission_date,
         item_type: r.item_type,
-        post_status: r.post_status
+        post_status: r.post_status,
+        accepted_by_staff_name: r.accepted_by_staff_name,
+        accepted_by_staff_email: r.accepted_by_staff_email,
+        claimed_by_name: r.claimed_by_name,
+        claimed_by_email: r.claimed_by_email,
+        claimed_by_contact: r.claimed_by_contact,
+        claimed_at: r.claimed_at,
+        claim_processed_by_staff_id: r.claim_processed_by_staff_id,
+        claim_id: r.claim_id
       }))
     return ordered
   }

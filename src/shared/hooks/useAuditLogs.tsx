@@ -57,7 +57,7 @@ export function useAuditLogs () {
   const readAuditLog = async (logId: string): Promise<AuditLog | null> => {
     try {
       const { data, error } = await supabase
-        .from('audit_table')
+        .from('audit_logs')
         .select('*')
         .eq('log_id', logId)
         .single()
@@ -117,7 +117,7 @@ export function useAuditLogs () {
   ): Promise<AuditLog[]> => {
     try {
       const { data, error } = await supabase
-        .from('audit_table')
+        .from('audit_logs')
         .select('*')
         .eq('user_id', userId)
         .order('timestamp', { ascending: false })
@@ -149,7 +149,7 @@ export function useAuditLogs () {
   ): Promise<AuditLog[]> => {
     try {
       const { data, error } = await supabase
-        .from('audit_table')
+        .from('audit_logs')
         .select('*')
         .eq('action_type', actionType)
         .order('timestamp', { ascending: false })

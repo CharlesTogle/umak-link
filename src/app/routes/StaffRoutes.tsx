@@ -7,10 +7,13 @@ import ExpandedFraudReport from '../../features/staff/pages/ExpandedFraudReport'
 import ExpandedPostRecord from '../../features/staff/pages/ExpandedPostRecord'
 import Settings from '../../features/staff/pages/Settings'
 import ClaimItem from '../../features/staff/pages/ClaimItem'
+import NewPost from '../../features/staff/pages/NewPost'
 import Toolbar from '@/app/components/Toolbar'
 import { home, create, documentText, settings } from 'ionicons/icons'
 import Notifications from '@/features/user/pages/Notifications'
 import StaffExpandedPost from '@/features/staff/pages/StaffExpandedPost'
+import StaffSearchItem from '@/features/staff/pages/SearchItem'
+import StaffSearchResults from '@/features/staff/pages/SearchResults'
 
 export default function StaffRoutes () {
   return (
@@ -19,6 +22,12 @@ export default function StaffRoutes () {
         <Route exact path='/staff'>
           <Redirect to='/staff/home' />
         </Route>
+
+        <Route path='/staff/search' render={() => <StaffSearchItem />} />
+        <Route
+          path='/staff/search/results'
+          render={() => <StaffSearchResults />}
+        />
         <Route
           exact
           path='/staff/view-post/:postId'
@@ -29,6 +38,7 @@ export default function StaffRoutes () {
           path='/staff/post/claim/:postId'
           render={() => <ClaimItem />}
         />
+        <Route exact path='/staff/post/create' render={() => <NewPost />} />
         <Route path='/staff/notifications' render={() => <Notifications />} />
         <Route exact path='/staff/home' render={() => <Home />} />
         <Route

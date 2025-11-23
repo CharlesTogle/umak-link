@@ -29,6 +29,9 @@ export type CatalogPostProps = {
   onKebabButtonClick?: () => void | undefined
   itemStatus?: string | null
   showAnonIndicator?: boolean
+  // Claimer details
+  claimedByName?: string | null
+  claimedAt?: string | null
   // New props for external action sheet control
   actionSheetOpen?: boolean
   onActionSheetDismiss?: () => void
@@ -48,6 +51,8 @@ const Post: React.FC<CatalogPostProps> = ({
   onKebabButtonClick = undefined,
   itemStatus = null,
   showAnonIndicator = false,
+  claimedByName = null,
+  claimedAt = null,
   actionSheetOpen = false,
   onActionSheetDismiss,
   actionSheetButtons
@@ -150,6 +155,31 @@ const Post: React.FC<CatalogPostProps> = ({
           </IonText>
           <IonText className='text-base'>{locationLastSeenAt}</IonText>
         </div>
+        {normalizedStatus === 'claimed' && claimedByName && (
+          <div className='flex flex-col mt-4 text-xl text-slate-900'>
+            <IonText class='font-extrabold'>
+              <strong>Claimed By:</strong>
+            </IonText>
+            <div className='mt-2 space-y-1'>
+              <IonText className='text-base block'>
+                <strong>Name:</strong> {claimedByName}
+              </IonText>
+              {claimedAt && (
+                <IonText className='text-base block'>
+                  <strong>Claimed At:</strong>{' '}
+                  {new Date(claimedAt).toLocaleString('en-US', {
+                    month: '2-digit',
+                    day: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: true
+                  })}
+                </IonText>
+              )}
+            </div>
+          </div>
+        )}
       </IonCardContent>
       {/* Render ActionSheet if props provided */}
       {typeof actionSheetOpen !== 'undefined' && actionSheetButtons && (

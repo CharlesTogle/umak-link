@@ -17,6 +17,7 @@ export default function History () {
   const PAGE_SIZE = 5
   const [activeFilters, setActiveFilters] = useState<Set<PostStatus>>(new Set())
   const [sortDir, setSortDir] = useState<SortDirection>('desc')
+  const [postCount, setPostCount] = useState<number>(0)
   const contentRef = useRef<HTMLIonContentElement | null>(null)
   const { getUser } = useUser()
   const { navigate } = useNavigation()
@@ -61,7 +62,7 @@ export default function History () {
       categoryName: 'Post Status',
       options: [
         { value: 'Pending', label: 'Pending' },
-        { value: 'Fraud', label: 'Fraud' },
+        { value: 'Accepted', label: 'Accepted' },
         { value: 'Rejected', label: 'Rejected' }
       ]
     },
@@ -69,7 +70,9 @@ export default function History () {
       categoryName: 'Item Status',
       options: [
         { value: 'Claimed', label: 'Claimed' },
-        { value: 'Unclaimed', label: 'Unclaimed' }
+        { value: 'Unclaimed', label: 'Unclaimed' },
+        { value: 'Returned', label: 'Returned' },
+        { value: 'Lost', label: 'Lost' }
       ]
     },
     {
@@ -95,14 +98,21 @@ export default function History () {
   ]
 
   useEffect(() => {
-    const handler = (_ev?: Event) => {
-      contentRef.current?.scrollToTop?.(300)
+    const handler = async (_ev?: Event) => {
+      // Smooth scroll to top
+      await contentRef.current?.scrollToTop?.(400)
     }
 
     window.addEventListener('app:scrollToTop', handler as EventListener)
     return () =>
       window.removeEventListener('app:scrollToTop', handler as EventListener)
   }, [])
+
+  const handleFilterChange = (newFilters: Set<PostStatus>) => {
+    console.log('History - New Filters:', newFilters)
+    setActiveFilters(newFilters)
+    setPostCount(posts.length)
+  }
 
   return (
     <>
@@ -112,7 +122,7 @@ export default function History () {
         icon={createOutline}
         filterCategories={filterCategories}
         activeFilters={activeFilters}
-        onFilterChange={setActiveFilters}
+        onFilterChange={handleFilterChange}
         filterSelectionType='single-per-category'
         filterModalTitle='Filter Posts'
         filterModalSubtitle='Select post statuses to be displayed.'
@@ -124,6 +134,11 @@ export default function History () {
         sortModalTitle='Sort display order by'
         sortButtonLabel={sortDir === 'desc' ? 'Recent Upload' : 'Oldest Upload'}
       />
+      {postCount === 0 && (
+        <div className='flex justify-center mt-15 h-full text-gray-400'>
+          <p>No posts match the selected filters.</p>
+        </div>
+      )}
       <div className='h-full'>
         <PostList
           posts={posts}
@@ -145,12 +160,14 @@ export default function History () {
           onClick={(postId: string) => {
             navigate(`/user/post/history/view/${postId}`)
           }}
+          viewDetailsPath='/user/post/history/view/:postId'
           handleRefresh={async (event: CustomEvent) => {
             await refreshPosts()
             event.detail.complete()
           }}
           fetchNewPosts={fetchNewPosts}
           ref={contentRef}
+          withDelete={true}
         />
       </div>
     </>

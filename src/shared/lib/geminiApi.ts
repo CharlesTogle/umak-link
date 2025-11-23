@@ -316,27 +316,25 @@ export async function generateItemMetadata (
   const { itemName, itemDescription, image } = params
 
   const prompt = `
-You are an AI vision and language model. Your task is to analyze the provided image and return a *strictly valid JSON* object describing its visual, contextual, and identifying content.
+You are an AI vision model. Return only valid JSON describing the image.
 
-Requirements:
-1. Output must contain only JSON — no explanations, comments, markdown, or text outside the JSON.
-2. The JSON must have the following keys:
-   - "caption": a single concise sentence (max 100 characters) describing what you see in the image. Keep it descriptive and factual.
-   - "main_objects": an array of 5–10 concise nouns or noun phrases naming the primary visible objects.
-   - "descriptive_words": an array of 15–20 adjectives or short descriptive nouns about texture, color, material, shape, and condition.
-   - "potential_brands": an array of 1–5 possible brands or manufacturer names detected visually or inferred from the Item Name, Item Description, or Caption. If none are visible or implied, return an empty array [].
-   
-3. Keep all text lowercase and concise.
-4. Use short, general words — avoid long phrases or subjective terms.
-5. Remove duplicates and irrelevant terms.
-6. Ensure the JSON is syntactically correct and ready for direct parsing.
+Required JSON keys:
+- "caption": concise sentence (max 100 chars) describing the image
+- "main_objects": array of 5–10 primary visible objects (nouns/noun phrases)
+- "synonyms": array of 5–10 alternative terms for main_objects
+- "descriptive_words": array of 15–20 adjectives describing texture, color, material, shape, condition
+- "potential_brands": array of 1–5 brand names detected or inferred from visuals/context (empty array if none)
 
 Context:
 Item Name: ${itemName}
 Item Description: ${itemDescription}
 
-Goal:
-Provide consistent and comparable metadata that includes a descriptive caption and potential brand identifiers for use in reverse image matching.
+Rules:
+- Lowercase only
+- No duplicates
+- Short, general terms
+- No markdown, comments, or text outside JSON
+- Must be valid, parsable JSON
 
 Return only the JSON object.
 `

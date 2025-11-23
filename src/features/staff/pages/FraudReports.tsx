@@ -28,8 +28,9 @@ import FilterSortBar, {
 const FILTER_OPTIONS: FilterOption<ReportStatus>[] = [
   { value: 'All', label: 'All' },
   { value: 'Under Review', label: 'Under Review' },
-  { value: 'Verified', label: 'Verified' },
-  { value: 'Rejected', label: 'Rejected' }
+  { value: 'Open', label: 'Open' },
+  { value: 'Rejected', label: 'Rejected' },
+  { value: 'Resolved', label: 'Resolved' }
 ]
 
 const SORT_OPTIONS: SortOption[] = [

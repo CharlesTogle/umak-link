@@ -40,7 +40,7 @@ const CatalogHeader = memo(
   }
 )
 
-export default function SearchResults () {
+export default function StaffSearchResults () {
   const { searchResultPostIds: postIds, setSearchResults } = useSearchContext()
   const { navigate } = useNavigation()
   const [loading, setLoading] = useState(true)
@@ -77,8 +77,8 @@ export default function SearchResults () {
     fetchFunction: listFn,
     refreshPostFunction: refreshByIds(),
     cacheKeys: {
-      loadedKey: 'SearchResultsLoaded',
-      cacheKey: 'SearchResultsCached'
+      loadedKey: 'StaffSearchResultsLoaded',
+      cacheKey: 'StaffSearchResultsCached'
     },
     pageSize: 5
   })
@@ -86,15 +86,15 @@ export default function SearchResults () {
   const refreshSearchResults = useCallback(async () => {
     setLoading(true)
     const cache = createPostCache({
-      loadedKey: 'SearchResultsLoaded',
-      cacheKey: 'SearchResultsCached'
+      loadedKey: 'StaffSearchResultsLoaded',
+      cacheKey: 'StaffSearchResultsCached'
     })
 
     try {
       await cache.clearPostsCache()
       await fetchPosts()
     } catch (err) {
-      console.error('Error fetching search results:', err)
+      console.error('Error fetching staff search results:', err)
     } finally {
       setLoading(false)
     }
@@ -113,7 +113,7 @@ export default function SearchResults () {
 
   const handleSearchBarClick = () => {
     Keyboard.hide()
-    navigate('/user/search')
+    navigate('/staff/search')
   }
 
   return (
@@ -135,9 +135,10 @@ export default function SearchResults () {
           loadMorePosts={handleLoadMore}
           handleRefresh={refreshPosts}
           fetchNewPosts={fetchNewPosts}
-          onClick={postId => navigate(`/user/post/view/${postId}`)}
+          onClick={postId => navigate(`/staff/post-record/view/${postId}`)}
           pageSize={5}
-          variant='search'
+          viewDetailsPath='/staff/post-record/view/:postId'
+          marginBottom='0'
           children={
             <div className='px-4 py-2 text-sm text-gray-600'>
               Showing all search results

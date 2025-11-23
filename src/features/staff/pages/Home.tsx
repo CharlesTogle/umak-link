@@ -7,6 +7,7 @@ import {
 } from '@ionic/react'
 import { listOutline, arrowDownOutline, arrowUpOutline } from 'ionicons/icons'
 import { useNavigation } from '@/shared/hooks/useNavigation'
+import { isConnected } from '@/shared/utils/networkCheck'
 import Header from '@/shared/components/Header'
 import FilterSortBar from '@/shared/components/FilterSortBar'
 import type {
@@ -139,7 +140,7 @@ export default function Home () {
     })
 
   const handlePostClick = (postId: string) => {
-    navigate(`/staff/post/view/${postId}`)
+    navigate(`/staff/post-record/view/${postId}`)
   }
 
   useEffect(() => {
@@ -157,6 +158,15 @@ export default function Home () {
   // Pull-to-refresh: fetch new posts and refresh cache
   const handleRefresh = async (event: CustomEvent) => {
     try {
+      const connected = await isConnected()
+      if (!connected) {
+        setToastMessage('No internet connection - Showing cached posts')
+        setToastColor('danger')
+        setShowToast(true)
+        event.detail.complete()
+        return
+      }
+
       await fetchNewPosts()
       await refreshPosts()
     } finally {
@@ -166,9 +176,18 @@ export default function Home () {
 
   // scrollToTop event - fetch newest posts
   useEffect(() => {
-    const handler = (_ev?: Event) => {
+    const handler = async (_ev?: Event) => {
       // Scroll to top immediately (don't wait for fetch)
       contentRef.current?.scrollToTop?.(300)
+
+      // Check network status before fetching
+      const connected = await isConnected()
+      if (!connected) {
+        setToastMessage('No internet connection - Showing cached posts')
+        setToastColor('danger')
+        setShowToast(true)
+        return
+      }
 
       // Fetch newest posts in background
       fetchNewPosts()
@@ -210,10 +229,13 @@ export default function Home () {
         onFilterChange={setActiveFilters}
         filterSelectionType='single'
         filterModalTitle='Filter by Item Type'
+        filterModalSubtitle='Select an item type to filter posts'
         sortOptions={sortOptions}
         activeSort={sortDir}
         onSortChange={sort => setSortDir(sort as 'asc' | 'desc')}
         sortModalTitle='Sort by Submission Date'
+        breakpoints={[0.25, 0.5]}
+        initialBreakpoint={0.25}
       />
 
       {loading ? (

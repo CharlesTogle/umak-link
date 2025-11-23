@@ -5,15 +5,14 @@ import AdvancedSearch from '@/features/user/components/search-item/AdvancedSearc
 import { IonSearchbar, IonContent, IonButton, IonToast } from '@ionic/react'
 import { Keyboard } from '@capacitor/keyboard'
 import { useNavigation } from '@/shared/hooks/useNavigation'
-import useSearch from '@/features/user/hooks/useSearch'
-import SearchLoadingPage from './SearchLoadingPage'
+import useStaffSearch from '@/features/staff/hooks/useStaffSearch'
+import SearchLoadingPage from '@/features/user/pages/SearchLoadingPage'
 import { useSearchHistory } from '@/features/user/hooks/useSearchHistory'
 
-export default function SearchItem () {
+export default function StaffSearchItem () {
   const { searchHistory, setSearchHistory, addToHistory } = useSearchHistory()
   const [searchValue, setSearchValue] = useState('')
 
-  // ------------------ LIFTED ADVANCED SEARCH STATES ------------------
   // Initialize date/time/meridian to current Philippine Time (UTC+8)
   const now = new Date()
   const utcTime = now.getTime() + now.getTimezoneOffset() * 60000
@@ -48,15 +47,15 @@ export default function SearchItem () {
 
   const searchRef = useRef<HTMLIonSearchbarElement | null>(null)
   const { navigate } = useNavigation()
-  const { handleAdvancedSearch: processAdvancedSearch, toISODate } = useSearch()
+  const { handleAdvancedSearch: processAdvancedSearch, toISODate } =
+    useStaffSearch()
 
-  // 🔍 Filter logic
+  // Filter logic
   const filteredHistory = useMemo(() => {
     if (!searchValue.trim()) return searchHistory
     const matches = searchHistory.filter(item =>
       item.toLowerCase().includes(searchValue.toLowerCase())
     )
-    // If no matches, return an artificial "No Result Found" entry
     return matches.length > 0 ? matches : ['No Result Found']
   }, [searchHistory, searchValue])
 
@@ -64,7 +63,7 @@ export default function SearchItem () {
     setSearchValue('')
     if (!searchRef.current) return
     Keyboard.hide()
-    navigate('/user/home')
+    navigate('/staff/home')
   }, [navigate])
 
   const handleSearchbarFocus = useCallback(() => {
@@ -112,7 +111,6 @@ export default function SearchItem () {
   const handleHistoryItemClick = async (term: string) => {
     setSearchValue(term)
 
-    // Automatically trigger search with the clicked term
     setIsSearching(true)
     setSearchProgress({ current: 0, total: 0 })
 
@@ -136,7 +134,7 @@ export default function SearchItem () {
       return
     }
 
-    navigate('/user/search/results')
+    navigate('/staff/search/results')
   }
 
   // Handle advanced search submission
@@ -157,8 +155,6 @@ export default function SearchItem () {
       }
     })
 
-    // setIsSearching(false)/
-
     if (!response.success) {
       setToastMessage(response.message || 'Search failed. Please try again.')
       setShowToast(true)
@@ -171,8 +167,10 @@ export default function SearchItem () {
       addToHistory(searchValue.trim())
     }
 
-    navigate('/user/search/results')
+    navigate('/staff/search/results')
+    setIsSearching(false)
   }
+
   return (
     <>
       {isSearching ? (

@@ -4,14 +4,22 @@ import { closeOutline } from 'ionicons/icons'
 interface SearchHistoryProps {
   searchHistory: string[]
   setSearchHistory: React.Dispatch<React.SetStateAction<string[]>>
+  onItemClick?: (term: string) => void
 }
 
 export default function SearchHistory ({
   searchHistory,
-  setSearchHistory
+  setSearchHistory,
+  onItemClick
 }: SearchHistoryProps) {
   const handleRemove = (term: string) => {
     setSearchHistory(prev => prev.filter(item => item !== term))
+  }
+
+  const handleItemClick = (term: string) => {
+    if (term !== 'No Result Found' && onItemClick) {
+      onItemClick(term)
+    }
   }
 
   if (!searchHistory.length) return null
@@ -31,6 +39,8 @@ export default function SearchHistory ({
               key={`${term}-${idx}`}
               className='flex justify-between items-center text-gray-800'
               lines={idx === searchHistory.length - 1 ? 'none' : 'full'}
+              button={term !== 'No Result Found'}
+              onClick={() => handleItemClick(term)}
             >
               <IonLabel
                 className={`text-sm  text-black ${
@@ -45,7 +55,10 @@ export default function SearchHistory ({
                   fill='clear'
                   size='small'
                   className='!m-0  !font-roboto'
-                  onClick={() => handleRemove(term)}
+                  onClick={e => {
+                    e.stopPropagation()
+                    handleRemove(term)
+                  }}
                 >
                   <IonIcon icon={closeOutline} className='text-gray-500' />
                 </IonButton>

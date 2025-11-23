@@ -40,7 +40,15 @@ export async function refreshPublicPosts (
       submission_date,
       item_type,
       post_status,
-      accepted_on_date
+      accepted_on_date,
+      accepted_by_staff_name,
+      accepted_by_staff_email,
+      claimed_by_name,
+      claimed_by_email,
+      claimed_by_contact,
+      claimed_at,
+      claim_processed_by_staff_id,
+      claim_id
     `
     )
     .in('post_id', includeIds)
@@ -67,7 +75,15 @@ export async function refreshPublicPosts (
     post_id: r.post_id,
     submission_date: r.submission_date,
     item_type: r.item_type,
-    post_status: r.post_status
+    post_status: r.post_status,
+    accepted_by_staff_name: r.accepted_by_staff_name,
+    accepted_by_staff_email: r.accepted_by_staff_email,
+    claimed_by_name: r.claimed_by_name,
+    claimed_by_email: r.claimed_by_email,
+    claimed_by_contact: r.claimed_by_contact,
+    claimed_at: r.claimed_at,
+    claim_processed_by_staff_id: r.claim_processed_by_staff_id,
+    claim_id: r.claim_id
   }))
 }
 
@@ -95,7 +111,16 @@ export async function refreshStaffPosts (
       is_anonymous,
       submission_date,
       item_type,
-      post_status
+      post_status,
+      accepted_on_date,
+      accepted_by_staff_name,
+      accepted_by_staff_email,
+      claimed_by_name,
+      claimed_by_email,
+      claimed_by_contact,
+      claimed_at,
+      claim_processed_by_staff_id,
+      claim_id
     `
     )
     .in('post_id', includeIds)
@@ -119,7 +144,15 @@ export async function refreshStaffPosts (
     post_id: r.post_id,
     submission_date: r.submission_date,
     item_type: r.item_type,
-    post_status: r.post_status
+    post_status: r.post_status,
+    accepted_by_staff_name: r.accepted_by_staff_name,
+    accepted_by_staff_email: r.accepted_by_staff_email,
+    claimed_by_name: r.claimed_by_name,
+    claimed_by_email: r.claimed_by_email,
+    claimed_by_contact: r.claimed_by_contact,
+    claimed_at: r.claimed_at,
+    claim_processed_by_staff_id: r.claim_processed_by_staff_id,
+    claim_id: r.claim_id
   }))
 }
 
@@ -148,7 +181,16 @@ export async function refreshOwnPosts (
       is_anonymous,
       submission_date,
       item_type,
-      post_status
+      post_status,
+      accepted_on_date,
+      accepted_by_staff_name,
+      accepted_by_staff_email,
+      claimed_by_name,
+      claimed_by_email,
+      claimed_by_contact,
+      claimed_at,
+      claim_processed_by_staff_id,
+      claim_id
     `
     )
     .in('post_id', includeIds)
@@ -173,7 +215,15 @@ export async function refreshOwnPosts (
     post_id: r.post_id,
     submission_date: r.submission_date,
     item_type: r.item_type,
-    post_status: r.post_status
+    post_status: r.post_status,
+    accepted_by_staff_name: r.accepted_by_staff_name,
+    accepted_by_staff_email: r.accepted_by_staff_email,
+    claimed_by_name: r.claimed_by_name,
+    claimed_by_email: r.claimed_by_email,
+    claimed_by_contact: r.claimed_by_contact,
+    claimed_at: r.claimed_at,
+    claim_processed_by_staff_id: r.claim_processed_by_staff_id,
+    claim_id: r.claim_id
   }))
 }
 
@@ -202,7 +252,15 @@ export function refreshByIds () {
       submission_date,
       item_type,
       post_status,
-      accepted_on_date
+      accepted_on_date,
+      accepted_by_staff_name,
+      accepted_by_staff_email,
+      claimed_by_name,
+      claimed_by_email,
+      claimed_by_contact,
+      claimed_at,
+      claim_processed_by_staff_id,
+      claim_id
     `
       )
       .in('post_id', includeIds)
@@ -228,7 +286,15 @@ export function refreshByIds () {
       post_id: r.post_id,
       submission_date: r.submission_date,
       item_type: r.item_type,
-      post_status: r.post_status
+      post_status: r.post_status,
+      accepted_by_staff_name: r.accepted_by_staff_name,
+      accepted_by_staff_email: r.accepted_by_staff_email,
+      claimed_by_name: r.claimed_by_name,
+      claimed_by_email: r.claimed_by_email,
+      claimed_by_contact: r.claimed_by_contact,
+      claimed_at: r.claimed_at,
+      claim_processed_by_staff_id: r.claim_processed_by_staff_id,
+      claim_id: r.claim_id
     }))
   }
 }

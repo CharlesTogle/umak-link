@@ -3,26 +3,18 @@ import { Network } from '@capacitor/network'
 import { supabase } from '@/shared/lib/supabase'
 import { useNavigation } from '@/shared/hooks/useNavigation'
 import useNotifications from '@/features/user/hooks/useNotifications'
-import type { PublicPost } from '@/features/posts/types/post'
 
-interface SelectedUser {
-  id: string
-  name: string
-  email: string
-  image?: string | null
-}
-
-interface CurrentUser {
-  user_id: string
-  user_name: string
-}
 
 interface ClaimItemSubmitParams {
-  postId: string
-  selectedUser: SelectedUser
-  contactNumber: string
-  post: PublicPost
-  currentUser: CurrentUser
+  foundPostId: string
+  claimerName: string
+  claimerEmail: string
+  claimerContactNumber: string
+  posterName: string
+  posterUserId: string
+  itemType: string
+  staffId: string
+  staffName: string
   missingPostId: string | null
 }
 
@@ -37,21 +29,25 @@ export function useClaimItemSubmit () {
     onError: (message: string) => void
   ) => {
     const {
-      postId,
-      selectedUser,
-      contactNumber,
-      post,
-      currentUser,
+      foundPostId,
+      claimerName,
+      claimerEmail,
+      claimerContactNumber,
+      posterName,
+      posterUserId,
+      itemType,
+      staffId,
+      staffName,
       missingPostId
     } = params
 
     // Validation
-    if (!selectedUser || !post || !currentUser) {
+    if (!claimerName || !claimerEmail) {
       onError('Please select a claimer')
       return
     }
 
-    if (!contactNumber) {
+    if (!claimerContactNumber) {
       onError('Please enter contact number')
       return
     }
@@ -69,16 +65,16 @@ export function useClaimItemSubmit () {
 
       // Call process_claim RPC
       const { error } = await supabase.rpc('process_claim', {
-        found_post_id: postId,
+        found_post_id: Number(foundPostId),
         claim_details: {
-          claimer_name: selectedUser.name,
-          claimer_school_email: selectedUser.email,
-          claimer_contact_num: contactNumber,
-          poster_name: post.username || 'Unknown',
-          staff_id: currentUser.user_id,
-          staff_name: currentUser.user_name
+          claimer_name: claimerName,
+          claimer_school_email: claimerEmail,
+          claimer_contact_num: claimerContactNumber,
+          poster_name: posterName,
+          staff_id: staffId,
+          staff_name: staffName
         },
-        missing_post_id: missingPostId
+        missing_post_id: missingPostId ? Number(missingPostId) : null
       })
 
       if (error) {
@@ -86,9 +82,9 @@ export function useClaimItemSubmit () {
       }
 
       // Send notification to poster if item_type is 'lost'
-      if (post.item_type === 'lost' && post.user_id) {
+      if (itemType === 'lost' && posterUserId) {
         await sendNotification({
-          userId: post.user_id,
+          userId: posterUserId,
           title: 'Similar Items Found',
           message:
             'We found items similar to your reported lost item, you might want to come and check',

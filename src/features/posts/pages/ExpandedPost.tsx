@@ -5,9 +5,17 @@ import { getPost } from '../data/posts'
 import Post from '@/features/posts/components/Post'
 import PostSkeleton from '../components/PostSkeleton'
 import Header from '@/shared/components/Header'
-import { IonContent, IonActionSheet } from '@ionic/react'
+import {
+  IonContent,
+  IonActionSheet,
+  IonToast,
+  IonButton,
+  IonIcon
+} from '@ionic/react'
 import { Share } from '@capacitor/share'
 import { useNavigation } from '@/shared/hooks/useNavigation'
+import { isConnected } from '@/shared/utils/networkCheck'
+import { arrowBack } from 'ionicons/icons'
 
 export default function ExpandedPost () {
   const { postId } = useParams<{ postId: string }>()
@@ -16,12 +24,26 @@ export default function ExpandedPost () {
   const [post, setPost] = useState<PublicPost | null>()
   const [loading, setLoading] = useState<boolean>(true)
   const [actionSheetOpen, setActionSheetOpen] = useState<boolean>(false)
+  const [showToast, setShowToast] = useState(false)
+  const [toastMessage, setToastMessage] = useState('')
+  const [offline, setOffline] = useState(false)
 
   useEffect(() => {
     const getCurrentPost = async () => {
       if (!postId) return
       setLoading(true)
       setPost(undefined)
+
+      const connected = await isConnected()
+      if (!connected) {
+        setOffline(true)
+        setToastMessage('Failed to load Post - No Internet Connection')
+        setShowToast(true)
+        setLoading(false)
+        setPost(null)
+        return
+      }
+
       const fetchedPost = await getPost(postId as string)
       setPost(fetchedPost)
       setLoading(false)
@@ -53,32 +75,85 @@ export default function ExpandedPost () {
     navigate(`/user/post/report/${postId}`)
   }, [navigate, postId])
 
+  if (!loading && offline && post === null) {
+    return (
+      <IonContent>
+        <Header isProfileAndNotificationShown={true} logoShown={true} />
+        <div className='flex flex-col items-center justify-center h-full px-6 pt-20'>
+          <div className='text-center mb-6'>
+            <p className='text-xl font-semibold text-gray-800 mb-2'>
+              Failed to load Post
+            </p>
+            <p className='text-base text-gray-600'>No Internet Connection</p>
+          </div>
+          <IonButton
+            onClick={() => window.history.back()}
+            fill='solid'
+            style={{
+              '--background': 'var(--color-umak-blue)',
+              '--color': 'white'
+            }}
+          >
+            <IonIcon slot='start' icon={arrowBack} />
+            Go Back
+          </IonButton>
+        </div>
+      </IonContent>
+    )
+  }
+
   if (!loading && post === null) {
-    return <div>No post found.</div>
+    return (
+      <IonContent>
+        <Header isProfileAndNotificationShown={true} logoShown={true} />
+        <div className='flex flex-col items-center justify-center h-full px-6 pt-20'>
+          <div className='text-center mb-6'>
+            <p className='text-xl font-semibold text-gray-800'>No post found</p>
+          </div>
+          <IonButton
+            onClick={() => window.history.back()}
+            fill='solid'
+            style={{
+              '--background': 'var(--color-umak-blue)',
+              '--color': 'white'
+            }}
+          >
+            <IonIcon slot='start' icon={arrowBack} />
+            Go Back
+          </IonButton>
+        </div>
+      </IonContent>
+    )
   }
 
   return (
     <IonContent>
-      <Header isProfileAndNotificationShown={true} logoShown={true} />
+      <div className='fixed top-0 w-full'>
+        <Header isProfileAndNotificationShown={true} logoShown={true} />
+      </div>
 
-      {loading ? (
-        <PostSkeleton />
-      ) : (
-        <Post
-          category={post?.category ?? ''}
-          description={post?.item_description ?? ''}
-          imageUrl={post?.item_image_url ?? ''}
-          itemName={post?.is_anonymous ? 'Anonymous' : post?.item_name ?? ''}
-          itemStatus={post?.item_status ?? ''}
-          lastSeen={post?.last_seen_at ?? ''}
-          locationLastSeenAt={post?.last_seen_location ?? ''}
-          user_profile_picture_url={
-            post?.is_anonymous ? null : post?.profilepicture_url ?? ''
-          }
-          username={post?.is_anonymous ? 'Anonymous' : post?.username ?? ''}
-          onKebabButtonClick={handleOpenActions}
-        />
-      )}
+      <div className='pt-15'>
+        {loading ? (
+          <PostSkeleton />
+        ) : (
+          <Post
+            category={post?.category ?? ''}
+            description={post?.item_description ?? ''}
+            imageUrl={post?.item_image_url ?? ''}
+            itemName={post?.is_anonymous ? 'Anonymous' : post?.item_name ?? ''}
+            itemStatus={post?.item_status ?? ''}
+            lastSeen={post?.last_seen_at ?? ''}
+            locationLastSeenAt={post?.last_seen_location ?? ''}
+            user_profile_picture_url={
+              post?.is_anonymous ? null : post?.profilepicture_url ?? ''
+            }
+            username={post?.is_anonymous ? 'Anonymous' : post?.username ?? ''}
+            onKebabButtonClick={handleOpenActions}
+            claimedByName={post?.claimed_by_name ?? null}
+            claimedAt={post?.claimed_at ?? null}
+          />
+        )}
+      </div>
 
       <IonActionSheet
         isOpen={actionSheetOpen}
@@ -100,6 +175,15 @@ export default function ExpandedPost () {
             role: 'cancel'
           }
         ]}
+      />
+
+      <IonToast
+        isOpen={showToast}
+        onDidDismiss={() => setShowToast(false)}
+        message={toastMessage}
+        duration={3000}
+        position='top'
+        color='danger'
       />
     </IonContent>
   )

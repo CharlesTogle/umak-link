@@ -11,6 +11,7 @@ interface Props {
 
 export default function ExpandableImage ({ src, alt, className }: Props) {
   const [open, setOpen] = useState(false)
+  const [imageLoaded, setImageLoaded] = useState(false)
   const holdTimer = useRef<number | null>(null)
   const prevOverflow = useRef<string>('')
 
@@ -52,18 +53,21 @@ export default function ExpandableImage ({ src, alt, className }: Props) {
           className || ''
         }`}
         onClick={e => {
-          setOpen(true)
-          e.stopPropagation()
+          if (imageLoaded) {
+            setOpen(true)
+            e.stopPropagation()
+          }
         }}
-        onPointerDown={startHold}
-        onPointerUp={clearHold}
-        onPointerLeave={clearHold}
+        onPointerDown={imageLoaded ? startHold : undefined}
+        onPointerUp={imageLoaded ? clearHold : undefined}
+        onPointerLeave={imageLoaded ? clearHold : undefined}
         onContextMenu={e => e.preventDefault()}
       >
         <LazyImage
           src={src}
           alt={alt}
           className='w-full h-full object-cover select-none outline-none border-none'
+          onLoad={() => setImageLoaded(true)}
         />
       </div>
 

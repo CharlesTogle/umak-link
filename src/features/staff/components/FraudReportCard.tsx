@@ -62,7 +62,9 @@ const FraudReportCard: React.FC<FraudReportCardProps> = ({
 
   const getStatusColor = () => {
     switch ((reportStatus || '').toLowerCase()) {
-      case 'verified':
+      case 'open':
+        return 'amber-600'
+      case 'resolved':
         return 'green-600'
       case 'rejected':
         return 'umak-red'

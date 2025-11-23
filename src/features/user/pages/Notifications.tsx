@@ -171,50 +171,67 @@ export default function Notifications () {
           [...Array(10)].map((_, idx) => <NotificationItemSkeleton key={idx} />)
         ) : (notificationsList ?? []).length === 0 ? (
           <div className='px-4 py-10 text-center text-slate-500 font-default-font text-sm'>
-            You’re all caught up.
+            You're all caught up.
           </div>
         ) : (
-          (notificationsList ?? []).map(n => {
-            // Construct title/description from available fields
-            const title = n.description ?? 'Notification'
-            const data = n.data ?? {}
-            let link
-            if (data['link'] && data['postId']) {
-              link = data['link']
-            }
-            const description = n.description ?? JSON.stringify(n.data ?? '')
-
-            const actions: ActionItem[] = [
-              {
-                color: 'danger',
-                type: 'Delete notification',
-                onClick: () => handleNotificationDelete(n.notification_id),
-                icon: trashOutline
+          (notificationsList ?? [])
+            .sort((a, b) => {
+              // Sort global_announcement to the top
+              if (
+                a.type === 'global_announcement' &&
+                b.type !== 'global_announcement'
+              )
+                return -1
+              if (
+                a.type !== 'global_announcement' &&
+                b.type === 'global_announcement'
+              )
+                return 1
+              return 0
+            })
+            .map(n => {
+              // Construct title/description from available fields
+              const title = n.title ?? 'Notification'
+              const data = n.data ?? {}
+              let link
+              if (data['link'] && data['postId']) {
+                link = data['link']
               }
-            ]
-            if (!n.is_read) {
-              actions.push({
-                color: 'primary',
-                type: 'Mark as read',
-                onClick: () => handleMarkAsRead(n.notification_id),
-                icon: checkmarkOutline
-              })
-            }
-            return (
-              <NotificationItem
-                key={n.notification_id}
-                type={(n.type as any) || 'info'}
-                title={title}
-                href={link}
-                description={description}
-                read={Boolean(n.is_read)}
-                actions={actions}
-                notificationId={n.notification_id}
-                handleMarkAsRead={handleMarkAsRead}
-                imageUrl={n.image_url ?? undefined}
-              />
-            )
-          })
+
+              const description = n.description ?? JSON.stringify(n.data ?? '')
+
+              const actions: ActionItem[] = [
+                {
+                  color: 'danger',
+                  type: 'Delete notification',
+                  onClick: () => handleNotificationDelete(n.notification_id),
+                  icon: trashOutline
+                }
+              ]
+              if (!n.is_read) {
+                actions.push({
+                  color: 'primary',
+                  type: 'Mark as read',
+                  onClick: () => handleMarkAsRead(n.notification_id),
+                  icon: checkmarkOutline
+                })
+              }
+              return (
+                <NotificationItem
+                  key={n.notification_id}
+                  type={(n.type as any) || 'info'}
+                  title={title}
+                  href={link}
+                  description={description}
+                  read={Boolean(n.is_read)}
+                  actions={actions}
+                  notificationId={n.notification_id}
+                  handleMarkAsRead={handleMarkAsRead}
+                  imageUrl={n.image_url ?? undefined}
+                  notificationData={data}
+                />
+              )
+            })
         )}
       </div>
 

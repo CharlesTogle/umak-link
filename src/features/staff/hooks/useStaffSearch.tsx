@@ -33,9 +33,7 @@ interface SearchResponse {
   data?: SearchResult
 }
 
-export default function useSearch () {
-  // Obtain the search context at the top-level of this custom hook
-  // (calling context hooks inside nested functions causes invalid hook calls)
+export default function useStaffSearch () {
   const searchCtx = useSearchContext()
 
   /**
@@ -76,7 +74,6 @@ export default function useSearch () {
       onProgress
     } = params
 
-    // Use the context methods from the top-level context reference
     searchCtx.clearSearchResults()
 
     // Validation: return null if search value is not provided
@@ -175,11 +172,10 @@ export default function useSearch () {
         'Error running DB search or saving results from hook:',
         dbErr
       )
-      // Clear any previous results to avoid stale data
       searchCtx.setSearchResults([])
     }
 
-    console.log('Advanced Search Result:', searchResult)
+    console.log('Staff Advanced Search Result:', searchResult)
     return { success: true, data: searchResult }
   }
 
@@ -196,7 +192,7 @@ export default function useSearch () {
     locationLastSeen?: string | null
     category?: string | null
   }) {
-    const { data, error } = await supabase.rpc('search_items_fts', {
+    const { data, error } = await supabase.rpc('search_items_fts_staff', {
       search_term: query,
       limit_count: limit,
       p_date: lastSeenDate ? lastSeenDate.toISOString().split('T')[0] : null,
@@ -206,7 +202,7 @@ export default function useSearch () {
 
     if (error) throw error
 
-    console.log('Search RPC Data:', data)
+    console.log('Staff Search RPC Data:', data)
     return data
   }
 

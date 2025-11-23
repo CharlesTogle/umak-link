@@ -1,11 +1,17 @@
 import type { FraudReportPublic } from '@/features/staff/hooks/useFraudReports'
 
-export type ReportStatus = 'All' | 'Under Review' | 'Verified' | 'Rejected'
+export type ReportStatus =
+  | 'All'
+  | 'Under Review'
+  | 'Open'
+  | 'Rejected'
+  | 'Resolved'
 
 export const STATUS_MAP: Record<Exclude<ReportStatus, 'All'>, string> = {
   'Under Review': 'under_review',
-  Verified: 'verified',
-  Rejected: 'rejected'
+  Open: 'open',
+  Rejected: 'rejected',
+  Resolved: 'resolved'
 }
 
 export type SortDirection = 'asc' | 'desc'

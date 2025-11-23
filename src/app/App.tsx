@@ -1,12 +1,5 @@
-import React, { useState, useEffect } from 'react'
-import {
-  IonApp,
-  IonRouterOutlet,
-  IonContent,
-  IonText,
-  IonButton,
-  IonIcon
-} from '@ionic/react'
+import React from 'react'
+import { IonApp, IonRouterOutlet } from '@ionic/react'
 import { IonReactRouter } from '@ionic/react-router'
 import { Route, Redirect } from 'react-router-dom'
 import { setupIonicReact } from '@ionic/react'
@@ -22,8 +15,6 @@ import { usePushRedirect } from './hooks/usePushRedirect'
 import AdminRoutes from './routes/AdminRoutes'
 import StaffRoutes from '@/app/routes/StaffRoutes'
 import AccountPage from '@/features/user/pages/AccountPage'
-import { Network } from '@capacitor/network'
-import { cloudOffline, refresh } from 'ionicons/icons'
 
 import '@ionic/react/css/core.css'
 import '@ionic/react/css/normalize.css'
@@ -42,100 +33,6 @@ setupIonicReact({ mode: 'md' })
 const App: React.FC = () => {
   usePushRedirect()
   const googleWebClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
-  const [isOnline, setIsOnline] = useState(true)
-  const [isChecking, setIsChecking] = useState(true)
-
-  useEffect(() => {
-    const checkConnection = async () => {
-      try {
-        const status = await Network.getStatus()
-        setIsOnline(status.connected)
-      } catch (error) {
-        console.error('Error checking network status:', error)
-        setIsOnline(true) // Assume online if we can't check
-      } finally {
-        setIsChecking(false)
-      }
-    }
-
-    checkConnection()
-
-    // Listen for network status changes
-    let listenerHandle: any
-    Network.addListener('networkStatusChange', status => {
-      setIsOnline(status.connected)
-    }).then(handle => {
-      listenerHandle = handle
-    })
-
-    return () => {
-      if (listenerHandle) {
-        listenerHandle.remove()
-      }
-    }
-  }, [])
-
-  const handleRetry = async () => {
-    setIsChecking(true)
-    try {
-      const status = await Network.getStatus()
-      setIsOnline(status.connected)
-    } catch (error) {
-      console.error('Error checking network status:', error)
-    } finally {
-      setIsChecking(false)
-    }
-  }
-
-  if (isChecking) {
-    return (
-      <IonApp>
-        <IonContent className='ion-padding'>
-          <div className='flex items-center justify-center h-screen'>
-            <div className='text-center'>
-              <div className='text-lg text-gray-600'>
-                Checking connection...
-              </div>
-            </div>
-          </div>
-        </IonContent>
-      </IonApp>
-    )
-  }
-
-  if (!isOnline) {
-    return (
-      <IonApp>
-        <IonContent className='ion-padding'>
-          <div className='flex items-center justify-center h-screen'>
-            <div className='text-center max-w-md px-4'>
-              <IonIcon
-                icon={cloudOffline}
-                className='text-gray-400 mb-4'
-                style={{ fontSize: '80px' }}
-              />
-              <h1 className='text-2xl font-bold text-gray-800 mb-2'>
-                No Internet Connection
-              </h1>
-              <IonText color='medium' className='block mb-6'>
-                Please check your internet connection and try again. This app
-                requires an active internet connection to work.
-              </IonText>
-              <IonButton
-                expand='block'
-                onClick={handleRetry}
-                className='mt-4'
-                style={{ '--background': 'var(--color-umak-blue)' }}
-              >
-                <IonIcon slot='start' icon={refresh} />
-                Retry Connection
-              </IonButton>
-            </div>
-          </div>
-        </IonContent>
-      </IonApp>
-    )
-  }
 
   return (
     <GoogleOAuthProvider

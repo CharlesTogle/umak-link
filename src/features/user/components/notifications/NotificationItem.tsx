@@ -8,18 +8,23 @@ import {
   checkmarkDoneCircleOutline,
   mailOutline,
   ellipsisVertical,
-  megaphone,
+  megaphoneOutline,
   alertCircle
 } from 'ionicons/icons'
 import { useNavigation } from '@/shared/hooks/useNavigation'
+import { useNotificationContext } from '@/shared/contexts/NotificationContext'
 
 export type NotificationType =
+  | 'match'
+  | 'success'
   | 'info'
+  | 'message'
+  | 'rejection'
+  | 'accept'
+  | 'global_announcement'
+  | 'progress'
   | 'found'
   | 'resolved'
-  | 'progress'
-  | 'global_announcement'
-  | 'rejection'
 
 export type ActionItem = {
   color: 'danger' | 'primary' // danger => umak-blue, primary => slate-900
@@ -39,22 +44,31 @@ interface NotificationItemProps {
   handleMarkAsRead?: (notificationId: string) => void
   href?: string
   imageUrl?: string
+  notificationData?: any
 }
 
 const iconForType = (type: NotificationType) => {
   switch (type) {
+    case 'match':
+      return { icon: checkmarkCircleOutline, colorClass: 'text-green-600' }
+    case 'success':
+      return { icon: checkmarkDoneCircleOutline, colorClass: 'text-green-600' }
     case 'info':
       return { icon: shieldOutline, colorClass: 'text-slate-700' }
+    case 'message':
+      return { icon: mailOutline, colorClass: 'text-umak-blue' }
+    case 'rejection':
+      return { icon: alertCircle, colorClass: 'text-red-600' }
+    case 'accept':
+      return { icon: checkmarkDoneCircleOutline, colorClass: 'text-green-600' }
     case 'global_announcement':
-      return { icon: megaphone, colorClass: 'text-umak-blue' }
+      return { icon: megaphoneOutline, colorClass: 'text-umak-blue' }
+    case 'progress':
+      return { icon: mailOutline, colorClass: 'text-amber-500' }
     case 'found':
       return { icon: checkmarkCircleOutline, colorClass: 'text-green-600' }
     case 'resolved':
       return { icon: checkmarkDoneCircleOutline, colorClass: 'text-green-600' }
-    case 'progress':
-      return { icon: mailOutline, colorClass: 'text-orange-500' }
-    case 'rejection':
-      return { icon: alertCircle, colorClass: 'text-red-600' }
     default:
       return { icon: shieldOutline, colorClass: 'text-slate-700' }
   }
@@ -70,11 +84,13 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
   notificationId,
   handleMarkAsRead,
   href,
-  imageUrl
+  imageUrl,
+  notificationData
 }) => {
   const [open, setOpen] = useState(false)
   const { icon, colorClass } = iconForType(type)
   const [expanded, setExpanded] = useState(false)
+  const { setMatchedPostIds, setLostItemPostId } = useNotificationContext()
 
   // Long-press handling
   const longPressTimeout = useRef<number | null>(null)
@@ -156,6 +172,24 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
           // If href is provided, navigate to it
           if (href) {
             handleMarkAsRead && handleMarkAsRead(notificationId!)
+
+            // If notification has matched_post_ids data, store it in context
+            if (notificationData?.matched_post_ids) {
+              try {
+                const matchedIds = JSON.parse(notificationData.matched_post_ids)
+                if (Array.isArray(matchedIds)) {
+                  setMatchedPostIds(matchedIds.map(String))
+                }
+              } catch (e) {
+                console.error('Failed to parse matched_post_ids:', e)
+              }
+            }
+
+            // Set the lost item postId from notification data
+            if (notificationData?.postId) {
+              setLostItemPostId(notificationData.postId)
+            }
+
             navigate(href)
             return
           }

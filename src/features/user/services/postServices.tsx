@@ -49,6 +49,26 @@ export interface CreatePostInput {
   image: File
 }
 
+// Edit Post input type (similar to CreatePostInput but includes post_id)
+export interface EditPostInput {
+  postId: string
+  anonymous: boolean
+  item: {
+    title: string
+    desc: string
+    type: PostType
+  }
+  category: PostCategory
+  lastSeenISO: string
+  locationDetails: {
+    level1: string
+    level2: string
+    level3: string
+  }
+  imageName: string
+  image: File
+}
+
 // Update Post input type (all fields optional except post_id)
 export interface UpdatePostInput {
   post_id: string
@@ -265,8 +285,7 @@ export const postServices = {
           p_last_seen_hours: lastSeenHours,
           p_last_seen_minutes: lastSeenMinutes,
           p_location_path: locationPath,
-          p_item_status:
-            postData.item.type === 'found' ? 'unclaimed' : 'missing',
+          p_item_status: postData.item.type === 'found' ? 'unclaimed' : 'lost',
           p_category: postData.category,
           p_post_status: 'pending',
           p_is_anonymous: postData.anonymous
@@ -275,7 +294,20 @@ export const postServices = {
 
       if (error) {
         console.error('[postServices] Error creating post:', error)
-        return { post: null, error: error.message }
+
+        // Check for duplicate post constraint violation
+        if (
+          error.code === '23505' &&
+          error.message?.includes('ux_post_unique_combination')
+        ) {
+          return {
+            post: null,
+            error:
+              'A post with the same details (item, location, and time) already exists. Please check your recent posts or modify the details.'
+          }
+        }
+
+        return { post: null, error: 'Error creating post' }
       }
 
       console.log('[postServices] Post created successfully:', data)
@@ -287,16 +319,185 @@ export const postServices = {
     }
   },
 
+  /**
+   * Edit an existing post
+   * @param userId - The ID of the user editing the post
+   * @param postData - The post data to update
+   * @returns The updated post or error
+   */
+  editPost: async (
+    userId: string,
+    postData: EditPostInput
+  ): Promise<PostResponse> => {
+    try {
+      console.log('[postServices] Editing post:', postData)
+
+      // 1) Fetch the old image path to delete it
+      const { data: postRecord, error: fetchError } = await supabase
+        .from('post_table')
+        .select('item_id')
+        .eq('post_id', postData.postId)
+        .single()
+
+      if (fetchError) {
+        console.error('[postServices] Error fetching post record:', fetchError)
+        return { post: null, error: fetchError.message }
+      }
+
+      const { data: itemRecord, error: itemError } = await supabase
+        .from('item_table')
+        .select('image_id')
+        .eq('item_id', postRecord.item_id)
+        .single()
+
+      if (itemError) {
+        console.error('[postServices] Error fetching item record:', itemError)
+        return { post: null, error: itemError.message }
+      }
+
+      const { data: oldImageData, error: imageError } = await supabase
+        .from('item_image_table')
+        .select('image_link')
+        .eq('item_image_id', itemRecord.image_id)
+        .single()
+
+      if (!imageError && oldImageData?.image_link) {
+        // Extract the old image path from the public URL
+        const oldImageUrl = oldImageData.image_link
+        const urlParts = oldImageUrl.split('/storage/v1/object/public/items/')
+        if (urlParts.length > 1) {
+          const oldImagePath = urlParts[1]
+          console.log('[postServices] Deleting old image:', oldImagePath)
+
+          // Delete the old image from storage
+          const { error: deleteError } = await supabase.storage
+            .from('items')
+            .remove([oldImagePath])
+
+          if (deleteError) {
+            console.error(
+              '[postServices] Error deleting old image:',
+              deleteError
+            )
+            // Don't fail the edit if deletion fails, just log it
+          } else {
+            console.log('[postServices] Old image deleted successfully')
+          }
+        }
+      }
+
+      // 2) Compress new image
+      const displayBlob = await makeDisplay(postData.image)
+
+      // 3) Paths
+      const basePath = `posts/${userId}/${Date.now()}`
+      const displayPath = `${basePath}.webp`
+
+      const displayUrl = await uploadAndGetPublicUrl(
+        displayPath,
+        displayBlob,
+        'image/webp'
+      )
+
+      // Parse lastSeenISO to extract date and time
+      const lastSeenDate = new Date(postData.lastSeenISO) // local device time
+      const lastSeenHours = lastSeenDate.getHours() // 0–23 (local)
+      const lastSeenMinutes = lastSeenDate.getMinutes() // 0–59
+
+      // Build location path array
+      const locationPath: Array<{
+        name: string
+        type: 'level1' | 'level2' | 'level3'
+      }> = []
+
+      const level1 = postData.locationDetails.level1?.trim()
+      if (level1) {
+        locationPath.push({ name: level1, type: 'level1' })
+      }
+
+      const level2 = postData.locationDetails.level2?.trim()
+      if (level2 && level2 !== 'Not Applicable') {
+        locationPath.push({ name: level2, type: 'level2' })
+      }
+
+      const level3 = postData.locationDetails.level3?.trim()
+      if (level3 && level3 !== 'Not Applicable') {
+        locationPath.push({ name: level3, type: 'level3' })
+      }
+
+      const imageHash = await computeBlockHash64(postData.image)
+
+      const { data, error } = await supabase.rpc(
+        'edit_post_with_item_date_time_location',
+        {
+          p_post_id: Number(postData.postId),
+          p_item_name: postData.item.title,
+          p_item_description: postData.item.desc,
+          p_item_type: postData.item.type,
+          p_image_hash: imageHash,
+          p_image_link: displayUrl,
+          p_last_seen_date: lastSeenDate,
+          p_last_seen_hours: lastSeenHours,
+          p_last_seen_minutes: lastSeenMinutes,
+          p_location_path: locationPath,
+          p_item_status: postData.item.type === 'found' ? 'unclaimed' : 'lost',
+          p_category: postData.category,
+          p_post_status: 'pending',
+          p_is_anonymous: postData.anonymous
+        }
+      )
+
+      if (error) {
+        console.error('[postServices] Error editing post:', error)
+        return { post: null, error: error.message }
+      }
+
+      console.log('[postServices] Post edited successfully:', data)
+
+      return { post: data as Post, error: null }
+    } catch (error) {
+      console.error('[postServices] Exception editing post:', error)
+      return { post: null, error: 'Failed to edit post' }
+    }
+  },
+
   reportPost: async (
     postId: string | number,
     reason: string,
-    proofImage?: File | null
+    userId: string | null,
+    proofImage?: File | null,
+    claimerName?: string | null,
+    claimerEmail?: string | null,
+    claimerContact?: string | null,
+    claimedAt?: string | null,
+    claimProcessedByStaffId?: string | null,
+    claimId?: string | null
   ): Promise<{
     success: boolean
     error: string | null
     report?: { report_id: string; report_status: string }
   }> => {
     try {
+      // First, check if the item status is 'claimed'
+      const { data: postData, error: postError } = await supabase
+        .from('post_public_view')
+        .select('item_status')
+        .eq('post_id', postId)
+        .single()
+
+      if (postError) {
+        console.error('[postServices] Error fetching post:', postError)
+        return { success: false, error: 'Failed to verify post status' }
+      }
+
+      if (!postData || postData.item_status !== 'claimed') {
+        return {
+          success: false,
+          error:
+            'This item is not claimed. Please reload the page and try again.'
+        }
+      }
+
       let proofUrl: string | null = null
 
       if (proofImage) {
@@ -309,7 +510,14 @@ export const postServices = {
       const { data, error } = await supabase.rpc('create_or_get_fraud_report', {
         p_post_id: Number(postId),
         p_reason: reason,
-        p_proof_image_url: proofUrl
+        p_proof_image_url: proofUrl,
+        p_claimer_name: claimerName,
+        p_claimer_school_email: claimerEmail,
+        p_claimer_contact_num: claimerContact,
+        p_claimed_at: claimedAt,
+        p_claim_processed_by_staff_id: claimProcessedByStaffId,
+        p_claim_id: claimId,
+        p_reported_by: userId
       })
 
       console.log(data)

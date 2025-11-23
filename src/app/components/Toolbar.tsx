@@ -19,15 +19,18 @@ export default function Toolbar ({ toolbarItems }: ToolbarProps) {
   const { navigate } = useNavigation()
   // ------------------ HIDE TOOLBAR ON CERTAIN ROUTES ------------------
   const noToolbarRoutes = [
-    '/user/search',
     '/user/new-post',
     '/user/post/report',
     '/staff/fraud-report/view'
   ] // add any routes you want to hide the toolbar
-  const isNoToolbar = noToolbarRoutes.some(
-    route =>
-      location.pathname === route || location.pathname.startsWith(route + '/')
-  )
+
+  // Special case: hide only exact /user/search, not child routes
+  const isNoToolbar =
+    location.pathname === '/user/search' ||
+    noToolbarRoutes.some(
+      route =>
+        location.pathname === route || location.pathname.startsWith(route + '/')
+    )
 
   // ------------------ NAVIGATION HANDLER ------------------
   const handleClick = useCallback(

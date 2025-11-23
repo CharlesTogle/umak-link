@@ -11,12 +11,14 @@ import {
 } from '@ionic/react'
 import { useState, useEffect } from 'react'
 import CatalogPost from '@/shared/components/CatalogPost'
-import CatalogPostSkeleton from '@/features/user/components/home/CatalogPostSkeleton'
+import CatalogPostSkeleton from '@/shared/components/CatalogPostSkeleton'
 import { useCallback } from 'react'
 import { type PostCacheKeys } from '@/features/posts/data/postsCache'
 import { useNavigation } from '@/shared/hooks/useNavigation'
 import { sharePost } from '@/shared/utils/shareUtils'
 import { useUser } from '@/features/auth/contexts/UserContext'
+import { isConnected } from '@/shared/utils/networkCheck'
+import { supabase } from '@/shared/lib/supabase'
 
 interface PostListProps {
   ref?: React.RefObject<HTMLIonContentElement | null>
@@ -35,6 +37,10 @@ interface PostListProps {
   onClick?: (postId: string) => void | undefined
   variant?: 'user' | 'staff' | 'search' | 'staff-pending'
   handleRefresh?: (event: CustomEvent) => Promise<void>
+  viewDetailsPath?: string // Optional custom path for "View details" action, defaults to /user/post/view/:postId
+  marginBottom?: string
+  enableReportForClaimed?: boolean // Only show Report action for claimed items (user homepage)
+  withDelete?: boolean // Enable delete action for posts
 }
 
 export default function PostList ({
@@ -49,7 +55,11 @@ export default function PostList ({
   onClick,
   variant = 'user',
   handleRefresh: customHandleRefresh,
-  setPosts
+  setPosts,
+  viewDetailsPath,
+  marginBottom,
+  enableReportForClaimed = false,
+  withDelete = false
 }: PostListProps) {
   const [isRefreshingContent, setRefreshingContent] = useState<boolean>(false)
   const [showActions, setShowActions] = useState(false)
@@ -58,6 +68,7 @@ export default function PostList ({
   const [showToast, setShowToast] = useState(false)
   const [toastMessage, setToastMessage] = useState('')
   const [toastColor, setToastColor] = useState<'success' | 'danger'>('success')
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const { navigate } = useNavigation()
   const { getUser } = useUser()
@@ -83,6 +94,44 @@ export default function PostList ({
     setShowActions(true)
   }
 
+  const handleDeletePost = async (postId: string) => {
+    setIsDeleting(true)
+    try {
+      const connected = await isConnected()
+      if (!connected) {
+        setToastMessage('No internet connection - Cannot delete post')
+        setToastColor('danger')
+        setShowToast(true)
+        setIsDeleting(false)
+        return
+      }
+
+      const { error } = await supabase.rpc('delete_post_by_id', {
+        p_post_id: parseInt(postId)
+      })
+
+      if (error) {
+        console.error('Error deleting post:', error)
+        setToastMessage('Failed to delete post')
+        setToastColor('danger')
+        setShowToast(true)
+      } else {
+        // Remove post from local state
+        setPosts(prevPosts => prevPosts.filter(p => p.post_id !== postId))
+        setToastMessage('Post deleted successfully')
+        setToastColor('success')
+        setShowToast(true)
+      }
+    } catch (err) {
+      console.error('Unexpected error deleting post:', err)
+      setToastMessage('Failed to delete post')
+      setToastColor('danger')
+      setShowToast(true)
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
   useEffect(() => {
     const loadInitialPosts = async () => {
       setLoading(true)
@@ -97,6 +146,16 @@ export default function PostList ({
     (event: CustomEvent) => {
       setRefreshingContent(true)
       ;(async () => {
+        const connected = await isConnected()
+        if (!connected) {
+          setToastMessage('No internet connection - Showing cached posts')
+          setToastColor('danger')
+          setShowToast(true)
+          event.detail.complete()
+          setRefreshingContent(false)
+          return
+        }
+
         if (customHandleRefresh) {
           await customHandleRefresh(event)
         } else {
@@ -111,7 +170,11 @@ export default function PostList ({
 
   return (
     <IonContent ref={ref} className='bg-default-bg'>
-      <div className={`pb-6 ${hasMore ? 'mb-16' : 'mb-25'}`}>
+      <div
+        className={`pb-6 ${hasMore ? 'mb-16' : 'mb-25 '} ${
+          marginBottom ? `mb-${marginBottom}!` : ''
+        }`}
+      >
         <IonRefresher slot='fixed' onIonRefresh={handleRefresh}>
           <IonRefresherContent />
         </IonRefresher>
@@ -130,7 +193,7 @@ export default function PostList ({
               let displayUsername = post.username
               let showAnonIndicator = false
               if (post.is_anonymous) {
-                if (variant === 'staff') {
+                if (variant === 'staff' || variant === 'staff-pending') {
                   // Staff: show real username + anon indicator
                   showAnonIndicator = true
                 } else {
@@ -152,7 +215,11 @@ export default function PostList ({
                   onKebabButtonClick={() =>
                     handleActionSheetClick(post.post_id)
                   }
-                  itemStatus={post.item_status}
+                  itemStatus={
+                    variant === 'staff-pending'
+                      ? post.item_type
+                      : post.item_status
+                  }
                   onClick={() => onClick?.(post.post_id)}
                   postId={post.post_id}
                   variant={variant}
@@ -161,6 +228,8 @@ export default function PostList ({
                   item_type={post.item_type}
                   setPosts={setPosts}
                   user_id={post.user_id}
+                  category={post.category ?? 'others'}
+                  submittedOn={post.submission_date ?? 'MM/DD/YYYY 00:00 AM/PM'}
                 />
               )
             })}
@@ -190,6 +259,10 @@ export default function PostList ({
         <IonLoading isOpen message='Refreshing content...' spinner='crescent' />
       )}
 
+      {isDeleting && (
+        <IonLoading isOpen message='Deleting post...' spinner='crescent' />
+      )}
+
       {ionFabButton}
 
       <IonActionSheet
@@ -199,16 +272,20 @@ export default function PostList ({
         buttons={(() => {
           const post = posts.find(p => p.post_id === activePostId)
           const buttons = []
-          // Delete: only for item_status 'unclaimed' or 'lost'
+          // Delete: only if withDelete is true AND (item_status 'unclaimed'/'lost' OR post_status 'rejected'/'pending')
           if (
+            withDelete &&
             post &&
-            (post.item_status === 'unclaimed' || post.item_status === 'lost')
+            (post.item_status === 'unclaimed' ||
+              post.item_status === 'lost' ||
+              post.post_status === 'rejected' ||
+              post.post_status === 'pending')
           ) {
             buttons.push({
               text: 'Delete',
               role: 'destructive',
               handler: () => {
-                /* TODO: implement delete logic */
+                if (activePostId) handleDeletePost(activePostId)
               },
               cssClass: 'delete-btn'
             })
@@ -227,7 +304,17 @@ export default function PostList ({
           buttons.push({
             text: 'View details',
             handler: () => {
-              if (activePostId) navigate(`/user/post/view/${activePostId}`)
+              if (activePostId) {
+                let path: string
+                if (viewDetailsPath) {
+                  path = viewDetailsPath.replace(':postId', activePostId)
+                } else if (variant === 'staff-pending') {
+                  path = `/staff/post-record/view/${activePostId}`
+                } else {
+                  path = `/user/post/view/${activePostId}`
+                }
+                navigate(path)
+              }
             }
           })
           // Share and Report (existing logic)
@@ -252,14 +339,12 @@ export default function PostList ({
               }
             }
           })
-          // Only show "Report" if the post is not owned by the current user
+          // Only show "Report" if enableReportForClaimed is true, item is claimed, and not owned by current user
           if (
-            !(
-              post &&
-              post.user_id &&
-              currentUserId &&
-              post.user_id === currentUserId
-            )
+            enableReportForClaimed &&
+            post &&
+            post.item_status === 'claimed' &&
+            !(post.user_id && currentUserId && post.user_id === currentUserId)
           ) {
             buttons.push({
               text: 'Report',

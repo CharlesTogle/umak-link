@@ -18,6 +18,7 @@ interface ImageUploadSectionProps {
   onImageChange: (file: File | null) => void
   className?: string
   isRequired?: boolean
+  imageLink?: string // Optional prop to display existing image from URL
 }
 
 const ImageUploadSection: React.FC<ImageUploadSectionProps> = ({
@@ -25,10 +26,27 @@ const ImageUploadSection: React.FC<ImageUploadSectionProps> = ({
   image,
   onImageChange,
   className = '',
-  isRequired = false
+  isRequired = false,
+  imageLink
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isOpen, setIsOpen] = useState(false)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+
+  // Create preview URL when image file changes
+  React.useEffect(() => {
+    if (image) {
+      const url = URL.createObjectURL(image)
+      setPreviewUrl(url)
+      // Cleanup
+      return () => URL.revokeObjectURL(url)
+    } else {
+      setPreviewUrl(null)
+    }
+  }, [image])
+
+  // Determine which image to display
+  const displayImageUrl = previewUrl || imageLink || null
 
   const openModal = () => setIsOpen(true)
   const closeModal = () => setIsOpen(false)
@@ -82,10 +100,12 @@ const ImageUploadSection: React.FC<ImageUploadSectionProps> = ({
       <div
         role='button'
         aria-label='Upload image'
-        onClick={!image ? openModal : undefined}
-        className={`flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg h-32 cursor-pointer transition relative hover:bg-gray-50`}
+        onClick={!displayImageUrl ? openModal : undefined}
+        className={`flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg ${
+          displayImageUrl ? 'h-auto p-4' : 'h-32'
+        } cursor-pointer transition relative hover:bg-gray-50`}
       >
-        {!image ? (
+        {!displayImageUrl ? (
           <>
             <IonIcon
               icon={cloudUploadOutline}
@@ -94,10 +114,24 @@ const ImageUploadSection: React.FC<ImageUploadSectionProps> = ({
             <p className='text-sm text-gray-500'>Upload Image (Max: 1 file)</p>
           </>
         ) : (
-          <div className='flex flex-col items-center justify-center text-center'>
-            <p className='font-default-font text-base font-regular mb-2 truncate w-48'>
-              {image.name}
-            </p>
+          <div className='flex flex-col items-center justify-center text-center w-full'>
+            {/* Image Preview - Square Aspect Ratio */}
+            <div className='w-48 h-48 mb-3 overflow-hidden rounded-lg border-2 border-gray-200'>
+              <img
+                src={displayImageUrl}
+                alt='Preview'
+                className='w-full h-full object-cover'
+              />
+            </div>
+
+            {/* File name if available */}
+            {image && (
+              <p className='font-default-font text-sm font-regular mb-2 truncate w-48 text-gray-600'>
+                {image.name}
+              </p>
+            )}
+
+            {/* Action Buttons */}
             <div className='flex gap-2'>
               <IonButton
                 type='button'

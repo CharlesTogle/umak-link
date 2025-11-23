@@ -1,5 +1,5 @@
 import { IonPage, IonContent } from '@ionic/react'
-import CatalogPostSkeleton from '../home/CatalogPostSkeleton'
+import CatalogPostSkeleton from '../../../../shared/components/CatalogPostSkeleton'
 import Header from '@/shared/components/Header'
 
 export default function HomeSkeleton () {

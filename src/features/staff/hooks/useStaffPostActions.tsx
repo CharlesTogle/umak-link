@@ -25,6 +25,15 @@ export function useStaffPostActions () {
     try {
       const success = await changePostStatus(postId, 'accepted')
 
+      const { error: postError } = await supabase
+        .from('post_table')
+        .update({ accepted_by_staff_id: user?.user_id || null })
+        .eq('post_id', postId)
+
+      if (postError) {
+        console.error('Error updating accepted_by_staff_id:', postError)
+      }
+
       if (success) {
         // Dispatch event for post status change
         window.dispatchEvent(

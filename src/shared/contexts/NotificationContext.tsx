@@ -2,10 +2,15 @@ import React, { createContext, useCallback, useContext, useState } from 'react'
 
 type NotificationContextType = {
   notificationPostIds: string[]
+  matchedPostIds: string[]
+  lostItemPostId: string | null
   setNotifications: (postIds: string[]) => void
+  setMatchedPostIds: (postIds: string[]) => void
+  setLostItemPostId: (postId: string | null) => void
   addNotification: (postId: string) => void
   removeNotification: (postId: string) => void
   clearNotifications: () => void
+  clearMatchedPostIds: () => void
   hasPostId: (postId: string) => boolean
   getCount: () => number
 }
@@ -18,9 +23,19 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({
   children
 }) => {
   const [notificationPostIds, setNotificationPostIds] = useState<string[]>([])
+  const [matchedPostIds, setMatchedPostIdsState] = useState<string[]>([])
+  const [lostItemPostId, setLostItemPostIdState] = useState<string | null>(null)
 
   const setNotifications = useCallback((postIds: string[]) => {
     setNotificationPostIds(postIds)
+  }, [])
+
+  const setMatchedPostIds = useCallback((postIds: string[]) => {
+    setMatchedPostIdsState(postIds)
+  }, [])
+
+  const setLostItemPostId = useCallback((postId: string | null) => {
+    setLostItemPostIdState(postId)
   }, [])
 
   const addNotification = useCallback((postId: string) => {
@@ -35,6 +50,10 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const clearNotifications = useCallback(() => {
     setNotificationPostIds([])
+  }, [])
+
+  const clearMatchedPostIds = useCallback(() => {
+    setMatchedPostIdsState([])
   }, [])
 
   const hasPostId = useCallback(
@@ -53,10 +72,15 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({
     <NotificationContext.Provider
       value={{
         notificationPostIds,
+        matchedPostIds,
+        lostItemPostId,
         setNotifications,
+        setMatchedPostIds,
+        setLostItemPostId,
         addNotification,
         removeNotification,
         clearNotifications,
+        clearMatchedPostIds,
         hasPostId,
         getCount
       }}

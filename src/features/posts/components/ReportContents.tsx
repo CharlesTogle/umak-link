@@ -33,16 +33,20 @@ export default function ReportContents ({
   }
 
   return (
-    <div className='ion-padding'>
+    <div className='mt-4'>
       <CustomRadioGroup
         label='Select Concern'
         value={concern}
         options={[
-          { label: 'Missing (Lost)', value: 'Missing' },
+          {
+            label: 'This is item is rightfully mine',
+            value: 'This item is rightfully mine'
+          },
           {
             label:
               'I personally know the rightful owner of this item and they have not claimed it yet.',
-            value: 'Fraud'
+            value:
+              'I personally know the rightful owner of this item and they have not claimed it yet.'
           },
           { label: 'Others', value: 'Others', type: 'text' }
         ]}
@@ -72,7 +76,7 @@ export default function ReportContents ({
       />
       <label>
         <FormSectionHeader header='Review' isRequired={true} />
-        <div className='flex items-start gap-1'>
+        <div className='flex items-start gap-1 mb-2'>
           <input
             type='checkbox'
             checked={reviewed}

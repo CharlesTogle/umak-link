@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useEffect } from 'react'
+import React, { useCallback, useState, useEffect, useRef } from 'react'
 import {
   IonPage,
   IonToast,
@@ -39,6 +39,7 @@ interface GoogleJwtPayload {
   exp: number
   jti?: string
 }
+
 const toSentenceCaseFull = (str: string) => {
   return str
     .toLowerCase()
@@ -47,6 +48,8 @@ const toSentenceCaseFull = (str: string) => {
     .join(' ')
 }
 
+const RATE_LIMIT_MS = 3000 // 3 seconds
+
 const Auth: React.FC = () => {
   const [showToast, setShowToast] = useState(false)
   const [toastMessage, setToastMessage] = useState('')
@@ -54,6 +57,10 @@ const Auth: React.FC = () => {
   const isWeb = Capacitor.getPlatform() === 'web'
   const [googleLoading, setGoogleLoading] = useState(false)
   const [socialLoginLoading, setSocialLoginLoading] = useState(false)
+
+  // Rate limiting state
+  const lastLoginAttempt = useRef<number>(0)
+  const [isRateLimited, setIsRateLimited] = useState(false)
 
   const { refreshUser } = useUser()
   const { getOrRegisterAccount } = useAuth()
@@ -66,7 +73,36 @@ const Auth: React.FC = () => {
     })
   }, [])
 
+  // Rate limiting check function
+  const checkRateLimit = (): boolean => {
+    const now = Date.now()
+    const timeSinceLastAttempt = now - lastLoginAttempt.current
+
+    if (timeSinceLastAttempt < RATE_LIMIT_MS) {
+      const remainingTime = Math.ceil(
+        (RATE_LIMIT_MS - timeSinceLastAttempt) / 1000
+      )
+      setToastMessage(
+        `Please wait ${remainingTime} second${
+          remainingTime > 1 ? 's' : ''
+        } before trying again.`
+      )
+      setShowToast(true)
+      setIsRateLimited(true)
+      return false
+    }
+
+    lastLoginAttempt.current = now
+    setIsRateLimited(false)
+    return true
+  }
+
   const handleSocialLogin = useCallback(async () => {
+    // Check rate limit
+    if (!checkRateLimit()) {
+      return
+    }
+
     try {
       const googleWebClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? ''
       await SocialLogin.initialize({
@@ -99,7 +135,7 @@ const Auth: React.FC = () => {
           })
           if (error || !user) {
             setToastMessage(
-              'Login Failed. Authentication with Google was unsuccessful.'
+              'Login Failed. Authentication with Google was unsuccessful. Please try again.'
             )
             setShowToast(true)
             setSocialLoginLoading(false)
@@ -127,7 +163,7 @@ const Auth: React.FC = () => {
     } catch (error) {
       console.error('Social login failed:', error)
       setToastMessage(
-        `Sign-in failed. Please try again. ${error} ${JSON.stringify(error)}`
+        `Sign-in failed. Please use your organization email to sign in or try again at a different time`
       )
       setShowToast(true)
     } finally {
@@ -138,6 +174,11 @@ const Auth: React.FC = () => {
   const handleGoogleSuccess = async (
     credentialResponse: CredentialResponse
   ) => {
+    // Check rate limit
+    if (!checkRateLimit()) {
+      return
+    }
+
     try {
       if (!credentialResponse.credential)
         throw new Error('No credential received')
@@ -191,10 +232,14 @@ const Auth: React.FC = () => {
       setGoogleLoading(false)
     }
   }
+
   const handleGoogleError = () => {
-    setToastMessage('Google sign-in was unsuccessful. Please try again.')
+    setToastMessage(
+      `Sign-in failed. Please use your organization email to sign in or try again at a different time`
+    )
     setShowToast(true)
   }
+
   return (
     <IonPage>
       <div className='flex flex-col h-screen w-full relative overflow-hidden'>
@@ -267,7 +312,7 @@ const Auth: React.FC = () => {
                 <button
                   className='w-full flex justify-center items-center bg-umak-blue! text-white font-default-font! p-4! rounded-lg!'
                   onClick={handleSocialLogin}
-                  disabled={socialLoginLoading}
+                  disabled={socialLoginLoading || isRateLimited}
                 >
                   {socialLoginLoading ? (
                     <IonSpinner name='crescent' />
