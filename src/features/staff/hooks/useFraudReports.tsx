@@ -515,7 +515,6 @@ export function useFraudReports ({
           userId: reporterId,
           title: 'Fraud Report Opened',
           message: `Your report on "${postTitle}" has been opened and is being investigated. Thank you for helping keep UMatch safe.`,
-          data: { link: `/user/reports` },
           type: 'acceptance'
         })
       }
@@ -629,7 +628,6 @@ export function useFraudReports ({
           userId: reporterId,
           title: 'Fraud Report Rejected',
           message: `Your report on "${postTitle}" has been rejected. Reason: ${reason}`,
-          data: { link: `/user/reports` },
           type: 'rejection'
         })
       }
@@ -663,12 +661,14 @@ export function useFraudReports ({
     reportId,
     postTitle,
     deleteClaim = false,
-    itemId
+    itemId,
+    reporterId
   }: {
     reportId: string
     postTitle: string
     deleteClaim?: boolean
     itemId?: string | null
+    reporterId?: string | null
   }) => {
     try {
       const {
@@ -746,6 +746,25 @@ export function useFraudReports ({
           new_status: 'resolved'
         }
       })
+
+      // Send notification to reporter based on whether claim was deleted
+      if (reporterId) {
+        if (deleteClaim) {
+          await sendNotification({
+            userId: reporterId,
+            title: 'Report Resolved - Item Available',
+            message: `Your report on "${postTitle}" has been resolved. The item is now available for claiming again. Thank you for keeping UMak LINK safe.`,
+            type: 'acceptance'
+          })
+        } else {
+          await sendNotification({
+            userId: reporterId,
+            title: 'Report Resolved',
+            message: `Your report on "${postTitle}" has been resolved. The staff decided not to retrieve the item from the claimer.`,
+            type: 'info'
+          })
+        }
+      }
 
       // Update local state - change report status to resolved
       setReports(prev => {

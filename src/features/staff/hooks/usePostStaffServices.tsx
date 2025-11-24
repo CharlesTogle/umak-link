@@ -442,9 +442,134 @@ export function usePostActionsStaffServices () {
     }
   }
 
+  /**
+   * Update item status with optional notification for discarded items
+   * @param postId - The ID of the post
+   * @param newItemStatus - The new item status (claimed/unclaimed/lost/returned/discarded)
+   * @returns Object with success status and optional error
+   */
+  const updateItemStatus = async (
+    postId: string,
+    newItemStatus: 'claimed' | 'unclaimed' | 'lost' | 'returned' | 'discarded'
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      let currentUser = user
+
+      if (!user) {
+        currentUser = await getUser()
+        setUser(currentUser)
+      }
+
+      // Fetch post and item details
+      const { data: postData, error: postError } = await supabase
+        .from('post_table')
+        .select('item_id, poster_id')
+        .eq('post_id', postId)
+        .single()
+
+      if (postError) {
+        console.error('Error fetching post data:', postError)
+        return { success: false, error: postError.message }
+      }
+
+      const itemId = postData?.item_id
+      const posterId = postData?.poster_id
+
+      if (!itemId) {
+        return { success: false, error: 'Item ID not found' }
+      }
+
+      // Get current item status for audit log
+      const { data: itemData, error: itemFetchError } = await supabase
+        .from('item_table')
+        .select('status, item_name')
+        .eq('item_id', itemId)
+        .single()
+
+      if (itemFetchError) {
+        console.error('Error fetching item data:', itemFetchError)
+        return { success: false, error: itemFetchError.message }
+      }
+
+      const oldStatus = itemData?.status
+      const itemName = itemData?.item_name || 'Unknown Item'
+
+      // Update item status
+      const { error: updateError } = await supabase
+        .from('item_table')
+        .update({ status: newItemStatus })
+        .eq('item_id', itemId)
+
+      if (updateError) {
+        console.error('Error updating item status:', updateError)
+        return { success: false, error: updateError.message }
+      }
+
+      // Log the action
+      await insertAuditLog({
+        user_id: currentUser?.user_id || 'unknown',
+        action_type: 'item_status_updated',
+        details: {
+          message: `${
+            currentUser?.user_name || 'Staff'
+          } changed item status of ${itemName} from ${oldStatus} to ${newItemStatus}`,
+          item_id: itemId,
+          post_id: postId,
+          old_status: oldStatus,
+          new_status: newItemStatus
+        }
+      })
+
+      // Send notification only if item is discarded
+      if (newItemStatus === 'discarded' && posterId) {
+        await sendNotification({
+          userId: posterId,
+          title: 'Item Discarded',
+          message: `The item "${itemName}" has been discarded and is no longer available for claim.`,
+          type: 'info',
+          data: {
+            postId,
+            itemName,
+            link: `/user/post/history/view/${postId}`,
+            itemStatus: newItemStatus
+          }
+        })
+      }
+
+      // Send notification if item was discarded and now unclaimed (retrieved)
+      if (
+        oldStatus === 'discarded' &&
+        newItemStatus === 'unclaimed' &&
+        posterId
+      ) {
+        await sendNotification({
+          userId: posterId,
+          title: 'Item Retrieved',
+          message: `Great news! The item "${itemName}" that was previously discarded has been retrieved and is now ready to be claimed again.`,
+          type: 'info',
+          data: {
+            postId,
+            itemName,
+            link: `/user/post/history/view/${postId}`,
+            itemStatus: newItemStatus
+          }
+        })
+      }
+
+      return { success: true }
+    } catch (error) {
+      console.error('Exception updating item status:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
+    }
+  }
+
   return {
     createPost,
     changePostStatus,
-    updatePostStatusWithNotification
+    updatePostStatusWithNotification,
+    updateItemStatus
   }
 }

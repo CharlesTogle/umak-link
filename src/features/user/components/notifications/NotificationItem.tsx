@@ -9,7 +9,9 @@ import {
   mailOutline,
   ellipsisVertical,
   megaphoneOutline,
-  alertCircle
+  closeCircleOutline,
+  hourglassOutline,
+  trashOutline
 } from 'ionicons/icons'
 import { useNavigation } from '@/shared/hooks/useNavigation'
 import { useNotificationContext } from '@/shared/contexts/NotificationContext'
@@ -17,14 +19,15 @@ import { useNotificationContext } from '@/shared/contexts/NotificationContext'
 export type NotificationType =
   | 'match'
   | 'success'
+  | 'acceptance'
+  | 'accept'
   | 'info'
   | 'message'
   | 'rejection'
-  | 'accept'
+  | 'post_accepted'
   | 'global_announcement'
   | 'progress'
-  | 'found'
-  | 'resolved'
+  | 'delete'
 
 export type ActionItem = {
   color: 'danger' | 'primary' // danger => umak-blue, primary => slate-900
@@ -53,22 +56,24 @@ const iconForType = (type: NotificationType) => {
       return { icon: checkmarkCircleOutline, colorClass: 'text-green-600' }
     case 'success':
       return { icon: checkmarkDoneCircleOutline, colorClass: 'text-green-600' }
+    case 'acceptance':
+      return { icon: checkmarkCircleOutline, colorClass: 'text-green-600' }
+    case 'accept':
+      return { icon: checkmarkDoneCircleOutline, colorClass: 'text-green-600' }
     case 'info':
-      return { icon: shieldOutline, colorClass: 'text-slate-700' }
+      return { icon: shieldOutline, colorClass: 'text-blue-600' }
     case 'message':
       return { icon: mailOutline, colorClass: 'text-umak-blue' }
     case 'rejection':
-      return { icon: alertCircle, colorClass: 'text-red-600' }
-    case 'accept':
+      return { icon: closeCircleOutline, colorClass: 'text-red-600' }
+    case 'post_accepted':
       return { icon: checkmarkDoneCircleOutline, colorClass: 'text-green-600' }
     case 'global_announcement':
       return { icon: megaphoneOutline, colorClass: 'text-umak-blue' }
     case 'progress':
-      return { icon: mailOutline, colorClass: 'text-amber-500' }
-    case 'found':
-      return { icon: checkmarkCircleOutline, colorClass: 'text-green-600' }
-    case 'resolved':
-      return { icon: checkmarkDoneCircleOutline, colorClass: 'text-green-600' }
+      return { icon: hourglassOutline, colorClass: 'text-amber-600' }
+    case 'delete':
+      return { icon: trashOutline, colorClass: 'text-red-600' }
     default:
       return { icon: shieldOutline, colorClass: 'text-slate-700' }
   }

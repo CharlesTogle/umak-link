@@ -69,25 +69,31 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
   category,
   submittedOn = 'MM/DD/YYYY 00:00 AM/PM'
 }) => {
-  const normalizedStatus = (itemStatus || '').toLowerCase()
-  const statusColorClass = getStatusColorClass(normalizedStatus)
-
-  function getStatusColorClass (status: string) {
-    switch (status) {
-      case 'unclaimed':
-        return 'text-red-600'
+  const getStatusColorClass = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'accepted':
+        return 'text-[#16a34a]' // green-600
+      case 'rejected':
+        return 'text-[#C1272D]' // umak-red
+      case 'pending':
+        return 'text-[#d97706]' // amber-600
       case 'claimed':
-        return 'text-green-600'
-      case 'lost':
-        return 'text-red-600'
       case 'returned':
-        return 'text-green-600'
-      case 'missing':
-        return 'text-amber-600'
-      case 'found':
-        return 'text-umak-blue'
+        return 'text-[#16a34a]' // green-600
+      case 'unclaimed':
+      case 'lost':
+        return 'text-[#d97706]' // amber-600
+      case 'fraud':
+        return 'text-[#b91c1c]' // red-700
+      case 'discarded':
+        return 'text-[#C1272D]' // umak-red
+      default:
+        return 'text-[#f59e0b]' // amber-500
     }
   }
+
+  const normalizedStatus = (itemStatus || '').toLowerCase()
+  const statusColorClass = getStatusColorClass(normalizedStatus)
 
   const { user } = useUser()
   const [isProcessing, setIsProcessing] = useState(false)
@@ -262,7 +268,7 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
         <IonCardContent className='-mt-2'>
           <div className='text-xl font-bold text-gray-900 flex justify-between items-center'>
             <span>{itemName}</span>{' '}
-            <span className={`text-sm ${statusColorClass}`}>
+            <span className={`text-sm ${statusColorClass} font-semibold`}>
               {itemStatus
                 ? itemStatus.charAt(0).toUpperCase() + itemStatus.slice(1)
                 : null}

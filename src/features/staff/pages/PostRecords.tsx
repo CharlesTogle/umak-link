@@ -317,52 +317,56 @@ export default function PostRecords () {
         <IonLoading isOpen message='Refreshing content...' spinner='crescent' />
       )}
       {loading ? (
-        <div className='mb-16 bg-default-bg'>
-          <div>
-            {/* Top action row skeleton */}
-            <IonCard className='px-4 mb-3'>
-              <IonCardContent className='flex items-center justify-between gap-3'>
-                <div className='flex items-center mb-2 gap-2'>
-                  <IonSkeletonText
-                    animated
-                    style={{
-                      width: '32px',
-                      height: '32px',
-                      borderRadius: '50%'
-                    }}
-                  />
-                  <IonSkeletonText
-                    animated
-                    style={{ width: '120px', height: '20px' }}
-                  />
-                </div>
-                <div className='flex items-center gap-2'>
-                  <IonSkeletonText
-                    animated
-                    style={{
-                      width: '100px',
-                      height: '36px',
-                      borderRadius: '20px'
-                    }}
-                  />
-                  <IonSkeletonText
-                    animated
-                    style={{
-                      width: '140px',
-                      height: '36px',
-                      borderRadius: '20px'
-                    }}
-                  />
-                </div>
-              </IonCardContent>
-            </IonCard>
+        <>
+          <PostRecordsHeader handleClick={handleSearchBarClick} />
 
-            {/* Post skeletons */}
-            {[...Array(3)].map((_, index) => (
-              <CatalogPostSkeleton key={index} className='mb-4' />
-            ))}
+          <div className='mb-16 bg-default-bg'>
+            <div>
+              {/* Top action row skeleton */}
+              <IonCard className='px-4 mb-3'>
+                <IonCardContent className='flex items-center justify-between gap-3'>
+                  <div className='flex items-center mb-2 gap-2'>
+                    <IonSkeletonText
+                      animated
+                      style={{
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '50%'
+                      }}
+                    />
+                    <IonSkeletonText
+                      animated
+                      style={{ width: '120px', height: '20px' }}
+                    />
+                  </div>
+                  <div className='flex items-center gap-2'>
+                    <IonSkeletonText
+                      animated
+                      style={{
+                        width: '100px',
+                        height: '36px',
+                        borderRadius: '20px'
+                      }}
+                    />
+                    <IonSkeletonText
+                      animated
+                      style={{
+                        width: '140px',
+                        height: '36px',
+                        borderRadius: '20px'
+                      }}
+                    />
+                  </div>
+                </IonCardContent>
+              </IonCard>
+
+              {/* Post skeletons */}
+              {[...Array(3)].map((_, index) => (
+                <CatalogPostSkeleton key={index} className='mb-4' />
+              ))}
+            </div>
           </div>
-        </div>
+        </>
       ) : (
         <>
           {/* FilterSortBar component */}

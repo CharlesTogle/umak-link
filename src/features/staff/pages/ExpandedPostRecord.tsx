@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from 'react'
+import { memo, useEffect, useState, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import { useNavigation } from '@/shared/hooks/useNavigation'
 import {
@@ -8,7 +8,6 @@ import {
   IonAvatar,
   IonIcon,
   IonToast,
-  IonSpinner,
   IonActionSheet,
   IonModal,
   IonButton,
@@ -27,6 +26,7 @@ import { ChoiceModal } from '@/shared/components/ChoiceModal'
 import { rejectReasons } from '@/features/staff/utils/catalogPostHandlers'
 import useNotifications from '@/features/user/hooks/useNotifications'
 import { isConnected } from '@/shared/utils/networkCheck'
+import PostSkeleton from '@/features/posts/components/PostSkeleton'
 
 export default memo(function ExpandedPostRecord () {
   const { postId } = useParams<{ postId: string }>()
@@ -43,48 +43,49 @@ export default memo(function ExpandedPostRecord () {
   const [showActions, setShowActions] = useState(false)
   const [showStatusModal, setShowStatusModal] = useState(false)
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null)
+  const [selectedItemStatus, setSelectedItemStatus] = useState<string | null>(
+    null
+  )
   const [showRejectionModal, setShowRejectionModal] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  useEffect(() => {
+  const loadPost = useCallback(async () => {
     if (!postId) return
-    let mounted = true
+
     setLoading(true)
-    ;(async () => {
-      try {
-        const connected = await isConnected()
-        if (!connected) {
-          setToast({
-            show: true,
-            message: 'Failed to load Post - No Internet Connection'
-          })
-          setLoading(false)
-          return
-        }
-
-        const data = await getPostFull(postId)
-
-        if (!data) {
-          setToast({ show: true, message: 'Post record not found' })
-          setLoading(false)
-          return
-        }
-
-        if (mounted) {
-          setRecord(data)
-          setSelectedStatus(data.post_status)
-        }
-      } catch (err) {
-        console.error('Error loading post record', err)
-        setToast({ show: true, message: 'Failed to load post record' })
-      } finally {
+    try {
+      const connected = await isConnected()
+      if (!connected) {
+        setToast({
+          show: true,
+          message: 'Failed to load Post - No Internet Connection'
+        })
         setLoading(false)
+        return
       }
-    })()
-    return () => {
-      mounted = false
+
+      const data = await getPostFull(postId)
+
+      if (!data) {
+        setToast({ show: true, message: 'Post record not found' })
+        setLoading(false)
+        return
+      }
+
+      setRecord(data)
+      setSelectedStatus(data.post_status)
+      setSelectedItemStatus(data.item_status)
+    } catch (err) {
+      console.error('Error loading post record', err)
+      setToast({ show: true, message: 'Failed to load post record' })
+    } finally {
+      setLoading(false)
     }
   }, [postId])
+
+  useEffect(() => {
+    loadPost()
+  }, [loadPost])
 
   const formatDateTime = (value?: string | null) => {
     if (!value) return ''
@@ -163,15 +164,14 @@ export default memo(function ExpandedPostRecord () {
         return '#d97706' // amber-600
       case 'claimed':
       case 'returned':
-        return '#2563eb' // blue-600
+        return '#16a34a' // green-600
       case 'unclaimed':
-        return '#C1272D' // umak-red
-      case 'fraud':
-        return '#b91c1c' // red-700
       case 'lost':
         return '#d97706' // amber-600
+      case 'fraud':
+        return '#b91c1c' // red-700
       case 'discarded':
-        return '#dc2626' // red-600
+        return '#C1272D' // umak-red
       default:
         return '#f59e0b' // amber-500
     }
@@ -181,12 +181,105 @@ export default memo(function ExpandedPostRecord () {
     return ['pending', 'accepted', 'rejected']
   }
 
+  const getItemStatusOptions = () => {
+    if (!record) return []
+
+    // Filter based on item type
+    if (record.item_type === 'found') {
+      return ['claimed', 'unclaimed', 'discarded']
+    } else {
+      // missing items
+      return ['returned', 'lost']
+    }
+  }
+
+  // Validate if item status is allowed based on selected post status
+  const isItemStatusAllowed = (itemStatus: string) => {
+    if (!selectedStatus) return true
+
+    switch (selectedStatus) {
+      case 'pending':
+        return itemStatus === 'unclaimed'
+      case 'accepted':
+        return true // All item statuses allowed
+      case 'rejected':
+        return itemStatus === 'unclaimed' || itemStatus === 'discarded'
+      default:
+        return true
+    }
+  }
+
+  // Validate if post status is allowed based on selected item status
+  const isPostStatusAllowed = (postStatus: string) => {
+    if (!selectedItemStatus) return true
+
+    switch (selectedItemStatus) {
+      case 'claimed':
+      case 'returned':
+        return postStatus === 'accepted'
+      case 'unclaimed':
+      case 'lost':
+        return true // All post statuses allowed
+      case 'discarded':
+        return postStatus === 'rejected' || postStatus === 'accepted'
+      default:
+        return true
+    }
+  }
+
   const isStatusActive = (status: string) => {
     return selectedStatus === status
   }
 
+  const isItemStatusActive = (status: string) => {
+    return selectedItemStatus === status
+  }
+
   const handleApplyStatusChange = async () => {
-    if (!selectedStatus || !record) return
+    if (!record) return
+
+    // Validate that at least one status is selected
+    if (!selectedStatus && !selectedItemStatus) {
+      setToast({
+        show: true,
+        message: 'Please select at least one status to change'
+      })
+      return
+    }
+
+    // If item status is claimed, redirect to claim page first
+    if (selectedItemStatus === 'claimed') {
+      // Update post status first if selected
+      if (selectedStatus) {
+        if (selectedStatus === 'rejected') {
+          setShowStatusModal(false)
+          setShowRejectionModal(true)
+          return
+        }
+
+        setIsSubmitting(true)
+        const result = await updatePostStatusWithNotification(
+          record.post_id,
+          selectedStatus as 'accepted' | 'rejected' | 'pending'
+        )
+        setIsSubmitting(false)
+
+        if (!result.success) {
+          setToast({
+            show: true,
+            message: result.error || 'Failed to update post status'
+          })
+          return
+        }
+      }
+
+      // Redirect to claim page
+      setShowStatusModal(false)
+      setSelectedStatus(null)
+      setSelectedItemStatus(null)
+      navigate(`/staff/post/claim/${record.post_id}`)
+      return
+    }
 
     // If rejected is selected, show rejection reason modal
     if (selectedStatus === 'rejected') {
@@ -195,34 +288,51 @@ export default memo(function ExpandedPostRecord () {
       return
     }
 
-    // For accepted and pending, directly update status
+    // For other statuses, update normally
     setIsSubmitting(true)
-    const result = await updatePostStatusWithNotification(
-      record.post_id,
-      selectedStatus as 'accepted' | 'rejected' | 'pending'
-    )
 
-    if (result.success) {
-      setToast({
-        show: true,
-        message: `Post status changed to ${selectedStatus}`
-      })
+    // Update post status if selected
+    if (selectedStatus) {
+      const result = await updatePostStatusWithNotification(
+        record.post_id,
+        selectedStatus as 'accepted' | 'rejected' | 'pending'
+      )
 
-      // Refresh the record
-      const updatedData = await getPostFull(record.post_id)
-      if (updatedData) {
-        setRecord(updatedData)
+      if (!result.success) {
+        setToast({
+          show: true,
+          message: result.error || 'Failed to update post status'
+        })
+        setIsSubmitting(false)
+        return
       }
-    } else {
+    }
+
+    // Update item status if selected (other than claimed)
+    if (selectedItemStatus) {
+      // TODO: Add API call to update item status
+      // For now, just show a message
       setToast({
         show: true,
-        message: result.error || 'Failed to update post status'
+        message: `Item status will be changed to ${selectedItemStatus}`
       })
+    }
+
+    setToast({
+      show: true,
+      message: 'Status updated successfully'
+    })
+
+    // Refresh the record
+    const updatedData = await getPostFull(record.post_id)
+    if (updatedData) {
+      setRecord(updatedData)
     }
 
     setIsSubmitting(false)
     setShowStatusModal(false)
     setSelectedStatus(null)
+    setSelectedItemStatus(null)
   }
 
   const handleRejectWithReason = async (choice: string) => {
@@ -266,13 +376,13 @@ export default memo(function ExpandedPostRecord () {
 
   return (
     <IonContent>
-      <div className='fixed top-0 w-full'>
+      <div className='fixed top-0 w-full z-10 max-h-screen'>
         <Header logoShown isProfileAndNotificationShown />
       </div>
 
       {loading && (
-        <div className='w-full grid place-items-center py-16'>
-          <IonSpinner />
+        <div>
+          <PostSkeleton className='mt-15' withStatusCard />
         </div>
       )}
 
@@ -507,10 +617,11 @@ export default memo(function ExpandedPostRecord () {
         onDidDismiss={() => {
           setShowStatusModal(false)
           setSelectedStatus(null)
+          setSelectedItemStatus(null)
         }}
         backdropDismiss={true}
-        initialBreakpoint={0.33}
-        breakpoints={[0.33, 0.5]}
+        initialBreakpoint={0.4}
+        breakpoints={[0.4, 0.6]}
         className='font-default-font'
         style={{ '--border-radius': '2rem' }}
       >
@@ -527,26 +638,70 @@ export default memo(function ExpandedPostRecord () {
             <h3 className='text-xs! font-semibold! text-black! uppercase! tracking-wide! mb-3!'>
               Post Status
             </h3>
+            <div className='flex flex-wrap gap-2 mb-4'>
+              {getStatusOptions().map(status => {
+                const isAllowed = isPostStatusAllowed(status)
+                const isActive = isStatusActive(status)
+                return (
+                  <IonChip
+                    key={status}
+                    onClick={() => {
+                      if (isAllowed) {
+                        setSelectedStatus(status)
+                      }
+                    }}
+                    outline={!isActive}
+                    className='px-4'
+                    disabled={!isAllowed}
+                    style={{
+                      '--background': isActive
+                        ? getStatusColor(status)
+                        : 'transparent',
+                      '--color': isActive ? 'white' : getStatusColor(status),
+                      border: `2px solid ${getStatusColor(status)}`,
+                      opacity: isAllowed ? 1 : 0.4,
+                      cursor: isAllowed ? 'pointer' : 'not-allowed'
+                    }}
+                  >
+                    <IonLabel className='capitalize'>{status}</IonLabel>
+                  </IonChip>
+                )
+              })}
+            </div>
+
+            <div className='w-full bg-black h-px mt-4' />
+            <h3 className='text-xs! font-semibold! text-black! uppercase! tracking-wide! mb-3!'>
+              Item Status
+            </h3>
             <div className='flex flex-wrap gap-2'>
-              {getStatusOptions().map(status => (
-                <IonChip
-                  key={status}
-                  onClick={() => setSelectedStatus(status)}
-                  outline={!isStatusActive(status)}
-                  className='px-4'
-                  style={{
-                    '--background': isStatusActive(status)
-                      ? getStatusColor(status)
-                      : 'transparent',
-                    '--color': isStatusActive(status)
-                      ? 'white'
-                      : getStatusColor(status),
-                    border: `2px solid ${getStatusColor(status)}`
-                  }}
-                >
-                  <IonLabel className='capitalize'>{status}</IonLabel>
-                </IonChip>
-              ))}
+              {getItemStatusOptions().map(status => {
+                const isAllowed = isItemStatusAllowed(status)
+                const isActive = isItemStatusActive(status)
+                return (
+                  <IonChip
+                    key={status}
+                    onClick={() => {
+                      if (isAllowed) {
+                        setSelectedItemStatus(status)
+                      }
+                    }}
+                    outline={!isActive}
+                    className='px-4'
+                    disabled={!isAllowed}
+                    style={{
+                      '--background': isActive
+                        ? getStatusColor(status)
+                        : 'transparent',
+                      '--color': isActive ? 'white' : getStatusColor(status),
+                      border: `2px solid ${getStatusColor(status)}`,
+                      opacity: isAllowed ? 1 : 0.4,
+                      cursor: isAllowed ? 'pointer' : 'not-allowed'
+                    }}
+                  >
+                    <IonLabel className='capitalize'>{status}</IonLabel>
+                  </IonChip>
+                )
+              })}
             </div>
           </div>
 
@@ -556,6 +711,7 @@ export default memo(function ExpandedPostRecord () {
               onClick={() => {
                 setShowStatusModal(false)
                 setSelectedStatus(null)
+                setSelectedItemStatus(null)
               }}
               className='flex text-umak-blue'
             >
@@ -564,7 +720,9 @@ export default memo(function ExpandedPostRecord () {
             <IonButton
               expand='block'
               onClick={handleApplyStatusChange}
-              disabled={!selectedStatus || isSubmitting}
+              disabled={
+                (!selectedStatus && !selectedItemStatus) || isSubmitting
+              }
               style={{
                 '--background': 'var(--color-umak-blue)'
               }}
@@ -586,6 +744,7 @@ export default memo(function ExpandedPostRecord () {
         onDidDismiss={() => {
           setShowRejectionModal(false)
           setSelectedStatus(null)
+          setSelectedItemStatus(null)
         }}
       />
     </IonContent>

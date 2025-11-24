@@ -27,6 +27,7 @@ export default function ExpandedHistoryPost () {
   const [isDeleting, setIsDeleting] = useState(false)
   const [showToast, setShowToast] = useState(false)
   const [toastMessage, setToastMessage] = useState('')
+  const [toastColor, setToastColor] = useState<'success' | 'danger'>('danger')
   const { navigate } = useNavigation()
   const { deletePost } = usePostActions()
 
@@ -60,7 +61,16 @@ export default function ExpandedHistoryPost () {
     const result = await deletePost(postId, post.item_name)
     setIsDeleting(false)
     if (result.success) {
-      navigate('/user/post/history')
+      setToastMessage('Post deleted successfully')
+      setToastColor('success')
+      setShowToast(true)
+      setTimeout(() => {
+        navigate('/user/history')
+      }, 1500)
+    } else {
+      setToastMessage(result.error || 'Failed to delete post')
+      setToastColor('danger')
+      setShowToast(true)
     }
   }
 
@@ -208,7 +218,7 @@ export default function ExpandedHistoryPost () {
         message={toastMessage}
         duration={3000}
         position='top'
-        color='danger'
+        color={toastColor}
       />
     </IonContent>
   )

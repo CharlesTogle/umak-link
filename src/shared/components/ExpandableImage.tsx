@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { IonIcon, IonButton } from '@ionic/react'
 import { close as closeIcon } from 'ionicons/icons'
 import LazyImage from '@/shared/components/LazyImage'
@@ -71,41 +72,43 @@ export default function ExpandableImage ({ src, alt, className }: Props) {
         />
       </div>
 
-      {open && (
-        <div
-          role='dialog'
-          aria-modal='true'
-          // ensure overlay is on top of everything
-          className='fixed inset-0 flex items-center justify-center backdrop-blur-sm bg-black/70 transition-all duration-200'
-          style={{ zIndex: 9999 }}
-          onClick={() => setOpen(false)}
-        >
+      {open &&
+        createPortal(
           <div
-            className='relative bg-transparent rounded-xl shadow-2xl overflow-hidden p-2 max-w-[90vw] max-h-[90vh] flex items-center justify-center animate-fadeIn'
-            onClick={e => e.stopPropagation()}
+            role='dialog'
+            aria-modal='true'
+            // ensure overlay is on top of everything
+            className='fixed inset-0 flex items-center justify-center backdrop-blur-sm bg-black/70 transition-all duration-200'
+            style={{ zIndex: 9999 }}
+            onClick={() => setOpen(false)}
           >
-            <IonButton
-              fill='clear'
-              className='absolute top-3 right-3 z-10 bg-white/90 hover:bg-white rounded-full shadow-lg w-8 aspect-square flex items-center justify-center focus:outline-none border-none'
-              onClick={() => setOpen(false)}
+            <div
+              className='relative bg-transparent rounded-xl shadow-2xl overflow-hidden p-2 max-w-[90vw] max-h-[90vh] flex items-center justify-center animate-fadeIn'
+              onClick={e => e.stopPropagation()}
             >
-              <IonIcon
-                icon={closeIcon}
-                className='text-[16px]'
-                color='dark'
-                slot='icon-only'
-              />
-            </IonButton>
+              <IonButton
+                fill='clear'
+                className='absolute top-3 right-3 z-10 bg-white/90 hover:bg-white rounded-full shadow-lg w-8 aspect-square flex items-center justify-center focus:outline-none border-none'
+                onClick={() => setOpen(false)}
+              >
+                <IonIcon
+                  icon={closeIcon}
+                  className='text-[16px]'
+                  color='dark'
+                  slot='icon-only'
+                />
+              </IonButton>
 
-            <img
-              src={src}
-              alt={alt}
-              className='max-w-full max-h-[85vh] object-contain rounded-lg transition-transform duration-200 select-none outline-none border-none shadow-none'
-              draggable={false}
-            />
-          </div>
-        </div>
-      )}
+              <img
+                src={src}
+                alt={alt}
+                className='max-w-full max-h-[85vh] object-contain rounded-lg transition-transform duration-200 select-none outline-none border-none shadow-none'
+                draggable={false}
+              />
+            </div>
+          </div>,
+          document.body
+        )}
     </>
   )
 }

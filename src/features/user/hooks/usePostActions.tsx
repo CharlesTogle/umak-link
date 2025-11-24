@@ -151,7 +151,7 @@ export function usePostActions () {
       sendNotification({
         title: 'Post Deleted',
         message: `Your post about "${itemName}" has been successfully deleted.`,
-        type: 'info',
+        type: 'delete',
         userId: user.user_id,
         data: {
           postId: String(postId),

@@ -17,7 +17,7 @@ export default function History () {
   const PAGE_SIZE = 5
   const [activeFilters, setActiveFilters] = useState<Set<PostStatus>>(new Set())
   const [sortDir, setSortDir] = useState<SortDirection>('desc')
-  const [postCount, setPostCount] = useState<number>(0)
+  const [postCount, setPostCount] = useState<number | null>(null)
   const contentRef = useRef<HTMLIonContentElement | null>(null)
   const { getUser } = useUser()
   const { navigate } = useNavigation()

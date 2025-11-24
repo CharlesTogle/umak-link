@@ -58,12 +58,22 @@ const Post: React.FC<CatalogPostProps> = ({
   actionSheetButtons
 }) => {
   const normalizedStatus = (itemStatus || '').toLowerCase()
-  const statusColorClass =
-    normalizedStatus === 'unclaimed'
-      ? 'text-red-600'
-      : normalizedStatus === 'claimed'
-      ? 'text-green-600'
-      : ''
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'claimed':
+      case 'returned':
+        return '#2563eb' // blue-600
+      case 'unclaimed':
+      case 'lost':
+        return '#d97706' // amber-600
+      case 'discarded':
+        return '#dc2626' // red-600
+      default:
+        return '#6b7280' // gray-500
+    }
+  }
+
   return (
     <IonCard
       className={`shadow-md border border-gray-200 font-default-font min-h-[93%] px-2 ${className}`}
@@ -110,7 +120,10 @@ const Post: React.FC<CatalogPostProps> = ({
       <IonCardContent className='-mt-2'>
         <div className='text-xl font-bold text-gray-900 flex justify-between items-center'>
           <span>{itemName}</span>{' '}
-          <span className={`text-sm ${statusColorClass}`}>
+          <span
+            className='text-sm font-semibold'
+            style={{ color: getStatusColor(normalizedStatus) }}
+          >
             {itemStatus
               ? itemStatus.charAt(0).toUpperCase() + itemStatus.slice(1)
               : null}

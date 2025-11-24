@@ -10,9 +10,9 @@ import {
   IonImg,
   IonIcon,
   IonToast,
-  IonSpinner,
   IonText,
-  IonButton
+  IonButton,
+  IonSpinner
 } from '@ionic/react'
 import { personCircle, arrowBack } from 'ionicons/icons'
 import { useFraudReports } from '@/features/staff/hooks/useFraudReports'
@@ -26,6 +26,7 @@ import { parseReasonForReporting } from '../utils/parseReasonForReporting'
 import { isConnected } from '@/shared/utils/networkCheck'
 import { useCallback } from 'react'
 import { useUser } from '@/features/auth/contexts/UserContext'
+import PostSkeleton from '@/features/posts/components/PostSkeleton'
 
 type RejectReasonKey =
   | 'insufficient_evidence'
@@ -228,7 +229,8 @@ export default memo(function ExpandedFraudReport () {
         reportId: report.report_id,
         postTitle: report.item_name || 'Unknown Item',
         deleteClaim: shouldDeleteClaim,
-        itemId: report.item_id
+        itemId: report.item_id,
+        reporterId: report.reporter_id
       })
 
       if (result.success) {
@@ -321,19 +323,15 @@ export default memo(function ExpandedFraudReport () {
 
   return (
     <IonContent>
-      <div className='fixed top-0 w-full'>
+      <div className='fixed top-0 w-full z-10'>
         <HeaderWithButtons
           loading={isProcessing}
-          onCancel={() => navigate('/staff/fraud-reports', 'back')}
+          onCancel={() => navigate('/staff/fraud-reports')}
           withSubmit={false}
         />
       </div>
 
-      {loading && (
-        <div className='w-full grid place-items-center py-16'>
-          <IonSpinner />
-        </div>
-      )}
+      {loading && <PostSkeleton withStatusCard className='mt-15' />}
 
       {!loading && !report && (
         <div className='flex flex-col items-center justify-center h-full px-6'>
