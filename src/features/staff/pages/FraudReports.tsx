@@ -38,6 +38,29 @@ const SORT_OPTIONS: SortOption[] = [
   { value: 'asc', label: 'Oldest First', icon: documentTextOutline }
 ]
 
+// Helper function to prioritize 'Open' status reports
+const prioritizeOpenReports = (
+  reports: FraudReportPublic[],
+  sortDir: SortDirection
+): FraudReportPublic[] => {
+  // Separate open and non-open reports
+  const openReports = reports.filter(report => report.report_status === 'open')
+  const otherReports = reports.filter(report => report.report_status !== 'open')
+
+  // Sort each group by date
+  const sortByDate = (a: FraudReportPublic, b: FraudReportPublic) => {
+    const dateA = new Date(a.date_reported || 0).getTime()
+    const dateB = new Date(b.date_reported || 0).getTime()
+    return sortDir === 'desc' ? dateB - dateA : dateA - dateB
+  }
+
+  openReports.sort(sortByDate)
+  otherReports.sort(sortByDate)
+
+  // Concatenate with open reports first
+  return [...openReports, ...otherReports]
+}
+
 export default function FraudReport () {
   const PAGE_SIZE = 5
   const [showToast, setShowToast] = useState(false)
@@ -89,8 +112,13 @@ export default function FraudReport () {
   }, [reports])
 
   const updateFilteredReports = useCallback(() => {
+    // First apply filters and sort
     const filtered = applyFiltersAndSort(allReports, activeFilters, sortDir)
-    setFilteredReports(filtered)
+
+    // Then prioritize 'Open' status reports
+    const prioritized = prioritizeOpenReports(filtered, sortDir)
+
+    setFilteredReports(prioritized)
   }, [activeFilters, sortDir, allReports])
 
   useEffect(() => {

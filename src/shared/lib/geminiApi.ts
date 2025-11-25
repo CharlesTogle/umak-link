@@ -89,12 +89,10 @@ export async function callGeminiApi (
       const errorMessage = err?.message || err?.toString() || String(err)
       const statusCode =
         err?.status || err?.response?.status || err?.code || null
-      const respBody = err?.response?.data || err?.response || null
-      console.error(`Attempt ${attempt} failed:`, {
-        message: errorMessage,
-        statusCode,
-        respBody
-      })
+      console.error(
+        `Attempt ${attempt} failed:`,
+        JSON.stringify(err, Object.getOwnPropertyNames(err), 2)
+      )
 
       // Determine retryability using status code and error text
       const isRetryableStatus =
@@ -225,27 +223,24 @@ export async function generateItemContent (
 ): Promise<GenerateItemContentResponse> {
   const { itemName = '', itemDescription = '', image } = params
 
-  const prompt = `You are an assistant that analyzes an item (optionally with an image) and produces a small JSON object for UI autofill.
+  const prompt = `Analyze the item and return ONLY valid JSON:
 
-Allowed categories (choose exactly one, match one of these strings exactly):\n${getCategoryTypes().join(
-    ', '
-  )}\n\nReturn ONLY a single JSON object with these keys: \n{
+{
   "itemName": "...",
   "itemDescription": "...",
   "itemCategory": "..."
 }
 
-Guidelines:
-- Keep text concise (one short sentence for description, title <= 32 chars).
-- itemCategory should be a single-word or short phrase (e.g. "electronics", "clothing", "keys", "documents", "accessories", "other").
-- Lowercase, no markdown, no surrounding text.
+Rules:
+- itemName: ≤32 chars, include brand if identifiable
+- itemDescription: One concise sentences
+- itemCategory: Must be one of: ${getCategoryTypes().join(', ')}
+- Use image (if provided) to enhance accuracy
+- Lowercase, no markdown, no extra text
 
 Context:
 Item Name: ${itemName}
-Item Description: ${itemDescription}
-
-If you are given an image, use visual cues from the image to improve the values.
-Return only valid JSON.`
+Item Description: ${itemDescription}`
 
   const result = await callGeminiApi({
     prompt,

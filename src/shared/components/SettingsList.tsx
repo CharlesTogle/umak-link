@@ -21,7 +21,6 @@ import { clearPostsCache } from '@/features/posts/data/postsCache'
 import CardHeader from './CardHeader'
 import { Camera } from '@capacitor/camera'
 import { Filesystem } from '@capacitor/filesystem'
-import { Preferences } from '@capacitor/preferences'
 import { PushNotifications } from '@capacitor/push-notifications'
 
 export default function SettingsList () {
@@ -38,8 +37,11 @@ export default function SettingsList () {
 
   const handleClearPostsCache = async () => {
     try {
-      // Clear both home and history caches to avoid stale data in either feed
       await Promise.all([
+        clearPostsCache({
+          loadedKey: 'LoadedPosts',
+          cacheKey: 'CachedPublicPosts'
+        }),
         clearPostsCache({
           loadedKey: 'LoadedPosts:home',
           cacheKey: 'CachedPublicPosts:home'
@@ -47,12 +49,24 @@ export default function SettingsList () {
         clearPostsCache({
           loadedKey: 'LoadedPosts:history',
           cacheKey: 'CachedPublicPosts:history'
+        }),
+        clearPostsCache({
+          loadedKey: 'LoadedPosts:staff:home',
+          cacheKey: 'CachedPublicPosts:staff:home'
+        }),
+        clearPostsCache({
+          loadedKey: 'LoadedPosts:staff:records',
+          cacheKey: 'CachedPublicPosts:staff:records'
+        }),
+        clearPostsCache({
+          loadedKey: 'LoadedReports:staff:fraud',
+          cacheKey: 'CachedFraudReports:staff'
         })
       ])
-      setToastMessage('Posts cache cleared (home & history)')
+      setToastMessage('All caches cleared successfully')
     } catch (e) {
-      console.error('Failed to clear posts cache:', e)
-      setToastMessage('Failed to clear posts cache')
+      console.error('Failed to clear caches:', e)
+      setToastMessage('Failed to clear caches')
     } finally {
       setToastOpen(true)
     }
@@ -60,15 +74,13 @@ export default function SettingsList () {
 
   const handleRequestCameraPermission = async () => {
     try {
-      const status = await Camera.requestPermissions({
-        permissions: ['camera', 'photos']
-      })
+      console.log('Requesting camera permission...')
+      await Camera.requestPermissions()
+
+      // Check actual permission status after request
+      const status = await Camera.checkPermissions()
       const granted = status.camera === 'granted' || status.photos === 'granted'
 
-      await Preferences.set({
-        key: 'perm.camera',
-        value: granted ? 'granted' : 'denied'
-      })
       setPermState(prev => ({
         ...prev,
         camera: granted ? 'granted' : 'denied'
@@ -84,15 +96,19 @@ export default function SettingsList () {
     }
   }
 
+  const handleRevokeCameraPermission = () => {
+    setToastMessage('Please revoke camera permission in your device settings')
+    setToastOpen(true)
+  }
+
   const handleRequestFilesPermission = async () => {
     try {
-      const status = await Filesystem.requestPermissions()
+      await Filesystem.requestPermissions()
+
+      // Check actual permission status after request
+      const status = await Filesystem.checkPermissions()
       const granted = status.publicStorage === 'granted'
 
-      await Preferences.set({
-        key: 'perm.files',
-        value: granted ? 'granted' : 'denied'
-      })
       setPermState(prev => ({ ...prev, files: granted ? 'granted' : 'denied' }))
       setToastMessage(
         granted
@@ -107,15 +123,21 @@ export default function SettingsList () {
     }
   }
 
+  const handleRevokeFilesPermission = () => {
+    setToastMessage(
+      'Please revoke file access permission in your device settings'
+    )
+    setToastOpen(true)
+  }
+
   const handleRequestNotificationsPermission = async () => {
     try {
-      const permResult = await PushNotifications.requestPermissions()
+      await PushNotifications.requestPermissions()
+
+      // Check actual permission status after request
+      const permResult = await PushNotifications.checkPermissions()
       const granted = permResult.receive === 'granted'
 
-      await Preferences.set({
-        key: 'perm.notifications',
-        value: granted ? 'granted' : 'denied'
-      })
       setPermState(prev => ({
         ...prev,
         notifications: granted ? 'granted' : 'denied'
@@ -135,26 +157,39 @@ export default function SettingsList () {
     }
   }
 
+  const handleRevokeNotificationsPermission = () => {
+    setToastMessage(
+      'Please revoke notifications permission in your device settings'
+    )
+    setToastOpen(true)
+  }
+
   useEffect(() => {
     let active = true
     ;(async () => {
       try {
-        const [camera, files, notifs] = await Promise.all([
-          Preferences.get({ key: 'notifications.inApp' }),
-          Preferences.get({ key: 'notifications.push' }),
-          Preferences.get({ key: 'perm.camera' }),
-          Preferences.get({ key: 'perm.files' }),
-          Preferences.get({ key: 'perm.notifications' })
+        // Check actual permissions from native APIs
+        const [cameraStatus, filesStatus, notifsStatus] = await Promise.all([
+          Camera.checkPermissions(),
+          Filesystem.checkPermissions(),
+          PushNotifications.checkPermissions()
         ])
+
         if (!active) return
-        // setInAppNotifs(inApp.value === 'true')
-        // setPushNotifs(push.value === 'true')
+
         setPermState({
-          camera: camera.value || '',
-          files: files.value || '',
-          notifications: notifs.value || ''
+          camera:
+            cameraStatus.camera === 'granted' ||
+            cameraStatus.photos === 'granted'
+              ? 'granted'
+              : 'denied',
+          files: filesStatus.publicStorage === 'granted' ? 'granted' : 'denied',
+          notifications:
+            notifsStatus.receive === 'granted' ? 'granted' : 'denied'
         })
-      } catch {}
+      } catch (err) {
+        console.error('Error checking permissions:', err)
+      }
     })()
     return () => {
       active = false
@@ -183,33 +218,51 @@ export default function SettingsList () {
         <IonList>
           <IonItem
             button
-            disabled={permState.camera === 'granted'}
-            onClick={handleRequestCameraPermission}
+            onClick={
+              permState.camera === 'granted'
+                ? handleRevokeCameraPermission
+                : handleRequestCameraPermission
+            }
           >
             <IonIcon slot='start' icon={camera} className='mr-2' />
             <IonLabel>
               Camera {permState.camera === 'granted' && '(Granted)'}
             </IonLabel>
+            <IonLabel slot='end' className='text-sm text-umak-blue'>
+              {permState.camera === 'granted' ? 'Revoke' : 'Grant'}
+            </IonLabel>
           </IonItem>
           <IonItem
             button
-            disabled={permState.files === 'granted'}
-            onClick={handleRequestFilesPermission}
+            onClick={
+              permState.files === 'granted'
+                ? handleRevokeFilesPermission
+                : handleRequestFilesPermission
+            }
           >
             <IonIcon slot='start' icon={images} className='mr-2' />
             <IonLabel>
               Files {permState.files === 'granted' && '(Granted)'}
             </IonLabel>
+            <IonLabel slot='end' className='text-sm text-umak-blue'>
+              {permState.files === 'granted' ? 'Revoke' : 'Grant'}
+            </IonLabel>
           </IonItem>
           <IonItem
             button
-            disabled={permState.notifications === 'granted'}
-            onClick={handleRequestNotificationsPermission}
+            onClick={
+              permState.notifications === 'granted'
+                ? handleRevokeNotificationsPermission
+                : handleRequestNotificationsPermission
+            }
           >
             <IonIcon slot='start' icon={notifications} className='mr-2' />
             <IonLabel>
               Notifications{' '}
               {permState.notifications === 'granted' && '(Granted)'}
+            </IonLabel>
+            <IonLabel slot='end' className='text-sm text-umak-blue'>
+              {permState.notifications === 'granted' ? 'Revoke' : 'Grant'}
             </IonLabel>
           </IonItem>
         </IonList>

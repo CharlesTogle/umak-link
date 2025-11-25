@@ -73,21 +73,66 @@ const ImageUploadSection: React.FC<ImageUploadSectionProps> = ({
 
   const handleTakePhoto = async () => {
     try {
+      // Request camera permissions before taking photo
+      await Camera.requestPermissions({
+        permissions: ['camera', 'photos']
+      })
+
+      // Check if permissions were granted
+      const permissionStatus = await Camera.checkPermissions()
+      const hasPermission =
+        permissionStatus.camera === 'granted' ||
+        permissionStatus.photos === 'granted'
+
+      if (!hasPermission) {
+        console.error('Camera permission not granted')
+        throw new Error('Camera permission not granted')
+      }
+
+      // Use Base64 result type to avoid URI issues with dev server
       const photo = await Camera.getPhoto({
         quality: 80,
-        resultType: CameraResultType.Uri,
-        source: CameraSource.Camera
+        resultType: CameraResultType.Base64,
+        source: CameraSource.Camera,
+        saveToGallery: true
       })
-      const uri = photo.webPath || photo.path
-      if (!uri) throw new Error('No photo path')
-      const resp = await fetch(uri)
-      const blob = await resp.blob()
-      const ext = blob.type.includes('png') ? 'png' : 'jpg'
-      const file = new File([blob], `photo_${Date.now()}.${ext}`, {
-        type: blob.type || 'image/jpeg'
+
+      console.log('Photo captured (base64 length):', photo.base64String?.length)
+
+      if (!photo.base64String) {
+        console.error('No base64 data returned')
+        throw new Error('No photo data')
+      }
+
+      // Convert base64 to blob
+      const base64Data = photo.base64String
+      const mimeType = `image/${photo.format || 'jpeg'}`
+
+      // Decode base64 to binary
+      const binaryString = atob(base64Data)
+      const bytes = new Uint8Array(binaryString.length)
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i)
+      }
+
+      const blob = new Blob([bytes], { type: mimeType })
+      console.log('Blob created:', blob.size, blob.type)
+
+      // Determine file extension
+      const ext = photo.format === 'png' ? 'png' : 'jpg'
+
+      // Create a proper File object
+      const file = new File([blob], `camera_photo_${Date.now()}.${ext}`, {
+        type: mimeType,
+        lastModified: Date.now()
       })
+
+      console.log('File created:', file.name, file.size, file.type)
+
+      // Pass the file to parent component
       onImageChange(file)
     } catch (e) {
+      console.error('Camera error:', e)
       // optional: toast error
     } finally {
       closeModal()

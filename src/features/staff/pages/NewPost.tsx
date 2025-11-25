@@ -46,6 +46,7 @@ export default function NewPost () {
   })
   const [loading, setLoading] = useState(false)
   const [aiGenerating, setAiGenerating] = useState(false)
+  const [aiGenerationAborted, setAiGenerationAborted] = useState(false)
   const [showAiConfirmModal, setShowAiConfirmModal] = useState(false)
   const [aiGeneratedContent, setAiGeneratedContent] = useState<{
     itemName?: string
@@ -111,7 +112,8 @@ export default function NewPost () {
     // Guard: only trigger AI generation if image is uploaded (not null/removed)
     if (!file) return
 
-    // Set generating state
+    // Reset abort state and set generating state
+    setAiGenerationAborted(false)
     setAiGenerating(true)
 
     try {
@@ -123,9 +125,17 @@ export default function NewPost () {
         currentCategory: null
       })
 
+      // Check if generation was aborted
+      if (aiGenerationAborted) {
+        setAiGenerating(false)
+        return
+      }
+
       // Handle rate limit
       if (result.rateLimitExceeded) {
-        setErrorMessage('Autogeneration is limited to 10 times per 5 minutes. Try again at a later time.')
+        setErrorMessage(
+          'Autogeneration is limited to 10 times per 5 minutes. Try again at a later time.'
+        )
         setToastColor('danger')
         setShowToast(true)
         return
@@ -156,6 +166,11 @@ export default function NewPost () {
     } finally {
       setAiGenerating(false)
     }
+  }
+
+  const handleCancelAiGeneration = () => {
+    setAiGenerationAborted(true)
+    setAiGenerating(false)
   }
 
   const handleAiConfirm = () => {
@@ -460,6 +475,17 @@ export default function NewPost () {
             <div className='mt-1 text-sm text-gray-600'>
               This may take a few seconds.
             </div>
+            <IonButton
+              onClick={handleCancelAiGeneration}
+              fill='outline'
+              className='mt-4'
+              style={{
+                '--border-color': 'var(--color-umak-red)',
+                '--color': 'var(--color-umak-red)'
+              }}
+            >
+              Cancel
+            </IonButton>
           </div>
         </div>
       )}
