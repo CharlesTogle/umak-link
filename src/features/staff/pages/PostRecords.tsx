@@ -9,9 +9,6 @@ import {
   IonSearchbar,
   IonToast,
   IonContent,
-  IonCard,
-  IonCardContent,
-  IonSkeletonText,
   IonRefresher,
   IonRefresherContent,
   IonInfiniteScroll,
@@ -26,6 +23,7 @@ import { Keyboard } from '@capacitor/keyboard'
 import { useNavigation } from '@/shared/hooks/useNavigation'
 import Header from '@/shared/components/Header'
 import FilterSortBar from '@/shared/components/FilterSortBar'
+import FilterSortBarSkeleton from '@/shared/components/FilterSortBarSkeleton'
 import type {
   FilterCategory,
   SortOption
@@ -69,8 +67,8 @@ export default function PostRecords () {
   const [showToast, setShowToast] = useState(false)
   const [toastMessage, setToastMessage] = useState('')
   const [toastColor, setToastColor] = useState<'success' | 'danger'>('success')
-  const [activeFilters, setActiveFilters] = useState<Set<PostStatus>>(
-    new Set([])
+  const [activeFilters, setActiveFilters] = useState<Set<PostStatus | 'all'>>(
+    new Set(['all'])
   )
   const [sortDir, setSortDir] = useState<SortDirection>('desc')
   const [showActions, setShowActions] = useState(false)
@@ -82,10 +80,16 @@ export default function PostRecords () {
 
   // Handle filter changes - clear filters when 'all' is selected
   const handleFilterChange = (filters: Set<PostStatus | 'all'>) => {
-    if (filters.has('all' as PostStatus)) {
-      setActiveFilters(new Set([]))
+    if (filters.has('all') && !activeFilters.has('all')) {
+      setActiveFilters(new Set(['all']))
+    } else if (filters.has('all') && filters.size > 1) {
+      const newFilters = new Set(filters)
+      newFilters.delete('all')
+      setActiveFilters(newFilters)
+    } else if (filters.size === 0) {
+      setActiveFilters(new Set(['all']))
     } else {
-      setActiveFilters(filters as Set<PostStatus>)
+      setActiveFilters(filters)
     }
   }
 
@@ -162,7 +166,9 @@ export default function PostRecords () {
   // Use custom hook for filtering and sorting
   const filteredPosts = useFilterAndSortPosts({
     posts,
-    activeFilters,
+    activeFilters: activeFilters.has('all')
+      ? new Set([])
+      : (activeFilters as Set<PostStatus>),
     sortDirection: sortDir,
     filterMode: 'intersection'
   })
@@ -301,6 +307,7 @@ export default function PostRecords () {
         break
     }
   }
+  console.log(filteredPosts.length)
 
   return (
     <IonContent ref={contentRef}>
@@ -320,51 +327,11 @@ export default function PostRecords () {
         <>
           <PostRecordsHeader handleClick={handleSearchBarClick} />
 
-          <div className='mb-16 bg-default-bg'>
-            <div>
-              {/* Top action row skeleton */}
-              <IonCard className='px-4 mb-3'>
-                <IonCardContent className='flex items-center justify-between gap-3'>
-                  <div className='flex items-center mb-2 gap-2'>
-                    <IonSkeletonText
-                      animated
-                      style={{
-                        width: '32px',
-                        height: '32px',
-                        borderRadius: '50%'
-                      }}
-                    />
-                    <IonSkeletonText
-                      animated
-                      style={{ width: '120px', height: '20px' }}
-                    />
-                  </div>
-                  <div className='flex items-center gap-2'>
-                    <IonSkeletonText
-                      animated
-                      style={{
-                        width: '100px',
-                        height: '36px',
-                        borderRadius: '20px'
-                      }}
-                    />
-                    <IonSkeletonText
-                      animated
-                      style={{
-                        width: '140px',
-                        height: '36px',
-                        borderRadius: '20px'
-                      }}
-                    />
-                  </div>
-                </IonCardContent>
-              </IonCard>
-
-              {/* Post skeletons */}
-              {[...Array(3)].map((_, index) => (
-                <CatalogPostSkeleton key={index} className='mb-4' />
-              ))}
-            </div>
+          <div className=''>
+            <FilterSortBarSkeleton />
+            {[...Array(5)].map((_, index) => (
+              <CatalogPostSkeleton key={index} />
+            ))}
           </div>
         </>
       ) : (
@@ -393,7 +360,7 @@ export default function PostRecords () {
             />
           </div>
           {filteredPosts.length === 0 ? (
-            <div className='flex justify-center items-center mt-15 text-gray-400'>
+            <div className='flex justify-center items-center mt-15 text-gray-400 pt-40'>
               <p>No posts match the selected filters</p>
             </div>
           ) : (
@@ -498,18 +465,51 @@ export default function PostRecords () {
               handler: () => handleActionSheetClick('notify')
             })
           }
-
-          // Claim Item: always available
-          buttons.push({
-            text: 'Claim Item',
-            handler: () => handleActionSheetClick('claim')
-          })
+          console.log(post)
+          if (
+            post &&
+            post.item_type === 'found' &&
+            post.item_status === 'unclaimed'
+          ) {
+            buttons.push({
+              text: 'Claim Item',
+              handler: () => handleActionSheetClick('claim')
+            })
+          }
 
           // Cancel: always available
           buttons.push({
             text: 'Cancel',
             role: 'cancel'
           })
+
+          console.log(post)
+          if (
+            post?.item_type === 'missing' &&
+            post?.post_status === 'accepted' &&
+            post?.item_status === 'lost' &&
+            post
+          ) {
+            buttons.push({
+              text: 'Copy Item ID',
+              handler: async () => {
+                console.log(post.item_id)
+                if (post.item_id) {
+                  try {
+                    await navigator.clipboard.writeText(post.item_id)
+                    setToastMessage('Item ID copied to clipboard')
+                    setToastColor('success')
+                    setShowToast(true)
+                  } catch (err) {
+                    console.error('Failed to copy item ID:', err)
+                    setToastMessage('Failed to copy Item ID')
+                    setToastColor('danger')
+                    setShowToast(true)
+                  }
+                }
+              }
+            })
+          }
 
           return buttons
         })()}

@@ -9,7 +9,6 @@ import { NotificationProvider } from '@/shared/contexts/NotificationContext'
 import ProtectedRoute from '@/shared/components/ProtectedRoute'
 import UserRoutes from './routes/UserRoutes'
 import Auth from '@/features/auth/pages/Auth'
-import StartupLoading from './pages/StartupLoading'
 import HomeSkeleton from '@/features/user/components/skeletons/HomeSkeleton'
 import { usePushRedirect } from './hooks/usePushRedirect'
 import AdminRoutes from './routes/AdminRoutes'
@@ -45,12 +44,7 @@ const App: React.FC = () => {
               <IonRouterOutlet>
                 <Route path='/post/report/:postId' render={() => <></>} />
                 <Route path='/test' render={() => <HomeSkeleton />} />
-                <Route
-                  exact
-                  path='/'
-                  render={() => <Redirect to='/preload' />}
-                />
-                <Route path='/preload' render={() => <StartupLoading />} />
+                <Route exact path='/' render={() => <Redirect to='/auth' />} />
                 <Route path='/auth' render={() => <Auth />} />
                 <Route path='/account' render={() => <AccountPage />} />
                 <Route

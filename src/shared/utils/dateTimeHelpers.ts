@@ -45,3 +45,20 @@ export function toISODate (
     hours
   ).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00+08:00`
 }
+
+/**
+ * Get the maximum datetime in ISO format for Philippine timezone
+ * This converts Philippine time to UTC so IonDatetime can use it as max value
+ */
+export function getPhilippineTimeISO (): string {
+  const ph = getPhilippineTime()
+  const year = ph.getFullYear()
+  const month = String(ph.getMonth() + 1).padStart(2, '0')
+  const day = String(ph.getDate()).padStart(2, '0')
+  const hours = String(ph.getHours()).padStart(2, '0')
+  const minutes = String(ph.getMinutes()).padStart(2, '0')
+  const seconds = String(ph.getSeconds()).padStart(2, '0')
+
+  // Return in ISO format with Philippine timezone offset
+  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}+08:00`
+}

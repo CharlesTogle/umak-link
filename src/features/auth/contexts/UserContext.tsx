@@ -1,7 +1,6 @@
-import { createContext, useContext, useState, useCallback } from 'react'
+import { createContext, useContext, useState, useCallback, useRef } from 'react'
 import type { ReactNode } from 'react'
 import { supabase } from '@/shared/lib/supabase'
-
 // User type enum
 export type UserType = 'User' | 'Staff' | 'Admin'
 
@@ -22,7 +21,7 @@ interface UserContextType {
   setUser: (user: User | null) => void
   refreshUser: (userId: string) => Promise<void>
   updateUser: (updates: Partial<User>) => Promise<void>
-  clearUser: () => void
+  clearUser: () => Promise<boolean>
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined)
@@ -30,6 +29,10 @@ const UserContext = createContext<UserContextType | undefined>(undefined)
 export function UserProvider ({ children }: { children: ReactNode }) {
   const [user, setUserState] = useState<User | null>(null)
   const [loading, setLoading] = useState<boolean>(false)
+
+  // Store setUserState in a ref
+  const setUserStateRef = useRef(setUserState)
+  setUserStateRef.current = setUserState
 
   const fetchUser = useCallback(async (userId: string) => {
     try {
@@ -75,7 +78,7 @@ export function UserProvider ({ children }: { children: ReactNode }) {
       }
 
       // Update context with fetched user
-      setUserState(userData)
+      // setUserState(userData)
       return userData
     } catch (error) {
       console.error('[UserContext] Error in getUser:', error)
@@ -121,10 +124,10 @@ export function UserProvider ({ children }: { children: ReactNode }) {
     [user?.user_id]
   )
 
-  const clearUser = useCallback(() => {
-    setUserState(null)
-    supabase.auth.signOut()
-  }, [])
+  const clearUser = useCallback(async () => {
+    setUserStateRef.current(null)
+    return true
+  }, []) // Now clearUser is stable and never changes
 
   return (
     <UserContext.Provider

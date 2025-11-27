@@ -35,7 +35,7 @@ interface PostListProps {
   sortDirection?: 'asc' | 'desc'
   pageSize: number
   onClick?: (postId: string) => void | undefined
-  variant?: 'user' | 'staff' | 'search' | 'staff-pending'
+  variant?: 'user' | 'staff' | 'search' | 'staff-pending' 
   handleRefresh?: (event: CustomEvent) => Promise<void>
   viewDetailsPath?: string // Optional custom path for "View details" action, defaults to /user/post/view/:postId
   marginBottom?: string
@@ -272,6 +272,7 @@ export default function PostList ({
         buttons={(() => {
           const post = posts.find(p => p.post_id === activePostId)
           const buttons = []
+
           // Delete: only if withDelete is true AND (item_status 'unclaimed'/'lost' OR post_status 'rejected'/'pending')
           if (
             withDelete &&

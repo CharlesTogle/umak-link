@@ -9,7 +9,6 @@ import {
   IonText
 } from '@ionic/react'
 import { personCircle } from 'ionicons/icons'
-import { IonImg } from '@ionic/react'
 import { parseReasonForReporting } from '@/features/staff/utils/parseReasonForReporting'
 
 export type FraudReportCardProps = {
@@ -156,8 +155,8 @@ const FraudReportCard: React.FC<FraudReportCardProps> = ({
             </div>
             <div className='h-px w-full my-2 bg-black'></div>
             <div className='flex justify-start items-center mt-3'>
-              <div className='aspect-[16/13] overflow-hidden rounded-xl max-w-30 border-2 border-slate-900'>
-                <IonImg
+              <div className='aspect-[16/13] overflow-hidden rounded-xl min-w-30 max-w-30 border-2 border-slate-900'>
+                <LazyImage
                   className='w-full h-full object-cover'
                   src={itemImageUrl || undefined}
                   alt={itemName}

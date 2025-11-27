@@ -17,9 +17,12 @@ export default function Logout () {
   const { clearUser } = useUser()
 
   const handleLogout = async () => {
+    await clearUser()
     await logout()
-    clearUser()
-    navigate('/auth')
+    // Use setTimeout to defer navigation until after state updates complete
+    setTimeout(() => {
+      navigate('/auth', 'auth')
+    }, 0)
   }
   return (
     <div>

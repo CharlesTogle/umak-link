@@ -12,8 +12,8 @@ interface ClaimFormFieldsProps {
   dateTimeValue: string
   onDateTimeChange: (iso: string) => void
   maxDateTime: string
-  lostItemPostLink: string
-  onLostItemPostLinkChange: (value: string) => void
+  itemId: string
+  onItemIdChange: (value: string) => void
   lostItemPost: PublicPost | null
   lostItemPostLoading: boolean
   lostItemPostError: string | null
@@ -25,8 +25,8 @@ export default function ClaimFormFields ({
   dateTimeValue,
   onDateTimeChange,
   maxDateTime,
-  lostItemPostLink,
-  onLostItemPostLinkChange,
+  itemId,
+  onItemIdChange,
   lostItemPost,
   lostItemPostLoading,
   lostItemPostError
@@ -56,23 +56,23 @@ export default function ClaimFormFields ({
         max={maxDateTime}
       />
 
-      {/* Lost Item Post Link Field */}
+      {/* Item ID Field */}
       <div className='mb-6'>
-        <FormSectionHeader header='Lost Item Post' isRequired={false} />
+        <FormSectionHeader header='Lost Item ID' isRequired={false} />
         <p className='text-sm text-gray-600 mb-3'>
-          Paste only the link of the claimer&apos;s Missing Item post.
+          Enter the Item ID of the claimer&apos;s Missing Item post.
         </p>
         <input
-          type='url'
-          placeholder='https://'
-          value={lostItemPostLink}
-          onChange={e => onLostItemPostLinkChange(e.target.value)}
+          type='text'
+          placeholder='Enter Item ID'
+          value={itemId}
+          onChange={e => onItemIdChange(e.target.value)}
           className='w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-umak-blue'
         />
       </div>
 
       {/* Claimer's Lost Item Post Display (if available) */}
-      {lostItemPostLink && (
+      {itemId && (
         <div className='mb-6'>
           <FormSectionHeader header="Claimer's Lost Item Post" />
           {lostItemPostLoading ? (
@@ -89,6 +89,7 @@ export default function ClaimFormFields ({
                   ? 'Anonymous'
                   : lostItemPost.username || 'Unknown'
               }
+              owner_profile_picture_url={lostItemPost.profilepicture_url}
             />
           ) : lostItemPostError ? (
             <div className='p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2'>
@@ -103,7 +104,7 @@ export default function ClaimFormFields ({
           ) : (
             <div className='p-4 bg-slate-50 border border-slate-200 rounded-lg'>
               <IonText className='text-sm text-slate-600'>
-                Enter a valid Missing item post link to preview
+                Enter a valid Missing item ID to preview
               </IonText>
             </div>
           )}

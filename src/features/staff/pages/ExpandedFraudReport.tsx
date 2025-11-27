@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from 'react'
+import { memo, useEffect, useState, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { useNavigation } from '@/shared/hooks/useNavigation'
 import { supabase } from '@/shared/lib/supabase'
@@ -80,6 +80,13 @@ export default memo(function ExpandedFraudReport () {
   const [showAcceptConfirmModal, setShowAcceptConfirmModal] = useState(false)
   const [closeReportConfirmed, setCloseReportConfirmed] = useState(false)
   const [showCloseChoiceModal, setShowCloseChoiceModal] = useState(false)
+
+  // Debounce refs
+  const acceptTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const rejectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const reviewTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const deleteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const rejectChoices = REJECT_REASONS.map(r => r.label)
   const closeReportChoices = [
     'Yes, delete the claim and set item as unclaimed',
@@ -138,37 +145,45 @@ export default memo(function ExpandedFraudReport () {
   }
 
   const handleAccept = async () => {
-    // ensure any open modal is closed
-    setShowChoiceModal(false)
-    setShowAcceptConfirmModal(false)
-    if (!report || isProcessing) return
-    setIsProcessing(true)
-
-    try {
-      const result = await acceptReport({
-        reportId: report.report_id,
-        postTitle: report.item_name || 'Unknown Item',
-        reporterId: report.reporter_id || undefined
-      })
-
-      if (result.success) {
-        setToast({
-          show: true,
-          message: 'Fraud report opened'
-        })
-        // Navigate back after a short delay to show the toast
-        setTimeout(() => {
-          navigate('/staff/fraud-reports')
-        }, 1500)
-      } else {
-        setToast({ show: true, message: 'Failed to accept report' })
-      }
-    } catch (err) {
-      console.error('Error in handleAccept:', err)
-      setToast({ show: true, message: 'Action failed' })
-    } finally {
-      setIsProcessing(false)
+    // Clear any existing timeout (debounce)
+    if (acceptTimeoutRef.current) {
+      clearTimeout(acceptTimeoutRef.current)
     }
+
+    // Debounce the action
+    acceptTimeoutRef.current = setTimeout(async () => {
+      // ensure any open modal is closed
+      setShowChoiceModal(false)
+      setShowAcceptConfirmModal(false)
+      if (!report || isProcessing) return
+      setIsProcessing(true)
+
+      try {
+        const result = await acceptReport({
+          reportId: report.report_id,
+          postTitle: report.item_name || 'Unknown Item',
+          reporterId: report.reporter_id || undefined
+        })
+
+        if (result.success) {
+          setToast({
+            show: true,
+            message: 'Fraud report opened'
+          })
+          // Navigate back after a short delay to show the toast
+          setTimeout(() => {
+            navigate('/staff/fraud-reports')
+          }, 1500)
+        } else {
+          setToast({ show: true, message: 'Failed to accept report' })
+        }
+      } catch (err) {
+        console.error('Error in handleAccept:', err)
+        setToast({ show: true, message: 'Action failed' })
+      } finally {
+        setIsProcessing(false)
+      }
+    }, 300) // 300ms debounce
   }
 
   const handleAcceptClick = () => {
@@ -181,34 +196,45 @@ export default memo(function ExpandedFraudReport () {
   }
 
   const handleRejectSubmit = async (choice: string) => {
-    if (!report || isProcessing) return
-    setShowChoiceModal(false)
-    setIsProcessing(true)
-
-    try {
-      const result = await rejectReport({
-        reporterId: report.reporter_id,
-        reportId: report.report_id,
-        postId: report.post_id,
-        postTitle: report.item_name || 'Unknown Item',
-        reason: choice
-      })
-
-      if (result.success) {
-        setToast({ show: true, message: 'Fraud report rejected successfully' })
-        // Navigate back after a short delay to show the toast
-        setTimeout(() => {
-          navigate('/staff/fraud-reports', 'back')
-        }, 1500)
-      } else {
-        setToast({ show: true, message: 'Failed to reject report' })
-      }
-    } catch (err) {
-      console.error('Error rejecting report', err)
-      setToast({ show: true, message: 'Failed to reject report' })
-    } finally {
-      setIsProcessing(false)
+    // Clear any existing timeout (debounce)
+    if (rejectTimeoutRef.current) {
+      clearTimeout(rejectTimeoutRef.current)
     }
+
+    // Debounce the action
+    rejectTimeoutRef.current = setTimeout(async () => {
+      if (!report || isProcessing) return
+      setShowChoiceModal(false)
+      setIsProcessing(true)
+
+      try {
+        const result = await rejectReport({
+          reporterId: report.reporter_id,
+          reportId: report.report_id,
+          postId: report.post_id,
+          postTitle: report.item_name || 'Unknown Item',
+          reason: choice
+        })
+
+        if (result.success) {
+          setToast({
+            show: true,
+            message: 'Fraud report rejected successfully'
+          })
+          // Navigate back after a short delay to show the toast
+          setTimeout(() => {
+            navigate('/staff/fraud-reports', 'back')
+          }, 1500)
+        } else {
+          setToast({ show: true, message: 'Failed to reject report' })
+        }
+      } catch (err) {
+        console.error('Error rejecting report', err)
+        setToast({ show: true, message: 'Failed to reject report' })
+      } finally {
+        setIsProcessing(false)
+      }
+    }, 300) // 300ms debounce
   }
 
   const handleCloseReport = () => {
@@ -218,94 +244,118 @@ export default memo(function ExpandedFraudReport () {
   }
 
   const handleCloseReportSubmit = async (choice: string) => {
-    if (!report || isProcessing) return
-    setShowCloseChoiceModal(false)
-    setIsProcessing(true)
+    // Clear any existing timeout (debounce)
+    if (closeTimeoutRef.current) {
+      clearTimeout(closeTimeoutRef.current)
+    }
 
-    const shouldDeleteClaim = choice.startsWith('Yes')
+    // Debounce the action
+    closeTimeoutRef.current = setTimeout(async () => {
+      if (!report || isProcessing) return
+      setShowCloseChoiceModal(false)
+      setIsProcessing(true)
 
-    try {
-      const result = await closeReport({
-        reportId: report.report_id,
-        postTitle: report.item_name || 'Unknown Item',
-        deleteClaim: shouldDeleteClaim,
-        itemId: report.item_id,
-        reporterId: report.reporter_id
-      })
+      const shouldDeleteClaim = choice.startsWith('Yes')
 
-      if (result.success) {
-        setToast({ show: true, message: 'Report closed successfully' })
+      try {
+        const result = await closeReport({
+          reportId: report.report_id,
+          postTitle: report.item_name || 'Unknown Item',
+          deleteClaim: shouldDeleteClaim,
+          itemId: report.item_id,
+          reporterId: report.reporter_id
+        })
+
+        if (result.success) {
+          setToast({ show: true, message: 'Report closed successfully' })
+          // Refresh the report data
+          const updatedReport = await getSingleReport(report.report_id)
+          if (updatedReport) {
+            setReport(updatedReport)
+          }
+          setTimeout(() => {
+            navigate('/staff/fraud-reports', 'back')
+          }, 1500)
+        } else {
+          setToast({ show: true, message: 'Failed to close report' })
+        }
+      } catch (err) {
+        console.error('Error closing report', err)
+        setToast({ show: true, message: 'Failed to close report' })
+      } finally {
+        setIsProcessing(false)
+        setCloseReportConfirmed(false)
+      }
+    }, 300) // 300ms debounce
+  }
+
+  const handleReviewReport = async () => {
+    // Clear any existing timeout (debounce)
+    if (reviewTimeoutRef.current) {
+      clearTimeout(reviewTimeoutRef.current)
+    }
+
+    // Debounce the action
+    reviewTimeoutRef.current = setTimeout(async () => {
+      if (!report || isProcessing) return
+      setIsProcessing(true)
+
+      try {
+        const { error } = await supabase
+          .from('fraud_reports_table')
+          .update({ report_status: 'under_review' })
+          .eq('report_id', report.report_id)
+
+        if (error) throw error
+
+        setToast({ show: true, message: 'Report moved to under review' })
         // Refresh the report data
         const updatedReport = await getSingleReport(report.report_id)
         if (updatedReport) {
           setReport(updatedReport)
         }
-        setTimeout(() => {
-          navigate('/staff/fraud-reports', 'back')
-        }, 1500)
-      } else {
-        setToast({ show: true, message: 'Failed to close report' })
+      } catch (err) {
+        console.error('Error reviewing report', err)
+        setToast({ show: true, message: 'Failed to review report' })
+      } finally {
+        setIsProcessing(false)
       }
-    } catch (err) {
-      console.error('Error closing report', err)
-      setToast({ show: true, message: 'Failed to close report' })
-    } finally {
-      setIsProcessing(false)
-      setCloseReportConfirmed(false)
-    }
-  }
-
-  const handleReviewReport = async () => {
-    if (!report || isProcessing) return
-    setIsProcessing(true)
-
-    try {
-      const { error } = await supabase
-        .from('fraud_reports_table')
-        .update({ report_status: 'under_review' })
-        .eq('report_id', report.report_id)
-
-      if (error) throw error
-
-      setToast({ show: true, message: 'Report moved to under review' })
-      // Refresh the report data
-      const updatedReport = await getSingleReport(report.report_id)
-      if (updatedReport) {
-        setReport(updatedReport)
-      }
-    } catch (err) {
-      console.error('Error reviewing report', err)
-      setToast({ show: true, message: 'Failed to review report' })
-    } finally {
-      setIsProcessing(false)
-    }
+    }, 300) // 300ms debounce
   }
 
   const handleDeleteReport = async () => {
-    if (!report || isProcessing) return
-    setIsProcessing(true)
-
-    try {
-      const { error } = await supabase
-        .from('fraud_reports_table')
-        .delete()
-        .eq('report_id', report.report_id)
-
-      if (error) throw error
-
-      // Remove deleted report from cache
-      setReports(prev => prev.filter(r => r.report_id !== report.report_id))
-
-      setToast({ show: true, message: 'Report deleted successfully' })
-      setTimeout(() => {
-        navigate('/staff/fraud-reports', 'back')
-      }, 1500)
-    } catch (err) {
-      console.error('Error deleting report', err)
-      setToast({ show: true, message: 'Failed to delete report' })
-    } finally {
-      setIsProcessing(false)
+    // Clear any existing timeout (debounce)
+    if (deleteTimeoutRef.current) {
+      clearTimeout(deleteTimeoutRef.current)
     }
+
+    // Debounce the action
+    deleteTimeoutRef.current = setTimeout(async () => {
+      if (!report || isProcessing) return
+      setIsProcessing(true)
+
+      try {
+        const { error } = await supabase
+          .from('fraud_reports_table')
+          .delete()
+          .eq('report_id', report.report_id)
+
+        if (error) throw error
+
+        // Remove deleted report from cache
+        setReports(prev => prev.filter(r => r.report_id !== report.report_id))
+
+        setToast({ show: true, message: 'Report deleted successfully' })
+        setTimeout(() => {
+          navigate('/staff/fraud-reports', 'back')
+        }, 1500)
+      } catch (err) {
+        console.error('Error deleting report', err)
+        setToast({ show: true, message: 'Failed to delete report' })
+      } finally {
+        setIsProcessing(false)
+      }
+    }, 300) // 300ms debounce
   }
 
   const getStatusColor = () => {

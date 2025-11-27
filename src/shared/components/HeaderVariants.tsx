@@ -67,4 +67,21 @@ const HeaderWithButtons = memo(
   }
 )
 
-export { HeaderWithButtons, HeaderWithSearchBar }
+const HeaderWithBackButton = memo(
+  ({ onBack }: { onBack: MouseEventHandler }) => {
+    return (
+      <Header logoShown={false} isProfileAndNotificationShown={false}>
+        <IonButton
+          style={{
+            '--background': 'var(--color-umak-red)'
+          }}
+          onClick={onBack}
+        >
+          Back
+        </IonButton>
+      </Header>
+    )
+  }
+)
+
+export { HeaderWithButtons, HeaderWithSearchBar, HeaderWithBackButton }

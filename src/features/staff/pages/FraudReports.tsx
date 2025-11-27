@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   IonContent,
-  IonSkeletonText,
   IonToast,
   IonRefresher,
   IonRefresherContent,
@@ -24,6 +23,7 @@ import FilterSortBar, {
   type FilterOption,
   type SortOption
 } from '@/shared/components/FilterSortBar'
+import FilterSortBarSkeleton from '@/shared/components/FilterSortBarSkeleton'
 
 const FILTER_OPTIONS: FilterOption<ReportStatus>[] = [
   { value: 'All', label: 'All' },
@@ -196,43 +196,8 @@ export default function FraudReport () {
       />
       {loading ? (
         <IonContent ref={contentRef} className='mb-16 bg-default-bg'>
-          <div className='p-4'>
-            <div className='mb-3 p-4 bg-white rounded-lg shadow-sm'>
-              <div className='flex items-center justify-between gap-3'>
-                <div className='flex items-center gap-2'>
-                  <IonSkeletonText
-                    animated
-                    style={{
-                      width: '32px',
-                      height: '32px',
-                      borderRadius: '50%'
-                    }}
-                  />
-                  <IonSkeletonText
-                    animated
-                    style={{ width: '150px', height: '20px' }}
-                  />
-                </div>
-                <div className='flex items-center gap-2'>
-                  <IonSkeletonText
-                    animated
-                    style={{
-                      width: '100px',
-                      height: '36px',
-                      borderRadius: '20px'
-                    }}
-                  />
-                  <IonSkeletonText
-                    animated
-                    style={{
-                      width: '120px',
-                      height: '36px',
-                      borderRadius: '20px'
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
+          <div className=''>
+            <FilterSortBarSkeleton />
             {[...Array(3)].map((_, index) => (
               <FraudReportSkeleton key={index} />
             ))}

@@ -20,7 +20,8 @@ import { Network } from '@capacitor/network'
 import { generateAndAutofillFields } from '@/features/user/utils/aiAutofill'
 import {
   initializeDateTimeState,
-  toISODate
+  toISODate,
+  getPhilippineTimeISO
 } from '@/shared/utils/dateTimeHelpers'
 import { getPostFull } from '@/features/posts/data/posts'
 
@@ -490,7 +491,7 @@ export default function EditPost () {
               datetimeId='last-seen-datetime'
               value={toISODate(date, time, meridian)}
               onChange={handleDateChange}
-              max={new Date().toISOString()}
+              max={getPhilippineTimeISO()}
             />
             <LocationDetailsSelector
               locationDetails={locationDetails}

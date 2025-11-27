@@ -9,5 +9,8 @@ export default defineConfig({
     alias: {
       '@': '/src'
     }
+  },
+  server: {
+    allowedHosts: ['curdier-belen-perspectiveless.ngrok-free.dev']
   }
 })

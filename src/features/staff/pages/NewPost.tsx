@@ -18,7 +18,8 @@ import { isConnected } from '@/shared/utils/networkCheck'
 import { generateAndAutofillFields } from '@/features/user/utils/aiAutofill'
 import {
   initializeDateTimeState,
-  toISODate
+  toISODate,
+  getPhilippineTimeISO
 } from '@/shared/utils/dateTimeHelpers'
 import { useUser } from '@/features/auth/contexts/UserContext'
 
@@ -379,7 +380,7 @@ export default function NewPost () {
               datetimeId='last-seen-datetime'
               value={toISODate(date, time, meridian)}
               onChange={handleDateChange}
-              max={new Date().toISOString()}
+              max={getPhilippineTimeISO()}
             />
             <LocationDetailsSelector
               locationDetails={locationDetails}

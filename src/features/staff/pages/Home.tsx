@@ -10,6 +10,7 @@ import { useNavigation } from '@/shared/hooks/useNavigation'
 import { isConnected } from '@/shared/utils/networkCheck'
 import Header from '@/shared/components/Header'
 import FilterSortBar from '@/shared/components/FilterSortBar'
+import FilterSortBarSkeleton from '@/shared/components/FilterSortBarSkeleton'
 import type {
   FilterOption,
   SortOption
@@ -219,55 +220,58 @@ export default function Home () {
         position='top'
         color={toastColor}
       />
-
-      {/* Filter and Sort Bar */}
-      <FilterSortBar
-        title='Pending Posts'
-        icon={listOutline}
-        filterOptions={filterOptions}
-        activeFilters={activeFilters}
-        onFilterChange={setActiveFilters}
-        filterSelectionType='single'
-        filterModalTitle='Filter by Item Type'
-        filterModalSubtitle='Select an item type to filter posts'
-        sortOptions={sortOptions}
-        activeSort={sortDir}
-        onSortChange={sort => setSortDir(sort as 'asc' | 'desc')}
-        sortModalTitle='Sort by Submission Date'
-        breakpoints={[0.25, 0.5]}
-        initialBreakpoint={0.25}
-      />
-
       {loading ? (
-        <div className='p-4'>
+        <div className=''>
+          <FilterSortBarSkeleton />
           {[...Array(3)].map((_, index) => (
             <PostSkeleton key={index} />
           ))}
         </div>
-      ) : filteredAndSortedPosts.length === 0 ? (
-        <div className='flex justify-center items-center h-full text-gray-400'>
-          <p>No pending posts at the moment</p>
-        </div>
       ) : (
-        <PostList
-          posts={filteredAndSortedPosts}
-          fetchPosts={fetchPosts}
-          hasMore={hasMore}
-          setPosts={setPosts}
-          loadedIdsRef={loadedIdsRef}
-          fetchNewPosts={fetchNewPosts}
-          loadMorePosts={handleLoadMore}
-          handleRefresh={handleRefresh}
-          ref={contentRef}
-          sortDirection={sortDir}
-          cacheKeys={{
-            loadedKey: 'LoadedPosts:staff:home',
-            cacheKey: 'CachedPublicPosts:staff:home'
-          }}
-          onClick={handlePostClick}
-          pageSize={PAGE_SIZE}
-          variant='staff-pending'
-        />
+        <>
+          {/* Filter and Sort Bar */}
+          <FilterSortBar
+            title='Pending Posts'
+            icon={listOutline}
+            filterOptions={filterOptions}
+            activeFilters={activeFilters}
+            onFilterChange={setActiveFilters}
+            filterSelectionType='single'
+            filterModalTitle='Filter by Item Type'
+            filterModalSubtitle='Select an item type to filter posts'
+            sortOptions={sortOptions}
+            activeSort={sortDir}
+            onSortChange={sort => setSortDir(sort as 'asc' | 'desc')}
+            sortModalTitle='Sort by Submission Date'
+            breakpoints={[0.25, 0.5]}
+            initialBreakpoint={0.25}
+          />
+          {filteredAndSortedPosts.length === 0 ? (
+            <div className='flex justify-center items-center h-full text-gray-400'>
+              <p>No pending posts at the moment</p>
+            </div>
+          ) : (
+            <PostList
+              posts={filteredAndSortedPosts}
+              fetchPosts={fetchPosts}
+              hasMore={hasMore}
+              setPosts={setPosts}
+              loadedIdsRef={loadedIdsRef}
+              fetchNewPosts={fetchNewPosts}
+              loadMorePosts={handleLoadMore}
+              handleRefresh={handleRefresh}
+              ref={contentRef}
+              sortDirection={sortDir}
+              cacheKeys={{
+                loadedKey: 'LoadedPosts:staff:home',
+                cacheKey: 'CachedPublicPosts:staff:home'
+              }}
+              onClick={handlePostClick}
+              pageSize={PAGE_SIZE}
+              variant='staff-pending'
+            />
+          )}
+        </>
       )}
     </>
   )

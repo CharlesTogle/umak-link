@@ -85,6 +85,10 @@ export function useStaffSearch (): UseStaffSearchReturn {
         return
       }
 
+      // Set loading immediately when starting a valid search
+      setLoading(true)
+      setError(null)
+
       // Security check - verify admin access
       const currentUser = await getUser()
       const isAllowed =
@@ -111,8 +115,7 @@ export function useStaffSearch (): UseStaffSearchReturn {
 
       // Debounce the search
       debounceTimerRef.current = setTimeout(async () => {
-        setLoading(true)
-        setError(null)
+        // Loading is already true from above
 
         // Create new abort controller
         abortControllerRef.current = new AbortController()

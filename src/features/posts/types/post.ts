@@ -1,5 +1,6 @@
 export interface PublicPost {
   post_id: string
+  item_id: string
   username: string
   user_id: string
   item_name: string

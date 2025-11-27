@@ -11,7 +11,6 @@ import NewPost from '../../features/staff/pages/NewPost'
 import Toolbar from '@/app/components/Toolbar'
 import { home, create, documentText, settings } from 'ionicons/icons'
 import Notifications from '@/features/user/pages/Notifications'
-import StaffExpandedPost from '@/features/staff/pages/StaffExpandedPost'
 import StaffSearchItem from '@/features/staff/pages/SearchItem'
 import StaffSearchResults from '@/features/staff/pages/SearchResults'
 
@@ -27,11 +26,6 @@ export default function StaffRoutes () {
         <Route
           path='/staff/search/results'
           render={() => <StaffSearchResults />}
-        />
-        <Route
-          exact
-          path='/staff/view-post/:postId'
-          render={() => <StaffExpandedPost />}
         />
         <Route
           exact

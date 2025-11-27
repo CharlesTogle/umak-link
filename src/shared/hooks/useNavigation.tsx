@@ -1,6 +1,6 @@
 import { useIonRouter } from '@ionic/react'
 
-const replaceFromAuthRoutes = ['auth', 'preload']
+const replaceFromAuthRoutes = ['auth']
 
 export const useNavigation = () => {
   const router = useIonRouter()

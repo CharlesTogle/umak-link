@@ -12,7 +12,7 @@ export default memo(function CatalogPostSkeleton ({
 }) {
   return (
     <IonCard
-      className={`shadow-sm border border-gray-200 font-default-font overflow-hidden px-2 ${className}`}
+      className={`shadow-sm border border-gray-200 font-default-font overflow-hidden px-2 mb-3 ${className}`}
     >
       <IonItem lines='none' className='py-2 -mx-2 items-center'>
         <div

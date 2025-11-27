@@ -55,12 +55,13 @@ export async function getTotalPostsCount (): Promise<number | null> {
   return count
 }
 
-export async function getPost (postId: string): Promise<PublicPost | null> {
+export async function getMissingItem (itemId: string): Promise<PublicPost | null> {
   let query = supabase
     .from('post_public_view')
     .select(
       `
       post_id,
+      item_id,
       poster_name,
       poster_id,
       item_name,
@@ -75,6 +76,95 @@ export async function getPost (postId: string): Promise<PublicPost | null> {
       submission_date,
       item_type,
       post_status,
+      accepted_on_date,
+      accepted_by_staff_name,
+      accepted_by_staff_email,
+      claimed_by_name,
+      claimed_by_email,
+      claimed_by_contact,
+      claimed_at,
+      claim_processed_by_staff_id,
+      claim_id
+    `
+    )
+    .eq('item_id', itemId)
+    .eq('item_type', 'missing')
+
+  const postCache = createPostCache({
+    loadedKey: 'LoadedPosts',
+    cacheKey: 'CachedPublicPosts'
+  })
+
+  if (!itemId) return null
+
+  const cachedPosts = await postCache.loadCachedPublicPosts()
+  const currPost = cachedPosts.find(p => p.post_id === itemId) || null
+  if (currPost) {
+    return currPost
+  }
+
+  const { data, error } = await query
+  if (error) {
+    console.error('Error fetching post:', error)
+    return null
+  }
+
+  if (!data || data.length === 0) return null
+
+  const r: any = data[0]
+  console.log(r)
+  return {
+    user_id: r.poster_id,
+    username: r.poster_name,
+    item_name: r.item_name,
+    item_id: r.item_id,
+    profilepicture_url: r.profile_picture_url,
+    accepted_on_date: r.accepted_on_date,
+    item_image_url: r.item_image_url,
+    item_description: r.item_description,
+    item_status: r.item_status,
+    category: r.category,
+    last_seen_at: formatTimestamp(r.last_seen_at),
+    last_seen_location: r.last_seen_location,
+    is_anonymous: r.is_anonymous,
+    post_id: r.post_id,
+    submission_date: r.submission_date,
+    item_type: r.item_type,
+    post_status: r.post_status,
+    accepted_by_staff_name: r.accepted_by_staff_name,
+    accepted_by_staff_email: r.accepted_by_staff_email,
+    claimed_by_name: r.claimed_by_name,
+    claimed_by_email: r.claimed_by_email,
+    claimed_by_contact: r.claimed_by_contact,
+    claimed_at: r.claimed_at,
+    claim_processed_by_staff_id: r.claim_processed_by_staff_id,
+    claim_id: r.claim_id
+  }
+}
+export async function getPost (postId: string): Promise<PublicPost | null> {
+  let query = supabase
+    .from('post_public_view')
+    .select(
+      `
+      post_id,
+      item_id,
+      poster_name,
+      poster_id,
+      item_name,
+      profile_picture_url,
+      item_image_url,
+      item_description,
+      category,
+      last_seen_at,
+      item_status,
+      last_seen_location,
+      is_anonymous,
+      submission_date,
+      item_type,
+      post_status,
+      accepted_on_date,
+      accepted_by_staff_name,
+      accepted_by_staff_email,
       claimed_by_name,
       claimed_by_email,
       claimed_by_contact,
@@ -112,6 +202,7 @@ export async function getPost (postId: string): Promise<PublicPost | null> {
     user_id: r.poster_id,
     username: r.poster_name,
     item_name: r.item_name,
+    item_id: r.item_id,
     profilepicture_url: r.profile_picture_url,
     accepted_on_date: r.accepted_on_date,
     item_image_url: r.item_image_url,
@@ -176,6 +267,7 @@ export async function listOwnPosts ({
     .select(
       `
       post_id,
+      item_id,
       poster_name,
       poster_id,
       item_name,
@@ -189,7 +281,16 @@ export async function listOwnPosts ({
       is_anonymous,
       submission_date,
       item_type,
-      post_status
+      post_status,
+      accepted_on_date,
+      accepted_by_staff_name,
+      accepted_by_staff_email,
+      claimed_by_name,
+      claimed_by_email,
+      claimed_by_contact,
+      claimed_at,
+      claim_processed_by_staff_id,
+      claim_id
     `
     )
     .eq('poster_id', userId)
@@ -216,6 +317,7 @@ export async function listOwnPosts ({
       user_id: r.poster_id,
       username: r.poster_name,
       item_name: r.item_name,
+      item_id: r.item_id,
       profilepicture_url: r.profile_picture_url,
       item_image_url: r.item_image_url,
       item_description: r.item_description,
@@ -251,6 +353,7 @@ export async function listPublicPosts (
     .select(
       `
       post_id,
+      item_id,
       poster_name,
       poster_id,
       item_name,
@@ -265,7 +368,15 @@ export async function listPublicPosts (
       submission_date,
       item_type,
       post_status,
-      accepted_on_date
+      accepted_on_date,
+      accepted_by_staff_name,
+      accepted_by_staff_email,
+      claimed_by_name,
+      claimed_by_email,
+      claimed_by_contact,
+      claimed_at,
+      claim_processed_by_staff_id,
+      claim_id
     `
     )
     .eq('item_type', 'found')
@@ -286,6 +397,7 @@ export async function listPublicPosts (
     user_id: r.poster_id,
     username: r.poster_name,
     item_name: r.item_name,
+    item_id: r.item_id,
     profilepicture_url: r.profile_picture_url,
     item_image_url: r.item_image_url,
     item_description: r.item_description,
@@ -323,6 +435,7 @@ export async function listPendingPosts (
     .select(
       `
       post_id,
+      item_id,
       poster_name,
       poster_id,
       item_name,
@@ -336,7 +449,16 @@ export async function listPendingPosts (
       is_anonymous,
       submission_date,
       item_type,
-      post_status
+      post_status,
+      accepted_on_date,
+      accepted_by_staff_name,
+      accepted_by_staff_email,
+      claimed_by_name,
+      claimed_by_email,
+      claimed_by_contact,
+      claimed_at,
+      claim_processed_by_staff_id,
+      claim_id
     `
     )
     .order('submission_date', { ascending: false })
@@ -356,6 +478,7 @@ export async function listPendingPosts (
     user_id: r.poster_id,
     username: r.poster_name,
     item_name: r.item_name,
+    item_id: r.item_id,
     profilepicture_url: r.profile_picture_url,
     item_image_url: r.item_image_url,
     item_description: r.item_description,
@@ -389,6 +512,7 @@ export async function listStaffPosts (
     .select(
       `
       post_id,
+      item_id,
       poster_name,
       poster_id,
       item_name,
@@ -402,7 +526,16 @@ export async function listStaffPosts (
       is_anonymous,
       submission_date,
       item_type,
-      post_status
+      post_status,
+      accepted_on_date,
+      accepted_by_staff_name,
+      accepted_by_staff_email,
+      claimed_by_name,
+      claimed_by_email,
+      claimed_by_contact,
+      claimed_at,
+      claim_processed_by_staff_id,
+      claim_id
     `
     )
     .order('submission_date', { ascending: false })
@@ -421,6 +554,7 @@ export async function listStaffPosts (
     user_id: r.poster_id,
     username: r.poster_name,
     item_name: r.item_name,
+    item_id: r.item_id,
     profilepicture_url: r.profile_picture_url,
     item_image_url: r.item_image_url,
     item_description: r.item_description,
@@ -464,6 +598,7 @@ export function listPostsByIds (getPostIds: () => string[]) {
       .select(
         `
       post_id,
+      item_id,
       poster_name,
       poster_id,
       item_name,
@@ -478,7 +613,15 @@ export function listPostsByIds (getPostIds: () => string[]) {
       submission_date,
       item_type,
       post_status,
-      accepted_on_date
+      accepted_on_date,
+      accepted_by_staff_name,
+      accepted_by_staff_email,
+      claimed_by_name,
+      claimed_by_email,
+      claimed_by_contact,
+      claimed_at,
+      claim_processed_by_staff_id,
+      claim_id
     `
       )
       .in('post_id', idsToFetch)
@@ -499,6 +642,7 @@ export function listPostsByIds (getPostIds: () => string[]) {
         user_id: r.poster_id,
         username: r.poster_name,
         item_name: r.item_name,
+        item_id: r.item_id,
         profilepicture_url: r.profile_picture_url,
         item_image_url: r.item_image_url,
         item_description: r.item_description,

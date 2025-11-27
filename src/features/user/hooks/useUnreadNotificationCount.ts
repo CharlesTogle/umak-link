@@ -20,35 +20,31 @@ type CachedCount = {
   timestamp: number
 }
 
-const POLLING_INTERVAL = 30000 // 30 seconds fallback polling
+const POLLING_INTERVAL = 30000 // 30 seconds
+const MAX_CACHE_AGE = 5 * 60 * 1000 // 5 minutes
+const MAX_RETRY_ATTEMPTS = 3
+const INITIAL_RETRY_DELAY = 2000
 
 /**
  * Hook to track unread notification count in realtime
  * @param userId - The user ID to track notifications for
- * @param initialCount - Optional initial count from cache for instant display
- * @returns object with unreadCount and error state
+ * @returns object with unreadCount, error state, and realtime status
  */
-export function useUnreadNotificationCount (
-  userId: string | null | undefined,
-  initialCount: number = 0
-) {
-  const [unreadCount, setUnreadCount] = useState<number>(initialCount)
+export function useUnreadNotificationCount (userId: string | null | undefined) {
+  const [unreadCount, setUnreadCount] = useState<number>(0)
   const [error, setError] = useState<Error | null>(null)
   const [isRealtimeActive, setIsRealtimeActive] = useState<boolean>(false)
+
   const retryCountRef = useRef(0)
   const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const channelRef = useRef<RealtimeChannel | null>(null)
   const hasFetchedRef = useRef(false)
-
-  // Update unreadCount when initialCount changes (e.g., cache loaded in parent)
-  useEffect(() => {
-    if (initialCount > 0 && !hasFetchedRef.current) {
-      setUnreadCount(initialCount)
-    }
-  }, [initialCount])
+  const isMountedRef = useRef(true)
 
   useEffect(() => {
+    isMountedRef.current = true
+
     if (!userId) {
       setUnreadCount(0)
       setError(null)
@@ -56,58 +52,53 @@ export function useUnreadNotificationCount (
       return
     }
 
-    let isMounted = true
+    // Create cache instance for this user
+    const userCountCache = createCache<CachedCount>({
+      keys: {
+        loadedKey: `LoadedNotificationCount:${userId}`,
+        cacheKey: `CachedNotificationCount:${userId}`
+      },
+      idSelector: () => 'count'
+    })
 
-    // Helper function to save count to cache
+    // Helper: Save count to cache
     const saveToCache = async (count: number) => {
       try {
-        const userCountCache = createCache<CachedCount>({
-          keys: {
-            loadedKey: `LoadedNotificationCount:${userId}`,
-            cacheKey: `CachedNotificationCount:${userId}`
-          },
-          idSelector: () => 'count'
-        })
-
         await userCountCache.saveCache([
           {
             count,
             timestamp: Date.now()
           }
         ])
-      } catch (cacheErr) {
-        console.warn('Failed to cache notification count:', cacheErr)
+      } catch (err) {
+        console.warn('Failed to cache notification count:', err)
       }
     }
 
-    // Load from cache immediately for instant display
-    const loadFromCache = async () => {
+    // Helper: Load from cache with freshness check
+    const loadFromCache = async (): Promise<boolean> => {
       try {
-        const userCountCache = createCache<CachedCount>({
-          keys: {
-            loadedKey: `LoadedNotificationCount:${userId}`,
-            cacheKey: `CachedNotificationCount:${userId}`
-          },
-          idSelector: () => 'count'
-        })
-
         const cached = await userCountCache.loadCache()
+
         if (cached.length > 0) {
           const cachedData = cached[0]
+          const age = Date.now() - cachedData.timestamp
 
-          // Use cache if it's fresh
-          setUnreadCount(cachedData.count)
-          return true
+          // Only use cache if it's fresh
+          if (age < MAX_CACHE_AGE) {
+            setUnreadCount(cachedData.count)
+            return true
+          }
         }
       } catch (err) {
-        console.log('No cached count available')
+        console.log('No cached count available:', err)
       }
       return false
     }
 
-    // Fetch current count from database
+    // Helper: Fetch current count from database
     const fetchCount = async () => {
-      if (!isMounted) return
+      if (!isMountedRef.current) return
 
       try {
         const { count, error: fetchError } = await supabase
@@ -116,7 +107,7 @@ export function useUnreadNotificationCount (
           .eq('sent_to', userId)
           .eq('is_read', false)
 
-        if (!isMounted) return
+        if (!isMountedRef.current) return
 
         if (fetchError) {
           throw new Error(
@@ -129,31 +120,124 @@ export function useUnreadNotificationCount (
         setError(null)
         hasFetchedRef.current = true
 
-        // Save to cache
         await saveToCache(newCount)
       } catch (err) {
-        if (!isMounted) return
+        if (!isMountedRef.current) return
+
         const error =
           err instanceof Error
             ? err
             : new Error('Unknown error fetching notification count')
+
         console.error('Error fetching notification count:', error)
         setError(error)
       }
     }
 
-    // Setup realtime subscription
-    const setupSubscription = async () => {
-      if (!isMounted) return
+    // Helper: Handle realtime payload updates
+    const handleInsert = (payload: NotificationPayload) => {
+      try {
+        if (!isMountedRef.current) return
 
-      // Clean up existing channel
+        if (payload.new && !payload.new.is_read) {
+          setUnreadCount(prev => {
+            const newCount = prev + 1
+            saveToCache(newCount)
+            return newCount
+          })
+        }
+      } catch (err) {
+        console.error('Error handling INSERT:', err)
+      }
+    }
+
+    const handleUpdate = (payload: NotificationPayload) => {
+      try {
+        if (!isMountedRef.current) return
+
+        const wasUnread = payload.old && !payload.old.is_read
+        const isNowRead = payload.new && payload.new.is_read
+        const wasRead = payload.old && payload.old.is_read
+        const isNowUnread = payload.new && !payload.new.is_read
+
+        if (wasUnread && isNowRead) {
+          // Marked as read
+          setUnreadCount(prev => {
+            const newCount = Math.max(0, prev - 1)
+            saveToCache(newCount)
+            return newCount
+          })
+        } else if (wasRead && isNowUnread) {
+          // Marked as unread
+          setUnreadCount(prev => {
+            const newCount = prev + 1
+            saveToCache(newCount)
+            return newCount
+          })
+        }
+      } catch (err) {
+        console.error('Error handling UPDATE:', err)
+      }
+    }
+
+    const handleDelete = (payload: NotificationPayload) => {
+      try {
+        if (!isMountedRef.current) return
+
+        if (payload.old && !payload.old.is_read) {
+          setUnreadCount(prev => {
+            const newCount = Math.max(0, prev - 1)
+            saveToCache(newCount)
+            return newCount
+          })
+        }
+      } catch (err) {
+        console.error('Error handling DELETE:', err)
+      }
+    }
+
+    // Helper: Stop polling
+    const stopPolling = () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current)
+        pollingIntervalRef.current = null
+      }
+    }
+
+    // Helper: Start polling as fallback
+    const startPolling = () => {
+      if (pollingIntervalRef.current) return
+
+      console.log('Starting polling fallback...')
+
+      pollingIntervalRef.current = setInterval(() => {
+        if (isMountedRef.current) {
+          fetchCount()
+        }
+      }, POLLING_INTERVAL)
+    }
+
+    // Helper: Clean up existing subscription
+    const cleanupSubscription = async () => {
       if (channelRef.current) {
         await supabase.removeChannel(channelRef.current)
         channelRef.current = null
       }
+    }
+
+    // Helper: Setup realtime subscription
+    const setupSubscription = async () => {
+      if (!isMountedRef.current) return
+
+      // Clean up any existing resources
+      await cleanupSubscription()
+      stopPolling()
 
       const channelName = `notifications-${userId}-${Date.now()}`
       const channel = supabase.channel(channelName)
+
+      // Store channel reference immediately before subscribing
+      channelRef.current = channel
 
       channel
         .on(
@@ -164,18 +248,7 @@ export function useUnreadNotificationCount (
             table: 'notification_table',
             filter: `sent_to=eq.${userId}`
           },
-          payload => {
-            if (!isMounted) return
-            const typedPayload = payload as unknown as NotificationPayload
-
-            if (typedPayload.new && !typedPayload.new.is_read) {
-              setUnreadCount(prev => {
-                const newCount = prev + 1
-                saveToCache(newCount)
-                return newCount
-              })
-            }
-          }
+          payload => handleInsert(payload as unknown as NotificationPayload)
         )
         .on(
           'postgres_changes',
@@ -185,34 +258,7 @@ export function useUnreadNotificationCount (
             table: 'notification_table',
             filter: `sent_to=eq.${userId}`
           },
-          payload => {
-            if (!isMounted) return
-            const typedPayload = payload as unknown as NotificationPayload
-
-            if (
-              typedPayload.old &&
-              !typedPayload.old.is_read &&
-              typedPayload.new &&
-              typedPayload.new.is_read
-            ) {
-              setUnreadCount(prev => {
-                const newCount = Math.max(0, prev - 1)
-                saveToCache(newCount)
-                return newCount
-              })
-            } else if (
-              typedPayload.old &&
-              typedPayload.old.is_read &&
-              typedPayload.new &&
-              !typedPayload.new.is_read
-            ) {
-              setUnreadCount(prev => {
-                const newCount = prev + 1
-                saveToCache(newCount)
-                return newCount
-              })
-            }
-          }
+          payload => handleUpdate(payload as unknown as NotificationPayload)
         )
         .on(
           'postgres_changes',
@@ -222,34 +268,24 @@ export function useUnreadNotificationCount (
             table: 'notification_table',
             filter: `sent_to=eq.${userId}`
           },
-          payload => {
-            if (!isMounted) return
-            const typedPayload = payload as unknown as NotificationPayload
-
-            if (typedPayload.old && !typedPayload.old.is_read) {
-              setUnreadCount(prev => {
-                const newCount = Math.max(0, prev - 1)
-                saveToCache(newCount)
-                return newCount
-              })
-            }
-          }
+          payload => handleDelete(payload as unknown as NotificationPayload)
         )
         .subscribe(async (status, err) => {
-          if (!isMounted) return
+          if (!isMountedRef.current) {
+            // Component unmounted during subscription, clean up immediately
+            if (channelRef.current) {
+              await supabase.removeChannel(channelRef.current).catch(() => {})
+              channelRef.current = null
+            }
+            return
+          }
+
           if (status === 'SUBSCRIBED') {
             setIsRealtimeActive(true)
             retryCountRef.current = 0
             setError(null)
 
-            // Stop polling if it was running
-            if (pollingIntervalRef.current) {
-              clearInterval(pollingIntervalRef.current)
-              pollingIntervalRef.current = null
-            }
-
-            // Fetch fresh count after successful subscription
-            // This ensures we're in sync after the subscription is active
+            // Fetch fresh count after successful subscription to ensure sync
             if (!hasFetchedRef.current) {
               await fetchCount()
             }
@@ -262,23 +298,22 @@ export function useUnreadNotificationCount (
             console.log('Notification subscription closed')
           }
         })
-
-      channelRef.current = channel
     }
 
-    // Handle subscription failures with retry and fallback
+    // Helper: Handle subscription failures with retry
     const handleSubscriptionFailure = () => {
-      if (!isMounted) return
+      if (!isMountedRef.current) return
 
-      if (retryCountRef.current < 3) {
+      if (retryCountRef.current < MAX_RETRY_ATTEMPTS) {
         retryCountRef.current += 1
-        const delay = 2000 * retryCountRef.current
+        const delay = INITIAL_RETRY_DELAY * retryCountRef.current
+
         console.log(
-          `Retrying subscription (attempt ${retryCountRef.current}/3) in ${delay}ms...`
+          `Retrying subscription (attempt ${retryCountRef.current}/${MAX_RETRY_ATTEMPTS}) in ${delay}ms...`
         )
 
         retryTimeoutRef.current = setTimeout(() => {
-          if (isMounted) {
+          if (isMountedRef.current) {
             setupSubscription()
           }
         }, delay)
@@ -286,54 +321,52 @@ export function useUnreadNotificationCount (
         console.log('Max retry attempts reached. Falling back to polling.')
         setError(
           new Error(
-            `Realtime connection failed. Using periodic updates instead.`
+            'Realtime connection failed. Using periodic updates instead.'
           )
         )
         startPolling()
       }
     }
 
-    // Start polling as fallback
-    const startPolling = () => {
-      if (pollingIntervalRef.current) return
-
-      console.log('Starting polling fallback...')
-
-      pollingIntervalRef.current = setInterval(() => {
-        if (isMounted && !isRealtimeActive) {
-          fetchCount()
-        }
-      }, POLLING_INTERVAL)
-    }
-
-    // Initialize - load cache first, then fetch, then setup realtime
+    // Initialize: Cache → Fetch → Realtime
     const initialize = async () => {
-      // 1. Load from cache immediately (instant display)
-      await loadFromCache()
+      // 1. Try loading from cache first for instant display
+      const hadValidCache = await loadFromCache()
 
-      // 2. Fetch fresh data in background (updates cache)
-      fetchCount()
+      // 2. Fetch fresh data from database
+      if (hadValidCache) {
+        // If we had cache, fetch in background after short delay
+        setTimeout(() => {
+          if (isMountedRef.current) {
+            fetchCount()
+          }
+        }, 1000)
+      } else {
+        // No cache, fetch immediately
+        await fetchCount()
+      }
 
-      // 3. Setup realtime subscription (runs in parallel)
+      // 3. Setup realtime subscription
       setupSubscription()
     }
 
     initialize()
 
-    // Cleanup
+    // Cleanup function
     return () => {
-      isMounted = false
+      isMountedRef.current = false
 
       if (retryTimeoutRef.current) {
         clearTimeout(retryTimeoutRef.current)
+        retryTimeoutRef.current = null
       }
 
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current)
-      }
+      stopPolling()
 
       if (channelRef.current) {
-        supabase.removeChannel(channelRef.current).then(() => {})
+        supabase.removeChannel(channelRef.current).catch(err => {
+          console.error('Error removing channel:', err)
+        })
       }
     }
   }, [userId])

@@ -4,7 +4,7 @@ import { getPostFull } from '@/features/posts/data/posts'
 import type { PostRecordDetails } from '@/features/posts/data/posts'
 import { useEffect, useState } from 'react'
 import PostSkeleton from '@/features/posts/components/PostSkeleton'
-import Header from '@/shared/components/Header'
+import { HeaderWithBackButton } from '@/shared/components/HeaderVariants'
 import {
   IonCard,
   IonCardContent,
@@ -110,7 +110,9 @@ export default function ExpandedHistoryPost () {
     return (
       <IonContent>
         <div className='fixed top-0 w-full'>
-          <Header isProfileAndNotificationShown={true} logoShown={true} />
+          <HeaderWithBackButton
+            onBack={() => navigate('/user/post/history', 'back')}
+          />
         </div>
         <div className='flex flex-col items-center justify-center h-full px-6'>
           <div className='text-center mb-6'>
@@ -135,7 +137,9 @@ export default function ExpandedHistoryPost () {
   return (
     <IonContent>
       <div className='fixed top-0 w-full'>
-        <Header isProfileAndNotificationShown={true} logoShown={true} />
+        <HeaderWithBackButton
+          onBack={() => navigate('/user/post/history', 'back')}
+        />
       </div>
       <div className='pt-15'>
         <IonCard className='my-4'>

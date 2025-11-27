@@ -16,7 +16,7 @@ import {
 } from '@ionic/react'
 import { personCircle, arrowBack } from 'ionicons/icons'
 import LazyImage from '@/shared/components/LazyImage'
-import Header from '@/shared/components/Header'
+import { HeaderWithBackButton } from '@/shared/components/HeaderVariants'
 import Post from '@/features/posts/components/Post'
 import { sharePost } from '@/shared/utils/shareUtils'
 import { getPostFull } from '@/features/posts/data/posts'
@@ -377,7 +377,9 @@ export default memo(function ExpandedPostRecord () {
   return (
     <IonContent>
       <div className='fixed top-0 w-full z-10 max-h-screen'>
-        <Header logoShown isProfileAndNotificationShown />
+        <HeaderWithBackButton
+          onBack={() => navigate('/staff/post-records', 'back')}
+        />
       </div>
 
       {loading && (

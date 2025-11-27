@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Network } from '@capacitor/network'
-import { getPost } from '@/features/posts/data/posts'
+import { getMissingItem } from '@/features/posts/data/posts'
 import type { PublicPost } from '@/features/posts/types/post'
 
 export function useClaimItemPostValidation () {
@@ -8,7 +8,7 @@ export function useClaimItemPostValidation () {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const validateAndFetchPost = async (url: string) => {
+  const validateAndFetchPost = async (itemId: string) => {
     try {
       setError(null)
 
@@ -20,44 +20,47 @@ export function useClaimItemPostValidation () {
         return
       }
 
-      // Extract post ID from URL patterns:
-      // root-link/staff/post/view/:postId or root-link/user/post/view/:postId
-      const postIdMatch = url.match(/\/(?:staff|user)\/post\/view\/([^/?]+)/)
-
-      if (!postIdMatch || !postIdMatch[1]) {
-        setError('Invalid post link format. Please use a valid post URL.')
+      // Validate that itemId is not empty
+      if (!itemId || !itemId.trim()) {
+        setError('Please enter a valid Item ID.')
         setLostItemPost(null)
         return
       }
 
-      const extractedPostId = postIdMatch[1]
-
       setLoading(true)
-      const fetchedPost = await getPost(extractedPostId)
+      const fetchedItem = await getMissingItem(itemId.trim())
 
-      if (!fetchedPost) {
-        setError('Post not found. Please check the link and try again.')
+      if (!fetchedItem) {
+        setError('Post not found. Please check the Item ID and try again.')
         setLostItemPost(null)
         return
       }
 
       // Validate that the post is a 'missing' item, not 'found'
-      if (fetchedPost.item_type === 'found') {
+      if (fetchedItem.item_type === 'found') {
         setError(
-          'This is a Found item post. Please link to a Missing item post instead.'
+          'This is a Found item post. Please enter a Missing item ID instead.'
         )
         setLostItemPost(null)
         return
       }
 
       // Validate that the item hasn't been returned already
-      if (fetchedPost.item_status === 'returned') {
+      if (fetchedItem.item_status === 'returned') {
         setError('This item has already been returned and cannot be linked.')
         setLostItemPost(null)
         return
       }
 
-      setLostItemPost(fetchedPost)
+      if (fetchedItem.post_status !== 'accepted') {
+        setError(
+          'This post is not accepted yet. Only accepted posts can be claimed.'
+        )
+        setLostItemPost(null)
+        return
+      }
+
+      setLostItemPost(fetchedItem)
       setError(null)
     } catch (err) {
       console.error('Error fetching lost item post:', err)

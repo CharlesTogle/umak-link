@@ -1,6 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
-import { IonContent, IonButton, IonText, IonToast } from '@ionic/react'
+import {
+  IonContent,
+  IonButton,
+  IonText,
+  IonToast,
+  IonSpinner
+} from '@ionic/react'
 import { alertCircle, checkmarkCircle } from 'ionicons/icons'
 import { useNavigation } from '@/shared/hooks/useNavigation'
 import { useUser } from '@/features/auth/contexts/UserContext'
@@ -21,7 +27,8 @@ import ClaimFormFields from '@/features/staff/components/claim-item/ClaimFormFie
 import ClaimItemLoadingSkeleton from '@/features/staff/components/claim-item/ClaimItemLoadingSkeleton'
 import {
   initializeDateTimeState,
-  toISODate
+  toISODate,
+  getPhilippineTimeISO
 } from '@/shared/utils/dateTimeHelpers'
 import { useClaimItemPostValidation } from '@/features/staff/hooks/useClaimItemPostValidation'
 import { useClaimItemSubmit } from '@/features/staff/hooks/useClaimItemSubmit'
@@ -35,13 +42,13 @@ interface SelectedUser {
 
 interface ClaimFormData {
   contactNumber: string
-  lostItemPostLink: string
+  itemId: string
 }
 
 export default function ClaimItem () {
   const { postId } = useParams<{ postId: string }>()
   const { navigate } = useNavigation()
-  const { user } = useUser()
+  const { getUser } = useUser()
 
   // Initialize Philippine time
   const initialDateTime = initializeDateTimeState()
@@ -78,7 +85,7 @@ export default function ClaimItem () {
   // Form state
   const [formData, setFormData] = useState<ClaimFormData>({
     contactNumber: '',
-    lostItemPostLink: ''
+    itemId: ''
   })
 
   // Submit hook
@@ -86,6 +93,7 @@ export default function ClaimItem () {
 
   // Toast/Modal state
   const [showConfirmModal, setShowConfirmModal] = useState(false)
+  const [showCancelModal, setShowCancelModal] = useState(false)
   const [toast, setToast] = useState<{
     show: boolean
     message: string
@@ -96,7 +104,13 @@ export default function ClaimItem () {
     color: 'success'
   })
 
-  // Load post on mount
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false)
+
+  useEffect(() => {
+    if (!hasUnsavedChanges) {
+      setHasUnsavedChanges(true)
+    }
+  }, [selectedUser, formData])
 
   const loadPost = useCallback(async () => {
     if (!postId) {
@@ -161,6 +175,13 @@ export default function ClaimItem () {
 
   // Handle user selection from search results
   const handleUserSelect = (user: any) => {
+    console.log('Selected user:', user)
+    console.log({
+      id: user.user_id,
+      name: user.user_name,
+      email: user.email,
+      image: user.profile_picture_url
+    })
     setSelectedUser({
       id: user.user_id,
       name: user.user_name,
@@ -207,19 +228,23 @@ export default function ClaimItem () {
       [field]: value
     }))
 
-    // If updating lostItemPostLink, extract and fetch the post
-    if (field === 'lostItemPostLink' && value.trim()) {
+    // If updating itemId, validate and fetch the post
+    if (field === 'itemId' && value.trim()) {
       await validateAndFetchPost(value)
-    } else if (field === 'lostItemPostLink' && !value.trim()) {
-      // Clear the lost item post if link is removed
+    } else if (field === 'itemId' && !value.trim()) {
+      // Clear the lost item post if item ID is removed
       clearPost()
     }
   }
 
   // Handle submit
   const handleSubmit = async () => {
+    const user = await getUser()
+    console.log('Submitting claim for post ID:', postId)
+    console.log(selectedUser)
+    console.log(post)
+    console.log(user)
     if (!postId || !selectedUser || !post || !user) return
-
     // Check network connectivity before submitting
     const connected = await isConnected()
     if (!connected) {
@@ -279,14 +304,23 @@ export default function ClaimItem () {
 
   return (
     <IonContent>
-      <HeaderWithButtons
-        loading={isProcessing}
-        onCancel={() => navigate('/staff/post-records', 'back')}
-        onSubmit={() => setShowConfirmModal(true)}
-        withSubmit={true}
-      />
+      <div className='fixed w-full top-0 z-10'>
+        <HeaderWithButtons
+          loading={isProcessing}
+          onCancel={() => {
+            console.log(hasUnsavedChanges)
+            if (hasUnsavedChanges) {
+              setShowCancelModal(true)
+            } else {
+              navigate('/staff/post-records', 'back')
+            }
+          }}
+          onSubmit={() => setShowConfirmModal(true)}
+          withSubmit={true}
+        />
+      </div>
 
-      <div className='ion-padding'>
+      <div className='ion-padding mt-15'>
         <CardHeader
           title='Confirm Claim Status'
           icon={checkmarkCircle}
@@ -329,11 +363,9 @@ export default function ClaimItem () {
           }
           dateTimeValue={toISODate(date, time, meridian)}
           onDateTimeChange={handleDateChange}
-          maxDateTime={new Date().toISOString()}
-          lostItemPostLink={formData.lostItemPostLink}
-          onLostItemPostLinkChange={value =>
-            handleFormChange('lostItemPostLink', value)
-          }
+          maxDateTime={getPhilippineTimeISO()}
+          itemId={formData.itemId}
+          onItemIdChange={value => handleFormChange('itemId', value)}
           lostItemPost={lostItemPost}
           lostItemPostLoading={lostItemPostLoading}
           lostItemPostError={lostItemPostError}
@@ -347,11 +379,18 @@ export default function ClaimItem () {
           onClick={() => setShowConfirmModal(true)}
           disabled={!selectedUser || !formData.contactNumber || isProcessing}
         >
-          {isProcessing ? 'Processing...' : 'Claim Item'}
+          {isProcessing ? (
+            <>
+              <IonSpinner name='crescent' className='mr-2' />
+              Processing...
+            </>
+          ) : (
+            'Claim Item'
+          )}
         </IonButton>
       </div>
 
-      {/* Confirmation Modal */}
+      {/* Submit Confirmation Modal */}
       <ConfirmationModal
         isOpen={showConfirmModal}
         heading='Confirm Claim?'
@@ -362,6 +401,20 @@ export default function ClaimItem () {
         onCancel={() => setShowConfirmModal(false)}
         submitLabel='Claim Item'
         cancelLabel='Cancel'
+      />
+
+      {/* Cancel Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showCancelModal}
+        heading='Discard changes?'
+        subheading='You have unsaved changes. Are you sure you want to discard them?'
+        onSubmit={() => {
+          setShowCancelModal(false)
+          navigate('/staff/post-records', 'back')
+        }}
+        onCancel={() => setShowCancelModal(false)}
+        submitLabel='Discard'
+        cancelLabel='Keep editing'
       />
 
       {/* Toast */}
