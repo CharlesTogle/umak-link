@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import {
   IonContent,
   IonToast,
@@ -15,7 +15,8 @@ import type { FraudReportPublic } from '@/features/staff/hooks/useFraudReports'
 import FraudReportCard from '@/features/staff/components/FraudReportCard'
 import FraudReportSkeleton from '@/features/staff/components/FraudReportSkeleton'
 import {
-  applyFiltersAndSort,
+  filterReports,
+  sortReports,
   type ReportStatus,
   type SortDirection
 } from '@/features/staff/utils/fraudReportFilters'
@@ -38,29 +39,6 @@ const SORT_OPTIONS: SortOption[] = [
   { value: 'asc', label: 'Oldest First', icon: documentTextOutline }
 ]
 
-// Helper function to prioritize 'Open' status reports
-const prioritizeOpenReports = (
-  reports: FraudReportPublic[],
-  sortDir: SortDirection
-): FraudReportPublic[] => {
-  // Separate open and non-open reports
-  const openReports = reports.filter(report => report.report_status === 'open')
-  const otherReports = reports.filter(report => report.report_status !== 'open')
-
-  // Sort each group by date
-  const sortByDate = (a: FraudReportPublic, b: FraudReportPublic) => {
-    const dateA = new Date(a.date_reported || 0).getTime()
-    const dateB = new Date(b.date_reported || 0).getTime()
-    return sortDir === 'desc' ? dateB - dateA : dateA - dateB
-  }
-
-  openReports.sort(sortByDate)
-  otherReports.sort(sortByDate)
-
-  // Concatenate with open reports first
-  return [...openReports, ...otherReports]
-}
-
 export default function FraudReport () {
   const PAGE_SIZE = 5
   const [showToast, setShowToast] = useState(false)
@@ -71,9 +49,6 @@ export default function FraudReport () {
   )
   const [sortDir, setSortDir] = useState<SortDirection>('desc')
   const [allReports, setAllReports] = useState<FraudReportPublic[]>([])
-  const [filteredReports, setFilteredReports] = useState<FraudReportPublic[]>(
-    []
-  )
   const contentRef = useRef<HTMLIonContentElement | null>(null)
   const { navigate } = useNavigation()
 
@@ -111,19 +86,10 @@ export default function FraudReport () {
     setAllReports(uniqueReports)
   }, [reports])
 
-  const updateFilteredReports = useCallback(() => {
-    // First apply filters and sort
-    const filtered = applyFiltersAndSort(allReports, activeFilters, sortDir)
-
-    // Then prioritize 'Open' status reports
-    const prioritized = prioritizeOpenReports(filtered, sortDir)
-
-    setFilteredReports(prioritized)
-  }, [activeFilters, sortDir, allReports])
-
-  useEffect(() => {
-    updateFilteredReports()
-  }, [updateFilteredReports])
+  const filteredReports = useMemo(() => {
+    const filtered = filterReports(allReports, activeFilters)
+    return sortReports(filtered, sortDir)
+  }, [allReports, activeFilters, sortDir])
 
   // Fetch more reports if filtered results are less than page size
   useEffect(() => {
@@ -145,17 +111,11 @@ export default function FraudReport () {
       contentRef.current?.scrollToTop?.(300)
 
       // Fetch newest reports in background
-      fetchNewReports()
-        .then(() => {
-          setToastMessage('Reports updated')
-          setToastColor('success')
-          setShowToast(true)
-        })
-        .catch(() => {
-          setToastMessage('Failed to fetch new reports')
-          setToastColor('danger')
-          setShowToast(true)
-        })
+      fetchNewReports().catch(() => {
+        setToastMessage('Failed to refresh reports')
+        setToastColor('danger')
+        setShowToast(true)
+      })
     }
 
     window.addEventListener('app:scrollToTop', handler as EventListener)
@@ -255,24 +215,27 @@ export default function FraudReport () {
 
             <div className={`${hasMore ? 'mb-25' : 'mb-30'}`}>
               {filteredReports.map(report => (
-                <FraudReportCard
-                  key={report.report_id}
-                  reportId={report.report_id}
-                  posterName={report.poster_name || undefined}
-                  posterProfilePictureUrl={report.poster_profile_picture_url}
-                  reporterName={report.reporter_name || undefined}
-                  reporterProfilePictureUrl={
-                    report.reporter_profile_picture_url
-                  }
-                  itemName={report.item_name || undefined}
-                  itemDescription={report.item_description || undefined}
-                  lastSeenAt={report.last_seen_at || undefined}
-                  reasonForReporting={report.reason_for_reporting || undefined}
-                  dateReported={report.date_reported || undefined}
-                  itemImageUrl={report.item_image_url || undefined}
-                  reportStatus={report.report_status}
-                  onClick={handleReportClick}
-                />
+                <div key={report.report_id} className='mb-4'>
+                  <FraudReportCard
+                    reportId={report.report_id}
+                    posterName={report.poster_name || undefined}
+                    posterProfilePictureUrl={report.poster_profile_picture_url}
+                    reporterName={report.reporter_name || undefined}
+                    reporterProfilePictureUrl={
+                      report.reporter_profile_picture_url
+                    }
+                    itemName={report.item_name || undefined}
+                    itemDescription={report.item_description || undefined}
+                    lastSeenAt={report.last_seen_at || undefined}
+                    reasonForReporting={
+                      report.reason_for_reporting || undefined
+                    }
+                    dateReported={report.date_reported || undefined}
+                    itemImageUrl={report.item_image_url || undefined}
+                    reportStatus={report.report_status}
+                    onClick={handleReportClick}
+                  />
+                </div>
               ))}
 
               {hasMore && (

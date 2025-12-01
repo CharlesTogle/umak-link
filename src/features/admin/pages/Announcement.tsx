@@ -230,6 +230,12 @@ export default function Announcement () {
                         />
                       </div>
                     )}
+                    <div>
+                      <p className='text-xs text-gray-500 font-semibold mb-1'>
+                        Title:
+                      </p>
+                      <p className='text-sm text-gray-4000'>{a.message}</p>
+                    </div>
                     {a.description && (
                       <div className='mb-2'>
                         <p className='text-xs text-gray-500 font-semibold mb-1'>
@@ -240,12 +246,6 @@ export default function Announcement () {
                         </p>
                       </div>
                     )}
-                    <div>
-                      <p className='text-xs text-gray-500 font-semibold mb-1'>
-                        Message:
-                      </p>
-                      <p className='text-sm text-gray-4000'>{a.message}</p>
-                    </div>
                   </div>
                 )}
               />

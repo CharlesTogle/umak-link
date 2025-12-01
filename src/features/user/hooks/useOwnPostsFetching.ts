@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { Network } from '@capacitor/network'
 import { createPostCache } from '@/features/posts/data/postsCache'
 import { listOwnPosts } from '@/features/posts/data/posts'
@@ -35,7 +35,6 @@ export function useOwnPostsFetching (config: UseOwnPostsFetchingConfig) {
     })
   )
   const hasRefreshedCacheRef = useRef(false)
-  const hasInitializedRef = useRef(false)
 
   // Reusable sort function
   const sortPosts = useCallback(
@@ -79,9 +78,18 @@ export function useOwnPostsFetching (config: UseOwnPostsFetchingConfig) {
       if (config.filterPosts) filteredPosts = config.filterPosts(newPosts)
 
       if (filteredPosts.length > 0) {
-        // Prepend new posts so newest appear first
-        const merged = sortPosts([...filteredPosts, ...posts])
-        setPosts(merged)
+        // Use functional update to avoid stale closure
+        setPosts(prevPosts => {
+          let merged: PublicPost[]
+          if ((config.sortDirection ?? 'desc') === 'desc') {
+            // Prepend new posts for newest-first
+            merged = sortPosts([...filteredPosts, ...prevPosts])
+          } else {
+            // Append new posts for oldest-first
+            merged = sortPosts([...prevPosts, ...filteredPosts])
+          }
+          return merged
+        })
 
         // Add new post IDs to loaded set
         filteredPosts.forEach(p => loadedIdsRef.current.add(p.post_id))
@@ -97,7 +105,7 @@ export function useOwnPostsFetching (config: UseOwnPostsFetchingConfig) {
       isFetchingRef.current = false
       setIsFetching(false)
     }
-  }, [posts, config, sortPosts])
+  }, [config, sortPosts])
 
   // Initial load: Load cache + refresh cached posts from Supabase
   const fetchPosts = useCallback(async (): Promise<void> => {
@@ -203,20 +211,18 @@ export function useOwnPostsFetching (config: UseOwnPostsFetchingConfig) {
       config.onError?.(error as Error)
 
       // On error, use cache if available
-      if (posts.length === 0) {
-        const cachedPosts = await cacheRef.current.loadCachedPublicPosts()
-        if (cachedPosts.length > 0) {
-          const filteredCache = config.filterPosts
-            ? config.filterPosts(cachedPosts)
-            : cachedPosts
-          setPosts(sortPosts(filteredCache))
-        }
+      const cachedPosts = await cacheRef.current.loadCachedPublicPosts()
+      if (cachedPosts.length > 0) {
+        const filteredCache = config.filterPosts
+          ? config.filterPosts(cachedPosts)
+          : cachedPosts
+        setPosts(sortPosts(filteredCache))
       }
     } finally {
       isFetchingRef.current = false
       setIsFetching(false)
     }
-  }, [posts, config, sortPosts])
+  }, [config, sortPosts])
 
   // Load more posts - ONLY called by infinite scroll handler
   const loadMorePosts = useCallback(async (): Promise<void> => {
@@ -254,9 +260,18 @@ export function useOwnPostsFetching (config: UseOwnPostsFetchingConfig) {
           setHasMore(false)
         }
 
-        // Append new posts to existing posts
-        const merged = sortPosts([...posts, ...filteredPosts])
-        setPosts(merged)
+        // Use functional update to avoid stale closure
+        setPosts(prevPosts => {
+          let merged: PublicPost[]
+          if ((config.sortDirection ?? 'desc') === 'desc') {
+            // Append new posts for newest-first
+            merged = sortPosts([...prevPosts, ...filteredPosts])
+          } else {
+            // Prepend new posts for oldest-first
+            merged = sortPosts([...filteredPosts, ...prevPosts])
+          }
+          return merged
+        })
 
         // Add new post IDs to loaded set
         filteredPosts.forEach(p => loadedIdsRef.current.add(p.post_id))
@@ -275,7 +290,7 @@ export function useOwnPostsFetching (config: UseOwnPostsFetchingConfig) {
       isFetchingRef.current = false
       setIsFetching(false)
     }
-  }, [posts, hasMore, config, sortPosts])
+  }, [hasMore, config, sortPosts])
 
   // Refresh function - only updates currently loaded posts
   const refreshPosts = useCallback(async (): Promise<void> => {
@@ -340,21 +355,6 @@ export function useOwnPostsFetching (config: UseOwnPostsFetchingConfig) {
 
   // Calculate loading: true if fetching and no posts loaded yet
   const isLoading = posts.length === 0 && isFetching
-
-  // Auto-initialize: When userId becomes available, load cache, refresh, and fetch new posts
-  useEffect(() => {
-    if (!config.userId || hasInitializedRef.current) return
-
-    hasInitializedRef.current = true
-
-    const initializePostsFlow = async () => {
-      await fetchPosts()
-      await refreshPosts()
-      await fetchNewPosts()
-    }
-
-    initializePostsFlow()
-  }, [config.userId])
 
   return {
     posts,

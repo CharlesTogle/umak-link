@@ -9,11 +9,13 @@ import { NotificationProvider } from '@/shared/contexts/NotificationContext'
 import ProtectedRoute from '@/shared/components/ProtectedRoute'
 import UserRoutes from './routes/UserRoutes'
 import Auth from '@/features/auth/pages/Auth'
-import HomeSkeleton from '@/features/user/components/skeletons/HomeSkeleton'
 import { usePushRedirect } from './hooks/usePushRedirect'
 import AdminRoutes from './routes/AdminRoutes'
 import StaffRoutes from '@/app/routes/StaffRoutes'
 import AccountPage from '@/features/user/pages/AccountPage'
+import { IonPage } from '@ionic/react'
+import Logout from '@/shared/components/LogOut'
+import Unauthorized from '@/shared/components/Unauthorized'
 
 import '@ionic/react/css/core.css'
 import '@ionic/react/css/normalize.css'
@@ -43,7 +45,15 @@ const App: React.FC = () => {
             <IonReactRouter>
               <IonRouterOutlet>
                 <Route path='/post/report/:postId' render={() => <></>} />
-                <Route path='/test' render={() => <HomeSkeleton />} />
+                <Route path='/unauthorized' render={() => <Unauthorized />} />
+                <Route
+                  path='/test'
+                  render={() => (
+                    <IonPage>
+                      <Logout></Logout>
+                    </IonPage>
+                  )}
+                />
                 <Route exact path='/' render={() => <Redirect to='/auth' />} />
                 <Route path='/auth' render={() => <Auth />} />
                 <Route path='/account' render={() => <AccountPage />} />

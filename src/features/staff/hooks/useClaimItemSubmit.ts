@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { Network } from '@capacitor/network'
 import { supabase } from '@/shared/lib/supabase'
 import { useNavigation } from '@/shared/hooks/useNavigation'
-import useNotifications from '@/features/user/hooks/useNotifications'
-
+import { useAuditLogs } from '@/shared/hooks/useAuditLogs'
+import { isConnected } from '@/shared/utils/networkCheck'
+import type { ExistingClaimDetails } from './useExistingClaimCheck'
 
 interface ClaimItemSubmitParams {
   foundPostId: string
@@ -11,17 +11,17 @@ interface ClaimItemSubmitParams {
   claimerEmail: string
   claimerContactNumber: string
   posterName: string
-  posterUserId: string
-  itemType: string
   staffId: string
   staffName: string
   missingPostId: string | null
+  existingClaim?: ExistingClaimDetails | null
+  isOverwrite?: boolean
 }
 
 export function useClaimItemSubmit () {
   const [isProcessing, setIsProcessing] = useState(false)
-  const { sendNotification } = useNotifications()
   const { navigate } = useNavigation()
+  const { insertAuditLog } = useAuditLogs()
 
   const submit = async (
     params: ClaimItemSubmitParams,
@@ -34,11 +34,11 @@ export function useClaimItemSubmit () {
       claimerEmail,
       claimerContactNumber,
       posterName,
-      posterUserId,
-      itemType,
       staffId,
       staffName,
-      missingPostId
+      missingPostId,
+      existingClaim,
+      isOverwrite
     } = params
 
     // Validation
@@ -55,12 +55,38 @@ export function useClaimItemSubmit () {
     setIsProcessing(true)
 
     try {
-      // Check network connectivity
-      const status = await Network.getStatus()
-      if (!status.connected) {
+      // Check network connectivity with 8-second timeout
+      const connected = await isConnected(8000)
+      if (!connected) {
         onError('No internet connection. Please check your network.')
         setIsProcessing(false)
         return
+      }
+
+      // If overwriting an existing claim, log the audit trail first
+      if (isOverwrite && existingClaim) {
+        await insertAuditLog({
+          user_id: staffId,
+          action_type: 'claim_overwritten',
+          details: {
+            message: `Claim overwritten by ${staffName}`,
+            item_id: existingClaim.item_id,
+            old_claim: {
+              claim_id: existingClaim.claim_id,
+              claimer_name: existingClaim.claimer_name,
+              claimer_email: existingClaim.claimer_school_email,
+              claimer_contact: existingClaim.claimer_contact_num,
+              claimed_at: existingClaim.claimed_at,
+              processed_by_staff: existingClaim.staff_name || 'Unknown'
+            },
+            new_claim: {
+              claimer_name: claimerName,
+              claimer_email: claimerEmail,
+              claimer_contact: claimerContactNumber,
+              processed_by_staff: staffName
+            }
+          }
+        })
       }
 
       // Call process_claim RPC
@@ -81,23 +107,12 @@ export function useClaimItemSubmit () {
         throw error
       }
 
-      // Send notification to poster if item_type is 'lost'
-      if (itemType === 'lost' && posterUserId) {
-        await sendNotification({
-          userId: posterUserId,
-          title: 'Similar Items Found',
-          message:
-            'We found items similar to your reported lost item, you might want to come and check',
-          type: 'info'
-        })
-      }
-
       onSuccess('Item claimed successfully!')
 
       // Navigate back after success
       setTimeout(() => {
         navigate('/staff/post-records', 'back')
-      }, 1500)
+      }, 1000)
     } catch (error) {
       console.error('Error claiming item:', error)
       onError('Failed to claim item')

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import {
   IonList,
   IonItem,
@@ -12,7 +12,6 @@ import {
 import {
   trash,
   camera,
-  images,
   lockClosed,
   notifications,
   folderOpen
@@ -20,8 +19,8 @@ import {
 import { clearPostsCache } from '@/features/posts/data/postsCache'
 import CardHeader from './CardHeader'
 import { Camera } from '@capacitor/camera'
-import { Filesystem } from '@capacitor/filesystem'
 import { PushNotifications } from '@capacitor/push-notifications'
+// Filesystem permission UI removed — do not import Filesystem here
 
 export default function SettingsList () {
   const [toastOpen, setToastOpen] = useState(false)
@@ -31,7 +30,6 @@ export default function SettingsList () {
   //   const [pushNotifs, setPushNotifs] = useState(false)
   const [permState, setPermState] = useState({
     camera: '',
-    files: '',
     notifications: ''
   })
 
@@ -79,7 +77,7 @@ export default function SettingsList () {
 
       // Check actual permission status after request
       const status = await Camera.checkPermissions()
-      const granted = status.camera === 'granted' || status.photos === 'granted'
+      const granted = status.camera === 'granted' && status.photos === 'granted'
 
       setPermState(prev => ({
         ...prev,
@@ -98,35 +96,6 @@ export default function SettingsList () {
 
   const handleRevokeCameraPermission = () => {
     setToastMessage('Please revoke camera permission in your device settings')
-    setToastOpen(true)
-  }
-
-  const handleRequestFilesPermission = async () => {
-    try {
-      await Filesystem.requestPermissions()
-
-      // Check actual permission status after request
-      const status = await Filesystem.checkPermissions()
-      const granted = status.publicStorage === 'granted'
-
-      setPermState(prev => ({ ...prev, files: granted ? 'granted' : 'denied' }))
-      setToastMessage(
-        granted
-          ? 'File access permission granted'
-          : 'File access permission denied'
-      )
-    } catch (e) {
-      console.error(e)
-      setToastMessage('File permission request failed')
-    } finally {
-      setToastOpen(true)
-    }
-  }
-
-  const handleRevokeFilesPermission = () => {
-    setToastMessage(
-      'Please revoke file access permission in your device settings'
-    )
     setToastOpen(true)
   }
 
@@ -164,51 +133,106 @@ export default function SettingsList () {
     setToastOpen(true)
   }
 
+  // Storage permission UI removed — we don't request Filesystem permissions here
+
+  // Accept an external permissions snapshot (e.g., from native layer).
+  // Re-check authoritative native permissions to avoid marking any
+  // permission as granted prematurely.
+  const handlePermissionSnapshot = async (snapshot: any) => {
+    try {
+      console.log(
+        'Applying external permission snapshot (rechecking native)',
+        snapshot
+      )
+
+      // Perform authoritative permission checks and fall back safely
+
+      const [cameraStatus, notifsStatus] = await Promise.all([
+        Camera.checkPermissions().catch(() => ({
+          camera: 'denied',
+          photos: 'denied'
+        })),
+        PushNotifications.checkPermissions().catch(() => ({
+          receive: 'denied'
+        }))
+      ])
+
+      const cameraGranted =
+        cameraStatus?.camera === 'granted' && cameraStatus?.photos === 'granted'
+      const notifsGranted = notifsStatus?.receive === 'granted'
+
+      setPermState({
+        camera: cameraGranted ? 'granted' : 'denied',
+        notifications: notifsGranted ? 'granted' : 'denied'
+      })
+
+      // If notifications are truly granted, ensure registration
+      if (notifsGranted) {
+        try {
+          await PushNotifications.register()
+        } catch (e) {
+          console.warn('Push registration failed after permissions snapshot', e)
+        }
+      }
+
+      setToastMessage('Permissions synced')
+      setToastOpen(true)
+    } catch (err) {
+      console.error('Failed to apply permission snapshot', err)
+    }
+  }
+
+  const checkPermissions = useCallback(async () => {
+    try {
+      // Check actual permissions from native APIs
+      const [cameraStatus, notifsStatus] = await Promise.all([
+        Camera.checkPermissions(),
+        PushNotifications.checkPermissions()
+      ])
+
+      console.log(
+        'Checked permissions:',
+        JSON.stringify({
+          camera: cameraStatus,
+          notifications: notifsStatus
+        })
+      )
+      setPermState({
+        camera:
+          cameraStatus.camera === 'granted' && cameraStatus.photos === 'granted'
+            ? 'granted'
+            : 'denied',
+        notifications: notifsStatus.receive === 'granted' ? 'granted' : 'denied'
+      })
+    } catch (err) {
+      console.error('Error checking permissions:', err)
+    }
+  }, [])
+
   useEffect(() => {
     let active = true
     ;(async () => {
-      try {
-        // Check actual permissions from native APIs
-        const [cameraStatus, filesStatus, notifsStatus] = await Promise.all([
-          Camera.checkPermissions(),
-          Filesystem.checkPermissions(),
-          PushNotifications.checkPermissions()
-        ])
-
-        if (!active) return
-
-        setPermState({
-          camera:
-            cameraStatus.camera === 'granted' ||
-            cameraStatus.photos === 'granted'
-              ? 'granted'
-              : 'denied',
-          files: filesStatus.publicStorage === 'granted' ? 'granted' : 'denied',
-          notifications:
-            notifsStatus.receive === 'granted' ? 'granted' : 'denied'
-        })
-      } catch (err) {
-        console.error('Error checking permissions:', err)
-      }
+      if (!active) return
+      await checkPermissions()
     })()
     return () => {
       active = false
     }
+  }, [checkPermissions])
+
+  // Listen for external permission snapshots (useful for native bridges)
+  useEffect(() => {
+    const handler = (e: any) => {
+      if (!e?.detail) return
+      void handlePermissionSnapshot(e.detail)
+    }
+    window.addEventListener('permissionsSnapshot', handler as EventListener)
+    return () =>
+      window.removeEventListener(
+        'permissionsSnapshot',
+        handler as EventListener
+      )
   }, [])
-
-  //   const updateInApp = async (val: boolean) => {
-  //     setInAppNotifs(val)
-  //     try {
-  //       await Preferences.set({ key: 'notifications.inApp', value: String(val) })
-  //     } catch {}
-  //   }
-
-  //   const updatePush = async (val: boolean) => {
-  //     setPushNotifs(val)
-  //     try {
-  //       await Preferences.set({ key: 'notifications.push', value: String(val) })
-  //     } catch {}
-  //   }
 
   return (
     <>
@@ -226,26 +250,10 @@ export default function SettingsList () {
           >
             <IonIcon slot='start' icon={camera} className='mr-2' />
             <IonLabel>
-              Camera {permState.camera === 'granted' && '(Granted)'}
+              Camera and Photos{permState.camera === 'granted' && ' (Granted)'}
             </IonLabel>
             <IonLabel slot='end' className='text-sm text-umak-blue'>
               {permState.camera === 'granted' ? 'Revoke' : 'Grant'}
-            </IonLabel>
-          </IonItem>
-          <IonItem
-            button
-            onClick={
-              permState.files === 'granted'
-                ? handleRevokeFilesPermission
-                : handleRequestFilesPermission
-            }
-          >
-            <IonIcon slot='start' icon={images} className='mr-2' />
-            <IonLabel>
-              Files {permState.files === 'granted' && '(Granted)'}
-            </IonLabel>
-            <IonLabel slot='end' className='text-sm text-umak-blue'>
-              {permState.files === 'granted' ? 'Revoke' : 'Grant'}
             </IonLabel>
           </IonItem>
           <IonItem
@@ -268,43 +276,20 @@ export default function SettingsList () {
         </IonList>
       </IonCard>
 
-      {/* Notification Settings */}
-      {/* <IonCard className='ion-padding mt-3'>
-        <CardHeader title='Notification' icon={notifications} />
-        <IonList>
-          <IonItem>
-            <IonLabel>In App Notifications</IonLabel>
-            <IonToggle
-              slot='end'
-              checked={inAppNotifs}
-              onIonChange={e => updateInApp(!!e.detail.checked)}
-            />
-          </IonItem>
-          <IonItem>
-            <IonLabel>Push Notifications</IonLabel>
-            <IonToggle
-              slot='end'
-              checked={pushNotifs}
-              onIonChange={e => updatePush(!!e.detail.checked)}
-            />
-          </IonItem>
-        </IonList>
-      </IonCard> */}
-
       {/* Storage */}
       <IonCard className='ion-padding mt-3'>
         <CardHeader title='Storage' icon={folderOpen} />
         <IonList>
           <IonItem button onClick={() => setConfirmOpen(true)}>
             <IonIcon slot='start' icon={trash} className='mr-2' />
-            <IonLabel>Clear Posts Cache</IonLabel>
+            <IonLabel>Clear Cache</IonLabel>
           </IonItem>
         </IonList>
       </IonCard>
 
       <IonAlert
         isOpen={confirmOpen}
-        header='Clear posts cache?'
+        header='Clear cache?'
         message='Clearing the feed cache will remove saved posts from your device. Your feed may briefly load slower while it refreshes. Proceed?'
         buttons={[
           {

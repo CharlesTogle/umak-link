@@ -80,7 +80,9 @@ const FAQAccordion = ({
               return (
                 <IonAccordion key={value} value={value}>
                   <IonItem slot='header' lines='full'>
-                    <IonLabel className='text-base'>{q.question}</IonLabel>
+                    <IonLabel className='text-base font-semibold! py-2! mr-1!'>
+                      {q.question}
+                    </IonLabel>
                   </IonItem>
                   <div slot='content' className='p-4'>
                     {typeof q.content === 'string' ? (
@@ -103,18 +105,22 @@ const FAQAccordion = ({
 export default function FAQs () {
   return (
     <IonContent>
-      <Header logoShown isProfileAndNotificationShown />
-      <OHSOCard />
-      <IonCard className='my-6'>
-        <IonCardContent>
-          <CardHeader
-            title='Frequently Asked Questions'
-            icon={helpCircleOutline}
-            hasLineBelow={false}
-          />
-        </IonCardContent>
-      </IonCard>
-      <FAQAccordion categories={FAQData} />
+      <div className='w-full fixed z-10'>
+        <Header logoShown isProfileAndNotificationShown />
+      </div>
+      <div className='mt-16 mb-20'>
+        <OHSOCard />
+        <IonCard className='my-6'>
+          <IonCardContent>
+            <CardHeader
+              title='Frequently Asked Questions'
+              icon={helpCircleOutline}
+              hasLineBelow={false}
+            />
+          </IonCardContent>
+        </IonCard>
+        <FAQAccordion categories={FAQData} />
+      </div>
     </IonContent>
   )
 }

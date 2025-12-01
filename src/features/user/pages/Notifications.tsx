@@ -36,15 +36,26 @@ export default function Notifications () {
   // Local view-state for action sheet
   const [showBulkSheet, setShowBulkSheet] = useState(false)
   const [user, setUser] = useState<{ user_id: string } | null>(null)
-
+  const [hasFetched, setHasFetched] = useState(false)
+  const [userLoaded, setUserLoaded] = useState(false)
   useEffect(() => {
     let mounted = true
-    try {
-      getUser().then(currentUser => {
+
+    const loadUser = async () => {
+      try {
+        const currentUser = await getUser()
         if (mounted) setUser(currentUser)
-      })
-    } catch (e) {
-      console.error('Failed to get user', e)
+      } catch (e) {
+        console.error('Failed to get user', e)
+      } finally {
+        if (mounted) setUserLoaded(true)
+      }
+    }
+
+    loadUser()
+
+    return () => {
+      mounted = false
     }
   }, [])
 
@@ -54,13 +65,23 @@ export default function Notifications () {
       await getAllNotifications(userId)
     } catch (e) {
       console.error('Failed to fetch notifications for user', e)
+    } finally {
+      setHasFetched(true)
     }
   }
 
   useEffect(() => {
     let mounted = true
     async function load () {
-      fetchNotificationsForUser(user?.user_id || '').catch(err => {
+      if (!userLoaded) return
+
+      // If userLoaded but no user (unauthenticated), mark fetched so "caught up" doesn't appear prematurely
+      if (!user?.user_id) {
+        if (mounted) setHasFetched(true)
+        return
+      }
+
+      fetchNotificationsForUser(user.user_id).catch(err => {
         if (mounted) {
           console.error('Failed to load notifications', err)
         }
@@ -70,7 +91,9 @@ export default function Notifications () {
     return () => {
       mounted = false
     }
-  }, [user])
+  }, [user, userLoaded])
+
+  const effectiveLoading = loading || (!hasFetched && !userLoaded)
 
   // Per-item actions
   const handleNotificationDelete = async (notificationId?: string) => {
@@ -115,6 +138,7 @@ export default function Notifications () {
       const currentUser = await getUser()
       if (!currentUser) return
       await getAllNotifications(currentUser.user_id)
+      setHasFetched(true)
     } catch (e) {
       console.error('Failed to refresh notifications', e)
     } finally {
@@ -125,17 +149,19 @@ export default function Notifications () {
   return (
     <IonContent className='bg-gray-50'>
       {/* App header you already have */}
-      <Header
-        logoShown={true}
-        isProfileAndNotificationShown={true}
-        isNotificationPage={true}
-      />
+      <div className='fixed w-full top-0 z-10'>
+        <Header
+          logoShown={true}
+          isProfileAndNotificationShown={true}
+          isNotificationPage={true}
+        />
+      </div>
       <IonRefresher slot='fixed' onIonRefresh={handleRefresh}>
         <IonRefresherContent />
       </IonRefresher>
 
       {/* Section header with horizontal ellipsis for list-level actions */}
-      <div className='bg-white border-y border-slate-200 px-3 py-2 font-default-font'>
+      <div className='bg-white border-y border-slate-200 px-3 py-2 font-default-font mt-16'>
         <div className='flex items-center justify-between'>
           <div className='text-[13px] text-slate-600'>Notifications</div>
 
@@ -167,8 +193,13 @@ export default function Notifications () {
 
       {/* Notifications list */}
       <div className='bg-white'>
-        {loading ? (
+        {effectiveLoading ? (
           [...Array(10)].map((_, idx) => <NotificationItemSkeleton key={idx} />)
+        ) : !hasFetched ? (
+          // initial fetch not completed yet — render empty placeholder
+          <div className='px-4 py-10 text-center text-slate-500 font-default-font text-sm'>
+            {/* waiting for notifications to load */}
+          </div>
         ) : (notificationsList ?? []).length === 0 ? (
           <div className='px-4 py-10 text-center text-slate-500 font-default-font text-sm'>
             You're all caught up.

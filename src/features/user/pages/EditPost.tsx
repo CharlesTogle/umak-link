@@ -353,7 +353,7 @@ export default function EditPost () {
         setShowToast(true)
         setLoading(false)
       }
-    }, 300) // 300ms debounce
+    }, 500) // 500ms debounce
   }
 
   return (
@@ -519,21 +519,21 @@ export default function EditPost () {
       {/* Finalize Submit Modal */}
       <ConfirmationModal
         isOpen={showFinalizeModal}
-        heading='Finalize and edit report?'
+        heading='Submit changes?'
         subheading='Once submitted, your report will be sent for review and processing.'
         onSubmit={() => {
           setShowFinalizeModal(false)
           void handleSubmit()
         }}
         onCancel={() => setShowFinalizeModal(false)}
-        submitLabel='Edit report'
-        cancelLabel='Continue editing'
+        submitLabel='Submit'
+        cancelLabel='Keep editing'
       />
 
       {/* Cancel Confirmation Modal */}
       <ConfirmationModal
         isOpen={showCancelModal}
-        heading='Discard post?'
+        heading='Discard changes?'
         subheading='You have unsaved changes. Are you sure you want to discard editing this post?'
         onSubmit={() => {
           setShowCancelModal(false)

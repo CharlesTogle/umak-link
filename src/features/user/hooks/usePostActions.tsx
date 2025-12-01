@@ -27,14 +27,35 @@ export function usePostActions () {
     const result = await postServices.createPost(user.user_id, postData)
 
     if (result.post && !result.error) {
+      // The RPC may return a custom table with out_* fields. Support both shapes.
+      const p: any = result.post
+
+      // If RPC returned an array wrapper, normalize to first element
+      const first = Array.isArray(p) && p.length > 0 ? p[0] : p
+
+      const createdPostId =
+        (first && (first.post_id || first.out_post_id)) == null
+          ? undefined
+          : String(first.post_id ?? first.out_post_id)
+
+      const createdItemId =
+        (first && (first.item_id || first.out_item_id)) == null
+          ? undefined
+          : String(first.item_id ?? first.out_item_id)
+
+      const link = createdPostId
+        ? `/user/post/history/view/${createdPostId}`
+        : undefined
+
       sendNotification({
         title: 'Report Received',
         message: `We've received your ${postData.item.type} report for "${postData.item.title}" and we'll be reviewing it shortly.`,
         type: 'info',
         userId: user.user_id,
         data: {
-          postId: result.post.post_id,
-          link: `/user/post/history/view/${result.post.post_id}`
+          ...(createdPostId ? { postId: createdPostId } : {}),
+          ...(createdItemId ? { itemId: createdItemId } : {}),
+          ...(link ? { link } : {})
         }
       })
     }
@@ -97,26 +118,70 @@ export function usePostActions () {
   }) => {
     const user = await getUser()
     if (!user) {
-      return { success: false, error: 'User not authenticated' }
+      return {
+        success: false,
+        error: 'User not authenticated',
+        hasDuplicateSelf: false,
+        hasDuplicateOthers: false
+      }
     }
 
-    const reason = `Reason for reporting: ${concern} ${
-      additionalDetails?.trim() !== ''
-        ? `\n\n Additional details: ${additionalDetails}`
-        : ''
-    }`
-    return await postServices.reportPost(
-      postId,
-      reason,
-      user.user_id,
-      proofImage,
-      claimerName,
-      claimerEmail,
-      claimerContact,
-      claimedAt,
-      claimProcessedByStaffId,
-      claimId
-    )
+    // Check if user has already reported this post
+    const { count: duplicateSelfCount, error: duplicateSelfError } =
+      await supabase
+        .from('fraud_reports_table')
+        .select('*', { count: 'exact', head: true })
+        .eq('post_id', postId)
+        .eq('reported_by', user.user_id)
+        .in('report_status', ['open', 'under_review'])
+
+    if (duplicateSelfError) {
+      console.error('Error checking duplicate self report:', duplicateSelfError)
+    }
+
+    // Check if others have reported with same concern
+    const { count: duplicateOthersCount, error: duplicateOthersError } =
+      await supabase
+        .from('fraud_reports_table')
+        .select('*', { count: 'exact', head: true })
+        .eq('post_id', postId)
+        .ilike('reason_for_reporting', `%${concern}%`)
+        .in('report_status', ['open', 'under_review'])
+
+    if (duplicateOthersError) {
+      console.error(
+        'Error checking duplicate others report:',
+        duplicateOthersError
+      )
+    }
+
+    const hasDuplicateSelf = (duplicateSelfCount ?? 0) > 0
+    const hasDuplicateOthers = (duplicateOthersCount ?? 0) > 0
+
+    // Return duplicate information for UI to handle
+    return {
+      hasDuplicateSelf,
+      hasDuplicateOthers,
+      submit: async () => {
+        const reason = `Reason for reporting: ${concern} ${
+          additionalDetails?.trim() !== ''
+            ? `\n\n Additional details: ${additionalDetails}`
+            : ''
+        }`
+        return await postServices.reportPost(
+          postId,
+          reason,
+          user.user_id,
+          proofImage,
+          claimerName,
+          claimerEmail,
+          claimerContact,
+          claimedAt,
+          claimProcessedByStaffId,
+          claimId
+        )
+      }
+    }
   }
 
   /**

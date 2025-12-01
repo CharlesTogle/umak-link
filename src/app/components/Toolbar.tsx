@@ -21,12 +21,17 @@ export default function Toolbar ({ toolbarItems }: ToolbarProps) {
   const noToolbarRoutes = [
     '/user/new-post',
     '/user/post/report',
-    '/staff/fraud-report/view'
+    '/staff/fraud-report/view',
+    '/user/post/history/view',
+    '/user/post/view',
+    '/admin/staff/add',
+    '/admin/generate-announcement'
   ] // add any routes you want to hide the toolbar
 
   // Special case: hide only exact /user/search, not child routes
   const isNoToolbar =
     location.pathname === '/user/search' ||
+    location.pathname === '/staff/search' ||
     noToolbarRoutes.some(
       route =>
         location.pathname === route || location.pathname.startsWith(route + '/')

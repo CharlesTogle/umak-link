@@ -9,10 +9,13 @@ import {
   IonFab,
   IonFabButton,
   IonSkeletonText,
-  IonToast
+  IonToast,
+  IonLoading,
+  IonRefresher,
+  IonRefresherContent
 } from '@ionic/react'
 import { useAdminServices } from '../hooks/useAdminServices'
-import { memo, useEffect, useState } from 'react'
+import { memo, useEffect, useState, useCallback } from 'react'
 import type { User } from '@/features/auth/contexts/UserContext'
 import { useUser } from '@/features/auth/contexts/UserContext'
 import {
@@ -24,11 +27,12 @@ import {
   alertCircle
 } from 'ionicons/icons'
 import CardHeader from '@/shared/components/CardHeader'
+import { ConfirmationModal } from '@/shared/components/ConfirmationModal'
 import Header from '@/shared/components/Header'
 import { useNavigation } from '@/shared/hooks/useNavigation'
 
 const AdminListItemSkeleton = memo(() => (
-  <IonCard className='rounded-2xl shadow-sm border border-slate-200/70'>
+  <IonCard className='rounded-2xl shadow-sm border mb-4 border-slate-200/70'>
     <IonCardContent className='p-4'>
       <div className='flex items-center gap-4'>
         <IonAvatar className='w-16 h-16 shrink-0'>
@@ -90,7 +94,8 @@ export const AdminListItem = memo(
     isCurrentUser?: boolean
   }) => {
     const [open, setOpen] = useState(false)
-    const { navigate } = useNavigation()
+    // id prop intentionally unused within this component now (actions removed)
+    void id
 
     return (
       <IonCard
@@ -165,16 +170,6 @@ export const AdminListItem = memo(
                       onRemove()
                     }
                   }
-                },
-                {
-                  text: 'Edit',
-                  handler: () => {
-                    navigate(`/admin/staff/edit/${id}`)
-                  }
-                },
-                {
-                  text: 'Cancel',
-                  role: 'cancel'
                 }
               ]}
             />
@@ -193,9 +188,97 @@ export default function StaffManagement () {
   const [showSuccessToast, setShowSuccessToast] = useState(false)
   const [showErrorToast, setShowErrorToast] = useState(false)
   const [toastMessage, setToastMessage] = useState('')
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [confirmTarget, setConfirmTarget] = useState<{
+    email: string
+    userId: string
+    userType: string
+    name: string
+  } | null>(null)
+  const [removingUserId, setRemovingUserId] = useState<string | null>(null)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const { getAllStaffAndAdmin, removeAdminOrStaffMember } = useAdminServices()
   const { navigate } = useNavigation()
-  const { user } = useUser()
+  const { getUser } = useUser()
+
+  useEffect(() => {
+    const fetchStaffsAndAdmins = async () => {
+      setLoading(true)
+      try {
+        const currentUser = await getUser()
+        setCurrentUserId(currentUser?.user_id || null)
+        const data = await getAllStaffAndAdmin()
+        if (data) {
+          const staffUsers = data.filter(
+            user => (user.user_type as string) === 'Staff'
+          )
+          const adminUsers = data.filter(
+            user => (user.user_type as string) === 'Admin'
+          )
+
+          const sortedAdmins = adminUsers.sort((a, b) => {
+            if (a.user_id === currentUser?.user_id) return -1
+            if (b.user_id === currentUser?.user_id) return 1
+            return 0
+          })
+
+          setAdmins(sortedAdmins)
+          setStaffs(staffUsers)
+        }
+      } catch (err) {
+        console.error('Error fetching staffs/admins', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchStaffsAndAdmins()
+  }, [])
+
+  const fetchStaffsAndAdmins = useCallback(async () => {
+    setLoading(true)
+    try {
+      const currentUser = await getUser()
+      setCurrentUserId(currentUser?.user_id || null)
+      const data = await getAllStaffAndAdmin()
+      if (data) {
+        const staffUsers = data.filter(
+          user => (user.user_type as string) === 'Staff'
+        )
+        const adminUsers = data.filter(
+          user => (user.user_type as string) === 'Admin'
+        )
+
+        const sortedAdmins = adminUsers.sort((a, b) => {
+          if (a.user_id === currentUser?.user_id) return -1
+          if (b.user_id === currentUser?.user_id) return 1
+          return 0
+        })
+
+        setAdmins(sortedAdmins)
+        setStaffs(staffUsers)
+      }
+    } catch (err) {
+      console.error('Error fetching staffs/admins', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [getAllStaffAndAdmin, getUser])
+
+  const handleRefresh = async (event: CustomEvent) => {
+    try {
+      await fetchStaffsAndAdmins()
+    } catch (err) {
+      console.error('Error refreshing staffs/admins', err)
+    } finally {
+      try {
+        event.detail.complete()
+      } catch {
+        const target = event.target as any
+        target?.complete?.()
+      }
+    }
+  }
 
   const handleToggle = (userId: string | number) => {
     setActiveUserId(prev => (prev === userId ? null : userId))
@@ -207,60 +290,68 @@ export default function StaffManagement () {
     userType: string,
     name: string
   ) => {
-    const success = await removeAdminOrStaffMember({
-      userId,
-      email,
-      name,
-      previousRole: userType as 'Staff' | 'Admin'
-    })
-    if (success) {
-      if (userType === 'Staff') {
-        setStaffs(prevStaffs =>
-          prevStaffs.filter(staff => staff.user_id !== userId)
-        )
-        setToastMessage('Staff member removed successfully')
+    setRemovingUserId(userId)
+    try {
+      const success = await removeAdminOrStaffMember({
+        userId,
+        email,
+        name,
+        previousRole: userType as 'Staff' | 'Admin'
+      })
+      if (success) {
+        if (userType === 'Staff') {
+          setStaffs(prevStaffs =>
+            prevStaffs.filter(staff => staff.user_id !== userId)
+          )
+          setToastMessage('Staff member removed successfully')
+        } else {
+          setAdmins(prevAdmins =>
+            prevAdmins.filter(admin => admin.user_id !== userId)
+          )
+          setToastMessage('Admin removed successfully')
+        }
+        setShowSuccessToast(true)
       } else {
-        setAdmins(prevAdmins =>
-          prevAdmins.filter(admin => admin.user_id !== userId)
-        )
-        setToastMessage('Admin removed successfully')
+        setToastMessage('Failed to remove member. Please try again.')
+        setShowErrorToast(true)
       }
-      setShowSuccessToast(true)
-    } else {
+    } catch (err) {
+      console.error('Failed to remove member', err)
       setToastMessage('Failed to remove member. Please try again.')
       setShowErrorToast(true)
+    } finally {
+      setRemovingUserId(null)
     }
   }
 
-  useEffect(() => {
-    const fetchStaffsAndAdmins = async () => {
-      setLoading(true)
-      const data = await getAllStaffAndAdmin()
-      if (data) {
-        const staffUsers = data.filter(
-          user => (user.user_type as string) === 'Staff'
-        )
-        const adminUsers = data.filter(
-          user => (user.user_type as string) === 'Admin'
-        )
+  const openConfirmFor = (
+    email: string,
+    userId: string,
+    userType: string,
+    name: string
+  ) => {
+    setConfirmTarget({ email, userId, userType, name })
+    setConfirmOpen(true)
+  }
 
-        // Sort admins: current user first, then others
-        const sortedAdmins = adminUsers.sort((a, b) => {
-          if (a.user_id === user?.user_id) return -1
-          if (b.user_id === user?.user_id) return 1
-          return 0
-        })
+  const handleConfirmSubmit = async () => {
+    if (!confirmTarget) return
+    const { email, userId, userType, name } = confirmTarget
+    setConfirmOpen(false)
+    setConfirmTarget(null)
+    await handleRemove(email, userId, userType, name)
+  }
 
-        setStaffs(staffUsers)
-        setAdmins(sortedAdmins)
-      }
-      setLoading(false)
-    }
-    fetchStaffsAndAdmins()
-  }, [user?.user_id])
   return (
     <IonContent>
       <Header logoShown isProfileAndNotificationShown />
+      <IonRefresher slot='fixed' onIonRefresh={handleRefresh}>
+        <IonRefresherContent
+          pullingText='Pull to refresh'
+          refreshingSpinner='crescent'
+          refreshingText='Refreshing data...'
+        />
+      </IonRefresher>
       <IonCard>
         <IonCardContent>
           <CardHeader icon={peopleCircle} title='Admin List' />
@@ -275,7 +366,7 @@ export default function StaffManagement () {
             </div>
           ) : (
             admins.map(admin => {
-              const isCurrentUser = admin.user_id === user?.user_id
+              const isCurrentUser = admin.user_id === currentUserId
               return (
                 <AdminListItem
                   key={admin.email}
@@ -289,7 +380,7 @@ export default function StaffManagement () {
                   onRemove={
                     !isCurrentUser
                       ? () =>
-                          handleRemove(
+                          openConfirmFor(
                             admin.email!,
                             admin.user_id!,
                             admin.user_type!,
@@ -330,7 +421,7 @@ export default function StaffManagement () {
                 isActive={activeUserId === staff.user_id}
                 onToggle={() => handleToggle(staff.user_id!)}
                 onRemove={() =>
-                  handleRemove(
+                  openConfirmFor(
                     staff.email!,
                     staff.user_id!,
                     staff.user_type!,
@@ -378,6 +469,25 @@ export default function StaffManagement () {
         position='top'
         color='danger'
         icon={alertCircle}
+      />
+
+      <IonLoading
+        isOpen={Boolean(removingUserId)}
+        message='Removing member...'
+      />
+
+      <ConfirmationModal
+        isOpen={Boolean(confirmOpen)}
+        heading='Remove account'
+        subheading={
+          confirmTarget
+            ? `Are you sure you want to remove ${confirmTarget.name} as a ${confirmTarget.userType}? You can add them again later.`
+            : 'Are you sure you want to remove this account? You can add them again later.'
+        }
+        onSubmit={handleConfirmSubmit}
+        onCancel={() => setConfirmOpen(false)}
+        submitLabel='Remove'
+        cancelLabel='Cancel'
       />
     </IonContent>
   )

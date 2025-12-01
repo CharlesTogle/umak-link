@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { IonModal, IonButton } from '@ionic/react'
 import CustomRadioGroup from './CustomRadioGroup'
 
@@ -22,6 +22,8 @@ export const ChoiceModal: React.FC<ChoiceModalProps> = ({
   onDidDismiss
 }) => {
   const [selected, setSelected] = useState<string>('')
+  const [submitting, setSubmitting] = useState(false)
+  const submitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     if (isOpen && choices.length > 0) {
@@ -30,10 +32,37 @@ export const ChoiceModal: React.FC<ChoiceModalProps> = ({
   }, [isOpen, choices])
 
   const handleSubmit = () => {
-    if (!selected) return
-    onSubmit(selected)
-    onDidDismiss?.()
+    if (!selected || submitting) return
+
+    // Clear any existing timeout
+    if (submitTimeoutRef.current) {
+      clearTimeout(submitTimeoutRef.current)
+    }
+
+    setSubmitting(true)
+
+    submitTimeoutRef.current = setTimeout(() => {
+      try {
+        onSubmit(selected)
+        onDidDismiss?.()
+      } finally {
+        setSubmitting(false)
+        if (submitTimeoutRef.current) {
+          clearTimeout(submitTimeoutRef.current)
+          submitTimeoutRef.current = null
+        }
+      }
+    }, 500)
   }
+
+  useEffect(() => {
+    return () => {
+      if (submitTimeoutRef.current) {
+        clearTimeout(submitTimeoutRef.current)
+        submitTimeoutRef.current = null
+      }
+    }
+  }, [])
 
   return (
     <IonModal
@@ -80,7 +109,7 @@ export const ChoiceModal: React.FC<ChoiceModalProps> = ({
 
           <IonButton
             onClick={handleSubmit}
-            disabled={!selected}
+            disabled={!selected || submitting}
             className='rounded-md py-2 text-sm shadow-none! text-white disabled:opacity-50'
             style={{
               '--background': 'var(--color-umak-blue)'

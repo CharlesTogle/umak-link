@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import {
   IonContent,
@@ -32,6 +32,7 @@ import {
 } from '@/shared/utils/dateTimeHelpers'
 import { useClaimItemPostValidation } from '@/features/staff/hooks/useClaimItemPostValidation'
 import { useClaimItemSubmit } from '@/features/staff/hooks/useClaimItemSubmit'
+import { useExistingClaimCheck } from '@/features/staff/hooks/useExistingClaimCheck'
 
 interface SelectedUser {
   id: string
@@ -91,8 +92,13 @@ export default function ClaimItem () {
   // Submit hook
   const { submit, isProcessing } = useClaimItemSubmit()
 
+  // Existing claim check hook
+  const { existingClaim, checkForExistingClaim, clearExistingClaim } =
+    useExistingClaimCheck()
+
   // Toast/Modal state
   const [showConfirmModal, setShowConfirmModal] = useState(false)
+  const [showOverwriteModal, setShowOverwriteModal] = useState(false)
   const [showCancelModal, setShowCancelModal] = useState(false)
   const [toast, setToast] = useState<{
     show: boolean
@@ -105,6 +111,23 @@ export default function ClaimItem () {
   })
 
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const submitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Helpers for phone normalization/validation
+  const normalizeToLocal = (input: string): string | null => {
+    const digits = (input || '').replace(/[^0-9]/g, '')
+    // +63XXXXXXXXXX (digits: 63 + 10) -> convert to 0 + 10 digits
+    if (/^63\d{10}$/.test(digits)) {
+      return '0' + digits.slice(2)
+    }
+    // 0XXXXXXXXXX (11 digits) or 9XXXXXXXXX (10 digits)
+    if (/^0?9\d{9}$/.test(digits)) {
+      if (digits.length === 10) return '0' + digits
+      return digits
+    }
+    return null
+  }
 
   useEffect(() => {
     if (!hasUnsavedChanges) {
@@ -125,8 +148,8 @@ export default function ClaimItem () {
     try {
       setLoading(true)
 
-      // Check network connectivity
-      const connected = await isConnected()
+      // Check network connectivity with 8-second timeout
+      const connected = await isConnected(8000)
       if (!connected) {
         setToast({
           show: true,
@@ -144,8 +167,21 @@ export default function ClaimItem () {
           message: 'Post not found',
           color: 'danger'
         })
+        setPost(null)
         return
       }
+
+      // Only allow 'found' item types to be claimed
+      if (fetchedPost.item_type !== 'found') {
+        setToast({
+          show: true,
+          message: 'Only found items can be claimed',
+          color: 'danger'
+        })
+        setPost(null)
+        return
+      }
+
       setPost(fetchedPost)
     } catch (error) {
       console.error('Error loading post:', error)
@@ -237,23 +273,232 @@ export default function ClaimItem () {
     }
   }
 
-  // Handle submit
+  // Handle submit (debounced)
   const handleSubmit = async () => {
+    // Close modal immediately for user feedback
+    setShowConfirmModal(false)
+    // Set submitting state to show spinner on buttons
+    setIsSubmitting(true)
+
+    // Clear existing timeout
+    if (submitTimeoutRef.current) {
+      clearTimeout(submitTimeoutRef.current)
+    }
+    submitTimeoutRef.current = setTimeout(async () => {
+      const user = await getUser()
+      console.log('Submitting claim for post ID:', postId)
+      console.log(selectedUser)
+      console.log(post)
+      console.log(user)
+      if (!postId || !selectedUser || !post || !user) return
+      // Validate Philippine contact number (accept multiple common formats)
+      const normalizeToLocal = (input: string): string | null => {
+        const digits = (input || '').replace(/[^0-9]/g, '')
+        // +63XXXXXXXXXX -> 63 + 10 digits => convert to 0 + 10 digits => 11 digits
+        if (/^63\d{10}$/.test(digits)) {
+          return '0' + digits.slice(2)
+        }
+        // 0XXXXXXXXXX (11 digits) already local
+        if (/^0?9\d{9}$/.test(digits)) {
+          // if starts with 9 and length 10, prepend 0
+          if (digits.length === 10) return '0' + digits
+          return digits
+        }
+        return null
+      }
+
+      const formatLocal = (local: string) => {
+        // Expect local like 09123456789 (11 chars). Format as 0912 345 6789 (4-3-4)
+        if (!local) return local
+        if (local.length === 11) {
+          return `${local.slice(0, 4)} ${local.slice(4, 7)} ${local.slice(7)}`
+        }
+        return local
+      }
+
+      const normalized = normalizeToLocal(formData.contactNumber.trim())
+      if (!normalized) {
+        setToast({
+          show: true,
+          message:
+            'Please enter a valid Philippine mobile number (examples: 09123456789, 0912 345 6789, +639123456789, +63 912-345-6789)',
+          color: 'danger'
+        })
+        setIsSubmitting(false)
+        return
+      }
+      const formattedNumber = formatLocal(normalized)
+
+      // If an itemId was provided ensure we found a matching lost item before updating its status
+      if (formData.itemId?.trim() && !lostItemPost) {
+        setToast({
+          show: true,
+          message: 'Referenced lost item not found. Please verify the Item ID.',
+          color: 'danger'
+        })
+        setIsSubmitting(false)
+        return
+      }
+
+      // Check claim_table for existing claim on this item
+      let itemIdToCheck: string | null = null
+
+      try {
+        const latestFound = await getPostFull(postId as string)
+        if (!latestFound) {
+          setToast({ show: true, message: 'Post not found', color: 'danger' })
+          setIsSubmitting(false)
+          return
+        }
+
+        itemIdToCheck = latestFound.item_id
+      } catch (err) {
+        console.error('Error fetching post details:', err)
+        setToast({
+          show: true,
+          message: 'Failed to verify post status',
+          color: 'danger'
+        })
+        setIsSubmitting(false)
+        return
+      }
+
+      // Check if item already has a claim in claim_table
+      if (itemIdToCheck) {
+        const existingClaimData = await checkForExistingClaim(itemIdToCheck)
+
+        if (existingClaimData) {
+          // Show overwrite confirmation modal
+          setIsSubmitting(false)
+          setShowOverwriteModal(true)
+          return
+        }
+      }
+      if (lostItemPost && lostItemPost.post_id) {
+        try {
+          const latestMissing = await getPostFull(lostItemPost.post_id)
+          if (!latestMissing) {
+            setToast({
+              show: true,
+              message: 'Referenced lost item not found',
+              color: 'danger'
+            })
+            setIsSubmitting(false)
+            return
+          }
+
+          if (latestMissing.item_status === 'returned') {
+            setToast({
+              show: true,
+              message:
+                'Cannot mark item as returned — it has already been returned.',
+              color: 'danger'
+            })
+            setIsSubmitting(false)
+            return
+          }
+        } catch (err) {
+          console.error('Error verifying missing post status:', err)
+          setToast({
+            show: true,
+            message: 'Failed to verify linked lost item',
+            color: 'danger'
+          })
+          setIsSubmitting(false)
+          return
+        }
+      }
+      // Check network connectivity before submitting
+      const connected = await isConnected(8000)
+      if (!connected) {
+        setToast({
+          show: true,
+          message: 'Failed to claim item - no internet connection',
+          color: 'danger'
+        })
+        setIsSubmitting(false)
+        return
+      }
+
+      await submit(
+        {
+          foundPostId: postId,
+          claimerName: selectedUser.name,
+          claimerEmail: selectedUser.email,
+          claimerContactNumber: formattedNumber,
+          posterName: post.is_anonymous ? 'Anonymous' : post.poster_name,
+          staffId: user.user_id,
+          staffName: user.user_name,
+          missingPostId: lostItemPost ? lostItemPost.post_id : null,
+          existingClaim: existingClaim,
+          isOverwrite: false
+        },
+        message => {
+          setToast({
+            show: true,
+            message,
+            color: 'success'
+          })
+          setIsSubmitting(false)
+          clearExistingClaim()
+        },
+        message => {
+          setToast({
+            show: true,
+            message,
+            color: 'danger'
+          })
+          setIsSubmitting(false)
+        }
+      )
+
+      // clear ref after run
+      if (submitTimeoutRef.current) {
+        clearTimeout(submitTimeoutRef.current)
+        submitTimeoutRef.current = null
+      }
+    }, 500)
+  }
+
+  // Handle overwrite confirmation
+  const handleOverwriteClaim = async () => {
+    // Close modal immediately for user feedback
+    setShowOverwriteModal(false)
+    // Set submitting state to show spinner on buttons
+    setIsSubmitting(true)
+
     const user = await getUser()
-    console.log('Submitting claim for post ID:', postId)
-    console.log(selectedUser)
-    console.log(post)
-    console.log(user)
     if (!postId || !selectedUser || !post || !user) return
-    // Check network connectivity before submitting
-    const connected = await isConnected()
+
+    const normalized = normalizeToLocal(formData.contactNumber.trim())
+    if (!normalized) {
+      setToast({
+        show: true,
+        message: 'Invalid contact number',
+        color: 'danger'
+      })
+      setIsSubmitting(false)
+      return
+    }
+
+    const formatLocal = (local: string) => {
+      if (!local) return local
+      if (local.length === 11) {
+        return `${local.slice(0, 4)} ${local.slice(4, 7)} ${local.slice(7)}`
+      }
+      return local
+    }
+    const formattedNumber = formatLocal(normalized)
+
+    // Check network connectivity with timeout
+    const connected = await isConnected(8000)
     if (!connected) {
       setToast({
         show: true,
         message: 'Failed to claim item - no internet connection',
         color: 'danger'
       })
-      setShowConfirmModal(false)
+      setIsSubmitting(false)
       return
     }
 
@@ -262,13 +507,13 @@ export default function ClaimItem () {
         foundPostId: postId,
         claimerName: selectedUser.name,
         claimerEmail: selectedUser.email,
-        claimerContactNumber: formData.contactNumber,
+        claimerContactNumber: formattedNumber,
         posterName: post.is_anonymous ? 'Anonymous' : post.poster_name,
-        posterUserId: post.poster_id,
-        itemType: post.item_type,
         staffId: user.user_id,
         staffName: user.user_name,
-        missingPostId: lostItemPost?.post_id || null
+        missingPostId: lostItemPost ? lostItemPost.post_id : null,
+        existingClaim: existingClaim,
+        isOverwrite: true
       },
       message => {
         setToast({
@@ -276,7 +521,8 @@ export default function ClaimItem () {
           message,
           color: 'success'
         })
-        setShowConfirmModal(false)
+        setIsSubmitting(false)
+        clearExistingClaim()
       },
       message => {
         setToast({
@@ -284,9 +530,19 @@ export default function ClaimItem () {
           message,
           color: 'danger'
         })
+        setIsSubmitting(false)
       }
     )
   }
+
+  useEffect(() => {
+    return () => {
+      if (submitTimeoutRef.current) {
+        clearTimeout(submitTimeoutRef.current)
+        submitTimeoutRef.current = null
+      }
+    }
+  }, [])
 
   if (loading) {
     return <ClaimItemLoadingSkeleton />
@@ -295,8 +551,30 @@ export default function ClaimItem () {
   if (!post) {
     return (
       <IonContent>
-        <div className='w-full grid place-items-center py-16'>
-          <IonText color='danger'>Post not found</IonText>
+        <div className='fixed w-full top-0 z-10'>
+          <HeaderWithButtons
+            loading={false}
+            onCancel={() => navigate('/staff/post-records', 'back')}
+            onSubmit={() => {}}
+            withSubmit={false}
+          />
+        </div>
+        <div className='ion-padding mt-15'>
+          <div className='w-full grid place-items-center py-16'>
+            <IonText color='danger' className='text-center'>
+              <h2 className='text-xl font-semibold mb-2'>Post not found</h2>
+              <p className='text-sm'>
+                The post you're looking for doesn't exist or cannot be claimed.
+              </p>
+            </IonText>
+            <IonButton
+              className='mt-6'
+              onClick={() => navigate('/staff/post-records', 'back')}
+              style={{ '--background': 'var(--color-umak-blue)' }}
+            >
+              Go Back
+            </IonButton>
+          </div>
         </div>
       </IonContent>
     )
@@ -306,7 +584,7 @@ export default function ClaimItem () {
     <IonContent>
       <div className='fixed w-full top-0 z-10'>
         <HeaderWithButtons
-          loading={isProcessing}
+          loading={isProcessing || isSubmitting}
           onCancel={() => {
             console.log(hasUnsavedChanges)
             if (hasUnsavedChanges) {
@@ -377,12 +655,20 @@ export default function ClaimItem () {
           className='mt-6 mb-4'
           style={{ '--background': 'var(--color-umak-blue)' }}
           onClick={() => setShowConfirmModal(true)}
-          disabled={!selectedUser || !formData.contactNumber || isProcessing}
+          disabled={
+            !selectedUser ||
+            !formData.contactNumber ||
+            isProcessing ||
+            isSubmitting ||
+            // disable if contact format clearly invalid (use normalization)
+            !normalizeToLocal(formData.contactNumber) ||
+            // if an item ID is entered but no matching lost post found, disable
+            (!!formData.itemId && !lostItemPost)
+          }
         >
-          {isProcessing ? (
+          {isProcessing || isSubmitting ? (
             <>
               <IonSpinner name='crescent' className='mr-2' />
-              Processing...
             </>
           ) : (
             'Claim Item'
@@ -393,13 +679,39 @@ export default function ClaimItem () {
       {/* Submit Confirmation Modal */}
       <ConfirmationModal
         isOpen={showConfirmModal}
-        heading='Confirm Claim?'
-        subheading={`Are you sure you want to claim this item${
-          post.item_type === 'lost' ? ' and notify the owner?' : '?'
-        }`}
+        heading='Confirm claim?'
+        subheading='Are you sure you want to claim this item?'
         onSubmit={handleSubmit}
         onCancel={() => setShowConfirmModal(false)}
-        submitLabel='Claim Item'
+        submitLabel='Confirm'
+        cancelLabel='Cancel'
+      />
+
+      {/* Overwrite Claim Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showOverwriteModal}
+        heading='Overwrite existing claim?'
+        subheading={
+          existingClaim
+            ? `This item has been already claimed by ${
+                existingClaim.claimer_name
+              } (${existingClaim.claimer_school_email}) on ${new Date(
+                existingClaim.claimed_at
+              ).toLocaleDateString('en-US', {
+                month: 'long',
+                day: 'numeric',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+              })}. Do you want to overwrite this claim?`
+            : 'Do you want to overwrite the existing claim?'
+        }
+        onSubmit={handleOverwriteClaim}
+        onCancel={() => {
+          setShowOverwriteModal(false)
+          clearExistingClaim()
+        }}
+        submitLabel='Overwrite'
         cancelLabel='Cancel'
       />
 

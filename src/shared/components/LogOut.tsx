@@ -7,22 +7,17 @@ import {
   IonList
 } from '@ionic/react'
 import { logOut } from 'ionicons/icons'
-import { useNavigation } from '@/shared/hooks/useNavigation'
 import { useAuth } from '@/features/auth/hooks/useAuth'
 import { useUser } from '@/features/auth/contexts/UserContext'
 
 export default function Logout () {
-  const { navigate } = useNavigation()
   const { logout } = useAuth()
   const { clearUser } = useUser()
 
   const handleLogout = async () => {
     await clearUser()
     await logout()
-    // Use setTimeout to defer navigation until after state updates complete
-    setTimeout(() => {
-      navigate('/auth', 'auth')
-    }, 0)
+    window.location.href = '/auth'
   }
   return (
     <div>

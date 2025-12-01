@@ -1,6 +1,6 @@
 # Zustand Global Stores
 
-This directory contains global state management stores using Zustand for the UMatch application.
+This directory contains global state management stores using Zustand for the UMak LINK application.
 
 ## Available Stores
 

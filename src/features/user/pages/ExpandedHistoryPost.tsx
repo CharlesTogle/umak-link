@@ -1,9 +1,15 @@
 import Post from '@/features/posts/components/Post'
 import { useParams } from 'react-router-dom'
-import { getPostFull } from '@/features/posts/data/posts'
+import {
+  getPostFull,
+  getPostByItemId,
+  getFoundPostByLinkedMissingItem
+} from '@/features/posts/data/posts'
 import type { PostRecordDetails } from '@/features/posts/data/posts'
+import type { PublicPost } from '@/features/posts/types/post'
 import { useEffect, useState } from 'react'
 import PostSkeleton from '@/features/posts/components/PostSkeleton'
+import PostCard from '@/features/posts/components/PostCard'
 import { HeaderWithBackButton } from '@/shared/components/HeaderVariants'
 import {
   IonCard,
@@ -22,7 +28,11 @@ import { arrowBack } from 'ionicons/icons'
 export default function ExpandedHistoryPost () {
   const { postId } = useParams<{ postId: string }>()
   const [post, setPost] = useState<PostRecordDetails | null>(null)
+  const [linkedPost, setLinkedPost] = useState<
+    PublicPost | PostRecordDetails | null
+  >(null)
   const [loading, setLoading] = useState(true)
+  const [loadingLinkedPost, setLoadingLinkedPost] = useState(false)
   const [showActions, setShowActions] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [showToast, setShowToast] = useState(false)
@@ -45,6 +55,39 @@ export default function ExpandedHistoryPost () {
 
       const fetchedPost = await getPostFull(postId as string)
       setPost(fetchedPost)
+
+      // Fetch linked post based on item type and status
+      if (fetchedPost) {
+        setLoadingLinkedPost(true)
+        let linked: PublicPost | PostRecordDetails | null = null
+
+        // For missing items with status 'returned': find the found item that has this missing item linked
+        if (
+          fetchedPost.item_type === 'missing' &&
+          fetchedPost.item_status === 'returned' &&
+          fetchedPost.item_id
+        ) {
+          linked = await getFoundPostByLinkedMissingItem(fetchedPost.item_id)
+          // Only show if the linked found item is accepted
+          if (linked && linked.post_status !== 'accepted') {
+            linked = null
+          }
+        }
+        // For missing items with status 'claimed': get the found item by item_id
+        else if (
+          fetchedPost.item_type === 'missing' &&
+          fetchedPost.item_status === 'claimed' &&
+          fetchedPost.item_id
+        ) {
+          linked = await getPostByItemId(fetchedPost.item_id)
+        }
+
+        if (linked) {
+          setLinkedPost(linked)
+        }
+        setLoadingLinkedPost(false)
+      }
+
       setLoading(false)
     }
     fetchPost()
@@ -110,16 +153,14 @@ export default function ExpandedHistoryPost () {
     return (
       <IonContent>
         <div className='fixed top-0 w-full'>
-          <HeaderWithBackButton
-            onBack={() => navigate('/user/post/history', 'back')}
-          />
+          <HeaderWithBackButton onBack={() => window.history.back()} />
         </div>
         <div className='flex flex-col items-center justify-center h-full px-6'>
           <div className='text-center mb-6'>
             <p className='text-xl font-semibold text-gray-800'>No post found</p>
           </div>
           <IonButton
-            onClick={() => navigate('/user/post/history', 'back')}
+            onClick={() => navigate('/user/post/history')}
             fill='solid'
             style={{
               '--background': 'var(--color-umak-blue)',
@@ -136,10 +177,8 @@ export default function ExpandedHistoryPost () {
 
   return (
     <IonContent>
-      <div className='fixed top-0 w-full'>
-        <HeaderWithBackButton
-          onBack={() => navigate('/user/post/history', 'back')}
-        />
+      <div className='fixed top-0 w-full z-10'>
+        <HeaderWithBackButton onBack={() => window.history.back()} />
       </div>
       <div className='pt-15'>
         <IonCard className='my-4'>
@@ -174,6 +213,7 @@ export default function ExpandedHistoryPost () {
             user_profile_picture_url={post?.poster_profile_picture_url ?? ''}
             username={post?.poster_name ?? ''}
             className={'min-h-[400px]!'}
+            returnedAt={post?.returned_at ?? null}
             onKebabButtonClick={() => setShowActions(true)}
             actionSheetOpen={showActions}
             onActionSheetDismiss={() => setShowActions(false)}
@@ -211,6 +251,53 @@ export default function ExpandedHistoryPost () {
             })()}
           />
         )}
+
+        {/* Linked Found Post Card - show when missing item is claimed or returned */}
+        {post &&
+          post.item_type === 'missing' &&
+          (post.item_status === 'claimed' || post.item_status === 'returned') &&
+          linkedPost && (
+            <div className='mt-6'>
+              <IonCard className='mb-4 border border-slate-200/70 shadow-sm'>
+                <IonCardContent className='p-5'>
+                  <h3 className='text-lg font-bold text-gray-900 mb-3'>
+                    {post.item_status === 'claimed'
+                      ? 'Matched Found Item'
+                      : 'Returned Found Item'}
+                  </h3>
+                </IonCardContent>
+              </IonCard>
+              {loadingLinkedPost ? (
+                <PostCard
+                  imgUrl=''
+                  title='Loading...'
+                  description=''
+                  owner=''
+                />
+              ) : (
+                <PostCard
+                  imgUrl={linkedPost.item_image_url ?? ''}
+                  title={linkedPost.item_name ?? ''}
+                  description={linkedPost.item_description ?? ''}
+                  owner={
+                    linkedPost.is_anonymous
+                      ? 'Anonymous'
+                      : ('username' in linkedPost
+                          ? linkedPost.username
+                          : linkedPost.poster_name) ?? ''
+                  }
+                  owner_profile_picture_url={
+                    'profilepicture_url' in linkedPost
+                      ? linkedPost.profilepicture_url
+                      : linkedPost.poster_profile_picture_url
+                  }
+                  onClick={() =>
+                    navigate(`/user/post/view/${linkedPost.post_id}`)
+                  }
+                />
+              )}
+            </div>
+          )}
       </div>
 
       {/* Action Sheet now handled by Post component */}

@@ -110,11 +110,17 @@ export default function NewPost () {
   const handleImageChange = async (file: File | null) => {
     setImage(file)
 
+    // Reset AI-related states when user tries to upload again
+    setAiGenerationAborted(false)
+    setAiGeneratedContent(null)
+    setShowAiConfirmModal(false)
+    setErrorMessage('')
+    setShowToast(false)
+
     // Guard: only trigger AI generation if image is uploaded (not null/removed)
     if (!file) return
 
-    // Reset abort state and set generating state
-    setAiGenerationAborted(false)
+    // Start generating
     setAiGenerating(true)
 
     try {
@@ -150,19 +156,23 @@ export default function NewPost () {
         return
       }
 
-      // Handle failure
+      // Handle failure (but don't show errors if the generation was cancelled)
       if (!result.success) {
-        if (result.error === 'ai_timeout') {
-          setErrorMessage(
-            'AI autofill took too long. Please fill in the fields manually.'
-          )
+        if (aiGenerationAborted) {
+          // Generation was cancelled by the user; do not show failure UI
         } else {
-          setErrorMessage(
-            'AI autofill failed. Please fill in the fields manually.'
-          )
+          if (result.error === 'ai_timeout') {
+            setErrorMessage(
+              'AI autofill took too long. Please fill in the fields manually.'
+            )
+          } else {
+            setErrorMessage(
+              'AI autofill failed. Please fill in the fields manually.'
+            )
+          }
+          setToastColor('danger')
+          setShowToast(true)
         }
-        setToastColor('danger')
-        setShowToast(true)
       }
     } finally {
       setAiGenerating(false)
@@ -172,6 +182,9 @@ export default function NewPost () {
   const handleCancelAiGeneration = () => {
     setAiGenerationAborted(true)
     setAiGenerating(false)
+    // ensure previously generated content isn't shown after cancel
+    setAiGeneratedContent(null)
+    setShowAiConfirmModal(false)
   }
 
   const handleAiConfirm = () => {
@@ -300,12 +313,14 @@ export default function NewPost () {
 
   return (
     <IonContent>
-      <HeaderWithButtons
-        loading={loading}
-        onCancel={() => handleCancel()}
-        onSubmit={() => setShowFinalizeModal(true)}
-      />
-      <div className=' bg-gray-50 mb-5 w-full font-default-font'>
+      <div className='fixed w-full top-0 z-10'>
+        <HeaderWithButtons
+          loading={loading}
+          onCancel={() => handleCancel()}
+          onSubmit={() => setShowFinalizeModal(true)}
+        />
+      </div>
+      <div className=' bg-gray-50 mb-5 w-full font-default-font mt-16'>
         <div className='mt-3 shadow-md p-4 border border-gray-200'>
           <div className='flex items-center space-x-2'>
             <IonIcon
@@ -408,15 +423,15 @@ export default function NewPost () {
       {/* Finalize Submit Modal */}
       <ConfirmationModal
         isOpen={showFinalizeModal}
-        heading='Finalize and submit report?'
+        heading='Submit report?'
         subheading='Once submitted, your report will be posted immediately.'
         onSubmit={() => {
           setShowFinalizeModal(false)
           void handleSubmit()
         }}
         onCancel={() => setShowFinalizeModal(false)}
-        submitLabel='Upload report'
-        cancelLabel='Continue editing'
+        submitLabel='Submit'
+        cancelLabel='Keep editing'
       />
 
       {/* Cancel Confirmation Modal */}
@@ -492,7 +507,7 @@ export default function NewPost () {
       )}
 
       {/* AI Confirmation Popover */}
-      {showAiConfirmModal && (
+      {showAiConfirmModal && !aiGenerationAborted && (
         <div
           className='fixed inset-0 z-50 flex items-center justify-center bg-black/50'
           onClick={handleAiCancel}

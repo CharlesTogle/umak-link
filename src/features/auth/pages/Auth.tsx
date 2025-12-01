@@ -1,6 +1,6 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useNavigation } from '@/shared/hooks/useNavigation'
-import { useUser, type User } from '@/features/auth/contexts/UserContext'
+import { useUser } from '@/features/auth/contexts/UserContext'
 import { SocialLogin } from '@capgo/capacitor-social-login'
 import AdminBuilding from '@/shared/assets/umak-admin-building.jpg'
 import UmakSeal from '@/shared/assets/umak-seal.png'
@@ -67,8 +67,6 @@ const toSentenceCaseFull = (str: string) => {
 const RATE_LIMIT_MS = 3000 // 3 seconds
 
 const Auth: React.FC = () => {
-  const [isAuthed, setIsAuthed] = useState<boolean | null>(null)
-  const [user, setUser] = useState<User | null>(null)
   const [showAuth, setShowAuth] = useState(false)
   const { navigate } = useNavigation()
   const { refreshUser, getUser } = useUser()
@@ -118,11 +116,23 @@ const Auth: React.FC = () => {
     return true
   }
 
-  const handleSocialLogin = useCallback(async () => {
-    // Check rate limit
-    if (!checkRateLimit()) {
-      return
+  const getRouteByUserType = (userType: string): string => {
+    const type = userType.toLowerCase()
+    const routeMap: Record<string, string> = {
+      admin: '/admin/dashboard',
+      staff: '/staff/home'
     }
+    return routeMap[type] || '/user/home'
+  }
+
+  const handleSocialLogin = async () => {
+    // Check rate limit
+    // if (!checkRateLimit()) {
+    //   return
+    // }
+
+    // Prevent re-entry if already loading
+    if (socialLoginLoading) return
 
     try {
       const googleWebClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? ''
@@ -134,8 +144,12 @@ const Auth: React.FC = () => {
         provider: 'google',
         options: { scopes: ['profile', 'email'] }
       })
+      console.log('[Auth] SocialLogin result:', res)
+
       if (res.provider === 'google') {
         const result = res.result as GoogleLoginResponse
+        console.log('[Auth] SocialLogin result.payload:', result)
+
         if ('profile' in result && 'idToken' in result) {
           const { name, email, imageUrl } = result.profile
 
@@ -145,37 +159,30 @@ const Auth: React.FC = () => {
               'Access Denied. Please use your organization email to sign in.'
             )
             setShowToast(true)
-            setSocialLoginLoading(false)
             return
           }
+
           const { user, error } = await getOrRegisterAccount({
             googleIdToken: result.idToken || '',
             email: email || '',
             user_name: toSentenceCaseFull(name || 'New User'),
             profile_picture_url: imageUrl || ''
           })
+
           if (error || !user) {
             setToastMessage(
               'Login Failed. Authentication with Google was unsuccessful. Please try again.'
             )
             setShowToast(true)
-            setSocialLoginLoading(false)
             return
           }
+
           await refreshUser(user?.user_id || '')
           const redirect = sessionStorage.getItem('redirect_after_login')
           if (redirect) {
             navigate(redirect)
             sessionStorage.removeItem('redirect_after_login')
           } else {
-            const getRouteByUserType = (userType: string): string => {
-              const type = userType.toLowerCase()
-              const routeMap: Record<string, string> = {
-                admin: '/admin/dashboard',
-                staff: '/staff/home'
-              }
-              return routeMap[type] || '/user/home'
-            }
             navigate(getRouteByUserType(user.user_type), 'auth')
           }
           setSocialLoginLoading(false)
@@ -187,11 +194,11 @@ const Auth: React.FC = () => {
         `Sign-in failed. Please use your organization email to sign in or try again at a different time`
       )
       setShowToast(true)
-    } finally {
       setSocialLoginLoading(false)
     }
-  }, [navigate, getOrRegisterAccount, refreshUser])
+  }
 
+  // useEffect(() => {})
   const handleGoogleSuccess = async (
     credentialResponse: CredentialResponse
   ) => {
@@ -233,14 +240,7 @@ const Auth: React.FC = () => {
         return
       }
       await refreshUser(user?.user_id || '')
-      const getRouteByUserType = (userType: string): string => {
-        const type = userType.toLowerCase()
-        const routeMap: Record<string, string> = {
-          admin: '/admin/dashboard',
-          staff: '/staff/home'
-        }
-        return routeMap[type] || '/user/home'
-      }
+
       navigate(getRouteByUserType(user.user_type), 'auth')
       setGoogleLoading(false)
     } catch (error) {
@@ -249,7 +249,6 @@ const Auth: React.FC = () => {
         `Sign-in failed. Please try again. ${JSON.stringify(error)}`
       )
       setShowToast(true)
-    } finally {
       setGoogleLoading(false)
     }
   }
@@ -267,52 +266,23 @@ const Auth: React.FC = () => {
       try {
         const currentUser = await getUser()
         if (currentUser) {
+          console.log('[Auth] User is authenticated:', currentUser)
           await refreshUser(currentUser.user_id)
-          setUser(currentUser)
-          setIsAuthed(true)
+          navigate(getRouteByUserType(currentUser.user_type), 'auth')
         } else {
-          await SocialLogin.logout({ provider: 'google' })
-          setUser(null)
-          setIsAuthed(false)
+          setShowAuth(true)
         }
       } catch (error) {
         console.error(error)
-        setIsAuthed(false)
-        setUser(null)
+        setShowAuth(true)
       }
     }
 
     checkAuth()
   }, [])
 
-  // Navigate after auth check
-  useEffect(() => {
-    if (isAuthed === null) return
-
-    const getRouteByUserType = (userType: string): string => {
-      const type = userType.toLowerCase()
-      const routeMap: Record<string, string> = {
-        admin: '/admin/dashboard',
-        staff: '/staff/home'
-      }
-      return routeMap[type] || '/user/home'
-    }
-
-    const targetRoute =
-      isAuthed && user ? getRouteByUserType(user.user_type) : '/auth'
-    if (isAuthed && user) {
-      setTimeout(() => {
-        navigate(targetRoute, 'auth')
-      }, 3000)
-    } else {
-      setTimeout(() => {
-        setShowAuth(true)
-      }, 3000)
-    }
-  }, [user, isAuthed, navigate])
-
   return (
-    <IonPage className='relative'>
+    <IonPage className='relative h-full'>
       <div
         className='relative overflow-hidden transition-all duration-1500'
         style={{
@@ -327,11 +297,13 @@ const Auth: React.FC = () => {
         />
         <div className='absolute inset-0 bg-gradient-to-b from-umak-blue/90 to-black/60' />
       </div>
-      <div className='absolute top-45 w-full flex items-center justify-center gap-10 animate-pulse transition-all duration-1500'>
+      <div className='absolute top-45 w-full flex items-center justify-center gap-10 transition-all duration-1000'>
         <div
-          className='flex justify-center items-center transition-transform duration-1500'
+          className='flex justify-center items-center transition-all duration-1000 animate-pulse'
           style={{
-            transform: showAuth ? 'translateX(-200px)' : 'translateX(0)'
+            transform: showAuth ? 'translateX(-200px)' : 'translateX(0)',
+            opacity: showAuth ? 0 : 1,
+            transition: 'transform 1000ms ease, opacity 1000ms ease'
           }}
         >
           <IonImg
@@ -341,9 +313,11 @@ const Auth: React.FC = () => {
           />
         </div>
         <div
-          className='flex justify-center items-center transition-transform duration-1500'
+          className='flex justify-center items-center transition-all duration-1000 animate-pulse'
           style={{
-            transform: showAuth ? 'translateX(200px)' : 'translateX(0)'
+            transform: showAuth ? 'translateX(200px)' : 'translateX(0)',
+            opacity: showAuth ? 0 : 1,
+            transition: 'transform 1000ms ease, opacity 1000ms ease'
           }}
         >
           <IonImg

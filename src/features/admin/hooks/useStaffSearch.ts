@@ -91,6 +91,7 @@ export function useStaffSearch (): UseStaffSearchReturn {
 
       // Security check - verify admin access
       const currentUser = await getUser()
+      console.log('Current User in useStaffSearch:', currentUser)
       const isAllowed =
         currentUser?.user_type === 'Admin' || currentUser?.user_type === 'Staff'
       const isAdmin = currentUser?.user_type === 'Admin'

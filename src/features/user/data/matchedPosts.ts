@@ -52,22 +52,23 @@ export async function listMatchedPosts (
     }
 
     return (data ?? []).map((r: any) => ({
+      item_id: r.item_id,
+      post_id: r.post_id, // integer
       user_id: r.poster_id,
       username: r.poster_name,
-      item_name: r.item_name,
       profilepicture_url: r.profile_picture_url,
+      item_name: r.item_name,
       item_image_url: r.item_image_url,
       item_description: r.item_description,
       item_status: r.item_status,
       accepted_on_date: r.accepted_on_date,
+      submission_date: r.submission_date,
+      item_type: r.item_type,
+      post_status: r.post_status,
       category: r.category,
       last_seen_at: formatTimestamp(r.last_seen_at),
       last_seen_location: r.last_seen_location,
       is_anonymous: r.is_anonymous,
-      post_id: r.post_id,
-      submission_date: r.submission_date,
-      item_type: r.item_type,
-      post_status: r.post_status,
       accepted_by_staff_name: r.accepted_by_staff_name,
       accepted_by_staff_email: r.accepted_by_staff_email,
       claimed_by_name: r.claimed_by_name,
@@ -76,6 +77,8 @@ export async function listMatchedPosts (
       claimed_at: r.claimed_at,
       claim_processed_by_staff_id: r.claim_processed_by_staff_id,
       claim_id: r.claim_id
+      // Add any other missing PublicPost fields here, e.g.:
+      // location, tags, etc. (if present in r)
     }))
   } catch (error) {
     console.error('Exception in listMatchedPosts:', error)
@@ -120,22 +123,23 @@ export async function refreshMatchedPosts (
     }
 
     return (data ?? []).map((r: any) => ({
+      item_id: r.item_id,
+      post_id: r.post_id, // integer
       user_id: r.poster_id,
       username: r.poster_name,
-      item_name: r.item_name,
       profilepicture_url: r.profile_picture_url,
+      item_name: r.item_name,
       item_image_url: r.item_image_url,
       item_description: r.item_description,
       item_status: r.item_status,
       accepted_on_date: r.accepted_on_date,
+      submission_date: r.submission_date,
+      item_type: r.item_type,
+      post_status: r.post_status,
       category: r.category,
       last_seen_at: formatTimestamp(r.last_seen_at),
       last_seen_location: r.last_seen_location,
       is_anonymous: r.is_anonymous,
-      post_id: r.post_id,
-      submission_date: r.submission_date,
-      item_type: r.item_type,
-      post_status: r.post_status,
       accepted_by_staff_name: r.accepted_by_staff_name,
       accepted_by_staff_email: r.accepted_by_staff_email,
       claimed_by_name: r.claimed_by_name,
@@ -144,6 +148,8 @@ export async function refreshMatchedPosts (
       claimed_at: r.claimed_at,
       claim_processed_by_staff_id: r.claim_processed_by_staff_id,
       claim_id: r.claim_id
+      // Add any other missing PublicPost fields here, e.g.:
+      // location, tags, etc. (if present in r)
     }))
   } catch (error) {
     console.error('Exception in refreshMatchedPosts:', error)

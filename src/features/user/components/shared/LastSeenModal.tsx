@@ -16,6 +16,7 @@ interface LastSeenModalProps {
   showTime?: boolean
   hasSelectedDate?: boolean
   onClear?: () => void
+  text?: string
 }
 
 const LastSeenModal: React.FC<LastSeenModalProps> = ({
@@ -24,7 +25,8 @@ const LastSeenModal: React.FC<LastSeenModalProps> = ({
   isRequired = false,
   showTime = true,
   hasSelectedDate = false,
-  onClear
+  onClear,
+  text
 }) => {
   const datetime = useRef<null | HTMLIonDatetimeElement>(null)
   const modalRef = useRef<null | HTMLIonModalElement>(null)
@@ -44,7 +46,7 @@ const LastSeenModal: React.FC<LastSeenModalProps> = ({
 
   return (
     <div className='mb-4'>
-      <FormSectionHeader header='Last Seen' isRequired={isRequired} />
+      <FormSectionHeader header={text || 'Last Seen'} isRequired={isRequired} />
       <div className='flex flex-col space-x-3'>
         {/* Date & Time Picker */}
         <div className='flex flex-row justify-start space-x-5 items-center'>

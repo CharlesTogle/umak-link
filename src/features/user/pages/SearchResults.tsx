@@ -1,12 +1,4 @@
-import {
-  useEffect,
-  useRef,
-  memo,
-  useState,
-  useCallback,
-  type MouseEventHandler
-} from 'react'
-import { IonSearchbar } from '@ionic/react'
+import { useEffect, useState, useCallback } from 'react'
 import { Keyboard } from '@capacitor/keyboard'
 import { usePostFetching } from '@/shared/hooks/usePostFetching'
 import { useSearchContext } from '@/shared/contexts/SearchContext'
@@ -14,36 +6,24 @@ import { useNavigation } from '@/shared/hooks/useNavigation'
 import { refreshByIds } from '@/features/posts/data/postsRefresh'
 import { listPostsByIds } from '@/features/posts/data/posts'
 import { createPostCache } from '@/features/posts/data/postsCache'
-import Header from '@/shared/components/Header'
 import PostList from '@/shared/components/PostList'
 import CatalogPostSkeleton from '@/shared/components/CatalogPostSkeleton'
 import type { PublicPost } from '@/features/posts/types/post'
-
-const CatalogHeader = memo(
-  ({ handleClick }: { handleClick: MouseEventHandler }) => {
-    const searchRef = useRef<HTMLIonSearchbarElement>(null)
-    return (
-      <Header logoShown={true}>
-        <IonSearchbar
-          ref={searchRef}
-          onClick={handleClick}
-          placeholder='Search'
-          showClearButton='never'
-          style={
-            {
-              ['--border-radius']: '0.5rem'
-            } as React.CSSProperties
-          }
-        />
-      </Header>
-    )
-  }
-)
+import { HeaderWithSearchBar } from '@/shared/components/HeaderVariants'
 
 export default function SearchResults () {
   const { searchResultPostIds: postIds, setSearchResults } = useSearchContext()
   const { navigate } = useNavigation()
   const [loading, setLoading] = useState(true)
+  const [searchValue, setSearchValue] = useState('')
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const q = params.get('q')
+    if (q) {
+      setSearchValue(decodeURIComponent(q))
+    }
+  }, [])
   const listFn = async (
     excludeIds: string[] = [],
     limit = 5
@@ -118,7 +98,7 @@ export default function SearchResults () {
 
   return (
     <>
-      <CatalogHeader handleClick={handleSearchBarClick} />
+      <HeaderWithSearchBar handleClick={handleSearchBarClick} />
       {loading ? (
         <div className='flex flex-col gap-4 px-4 py-2'>
           {[...Array(3)].map((_, index) => (
@@ -140,7 +120,14 @@ export default function SearchResults () {
           variant='search'
           children={
             <div className='px-4 py-2 text-sm text-gray-600'>
-              Showing all search results
+              {searchValue ? (
+                <>
+                  Search results for:{' '}
+                  <span className='font-semibold'>"{searchValue}"</span>
+                </>
+              ) : (
+                'Showing all search results'
+              )}
             </div>
           }
         />

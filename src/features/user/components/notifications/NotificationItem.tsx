@@ -11,7 +11,8 @@ import {
   megaphoneOutline,
   closeCircleOutline,
   hourglassOutline,
-  trashOutline
+  trashOutline,
+  informationCircleOutline
 } from 'ionicons/icons'
 import { useNavigation } from '@/shared/hooks/useNavigation'
 import { useNotificationContext } from '@/shared/contexts/NotificationContext'
@@ -61,7 +62,7 @@ const iconForType = (type: NotificationType) => {
     case 'accept':
       return { icon: checkmarkDoneCircleOutline, colorClass: 'text-green-600' }
     case 'info':
-      return { icon: shieldOutline, colorClass: 'text-blue-600' }
+      return { icon: informationCircleOutline, colorClass: 'text-blue-600' }
     case 'message':
       return { icon: mailOutline, colorClass: 'text-umak-blue' }
     case 'rejection':
@@ -69,7 +70,7 @@ const iconForType = (type: NotificationType) => {
     case 'post_accepted':
       return { icon: checkmarkDoneCircleOutline, colorClass: 'text-green-600' }
     case 'global_announcement':
-      return { icon: megaphoneOutline, colorClass: 'text-umak-blue' }
+      return { icon: megaphoneOutline, colorClass: 'text-umak-red' }
     case 'progress':
       return { icon: hourglassOutline, colorClass: 'text-amber-600' }
     case 'delete':

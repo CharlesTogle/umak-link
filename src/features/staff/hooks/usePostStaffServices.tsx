@@ -147,7 +147,7 @@ export function usePostActionsStaffServices () {
       // Log the action
       await insertAuditLog({
         user_id: currentUser.user_id,
-        action_type: 'Create Post',
+        action_type: 'create_post',
         details: {
           action: 'Create Post',
           post_id: postId,

@@ -19,7 +19,7 @@ export async function sharePost (
     if (navigator.share) {
       await navigator.share({
         title: 'Check out this post',
-        text: 'Found this interesting post on UMatch',
+        text: 'Found this interesting post on UMak Link',
         url: shareUrl
       })
       return { success: true, method: 'native' }
@@ -47,5 +47,9 @@ export function getPostShareUrl (
   postId: string,
   domain: 'user' | 'staff' | 'admin' = 'user'
 ): string {
-  return `${window.location.origin}/${domain}/post/view/${postId}`
+  if (domain === 'staff') {
+    return `${window.location.origin}/${domain}/post-record/view/${postId}`
+  } else {
+    return `${window.location.origin}/${domain}/post/view/${postId}`
+  }
 }

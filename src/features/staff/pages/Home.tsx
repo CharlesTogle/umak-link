@@ -191,17 +191,11 @@ export default function Home () {
       }
 
       // Fetch newest posts in background
-      fetchNewPosts()
-        .then(() => {
-          setToastMessage('Posts updated')
-          setToastColor('success')
-          setShowToast(true)
-        })
-        .catch(() => {
-          setToastMessage('Failed to fetch new posts')
-          setToastColor('danger')
-          setShowToast(true)
-        })
+      fetchNewPosts().catch(() => {
+        setToastMessage('Failed to refresh posts')
+        setToastColor('danger')
+        setShowToast(true)
+      })
     }
 
     window.addEventListener('app:scrollToTop', handler as EventListener)

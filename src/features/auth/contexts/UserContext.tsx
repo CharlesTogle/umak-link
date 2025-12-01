@@ -65,13 +65,15 @@ export function UserProvider ({ children }: { children: ReactNode }) {
     // Try to get user from Supabase auth
     try {
       const { data: authData, error: authError } = await supabase.auth.getUser()
-
       if (authError || !authData.user) {
         return null
       }
 
+      console.log('[UserContext] Supabase auth user ID:', authData.user.id)
+
       // Fetch user data from user_table
       const userData = await fetchUser(authData.user.id)
+      console.log('[UserContext] Fetched user data:', userData)
 
       if (!userData) {
         throw new Error('User data not found in database')

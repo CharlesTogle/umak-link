@@ -1,4 +1,4 @@
-import React, { lazy, memo, useState } from 'react'
+import React, { lazy, memo, useState, useRef, useEffect } from 'react'
 const LazyImage = lazy(() => import('@/shared/components/LazyImage'))
 import {
   IonCard,
@@ -10,13 +10,11 @@ import {
   IonButtons,
   IonButton,
   IonText,
-  IonToast,
   IonSpinner
 } from '@ionic/react'
 import { ellipsisVertical, personCircle } from 'ionicons/icons'
 import { formatTimestamp } from '@/shared/utils/formatTimeStamp'
 import { ChoiceModal } from './ChoiceModal'
-import { useUser } from '@/features/auth/contexts/UserContext'
 import {
   handleMatch as performMatch,
   handleRejectSubmit,
@@ -45,6 +43,8 @@ export type CatalogPostProps = {
   user_id?: string
   category?: string
   submittedOn?: string
+  currentUserId?: string
+  onShowToast?: (message: string, color: 'success' | 'danger') => void
 }
 
 const CatalogPost: React.FC<CatalogPostProps> = ({
@@ -67,7 +67,9 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
   setPosts,
   user_id,
   category,
-  submittedOn = 'MM/DD/YYYY 00:00 AM/PM'
+  submittedOn = 'MM/DD/YYYY 00:00 AM/PM',
+  currentUserId,
+  onShowToast
 }) => {
   const getStatusColorClass = (status: string) => {
     switch (status.toLowerCase()) {
@@ -95,20 +97,14 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
   const normalizedStatus = (itemStatus || '').toLowerCase()
   const statusColorClass = getStatusColorClass(normalizedStatus)
 
-  const { user } = useUser()
   const [isProcessing, setIsProcessing] = useState(false)
-  const [toast, setToast] = useState<{
-    show: boolean
-    message: string
-    color: string
-  }>({
-    show: false,
-    message: '',
-    color: 'success'
-  })
+  const rejectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const acceptTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const matchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [showRejectModal, setShowRejectModal] = useState(false)
 
   // Staff action handlers
+
   const handleRejectClick = (e: React.MouseEvent) => {
     e.stopPropagation()
     if (!postId || isProcessing) return
@@ -116,68 +112,80 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
   }
 
   const handleRejectChoice = async (choice: string) => {
-    if (!postId || isProcessing || !user_id || !user?.user_id) return
+    if (!postId || isProcessing || !user_id || !currentUserId) return
     setShowRejectModal(false)
-    setIsProcessing(true)
 
-    const result = await handleRejectSubmit(
-      postId,
-      user_id,
-      itemName,
-      choice,
-      user.user_id
-    )
-
-    setIsProcessing(false)
-    if (result.success) {
-      if (setPosts) {
-        setPosts((prev: any[]) => prev.filter((p: any) => p.post_id !== postId))
-      }
-      setToast({
-        show: true,
-        message: 'Post rejected successfully',
-        color: 'success'
-      })
-    } else {
-      setToast({
-        show: true,
-        message: result.error || 'Failed to reject post',
-        color: 'danger'
-      })
+    if (rejectTimeoutRef.current) {
+      clearTimeout(rejectTimeoutRef.current)
     }
+
+    rejectTimeoutRef.current = setTimeout(async () => {
+      setIsProcessing(true)
+
+      const result = await handleRejectSubmit(
+        postId,
+        user_id,
+        itemName,
+        choice,
+        currentUserId
+      )
+
+      setIsProcessing(false)
+      if (result.success) {
+        if (setPosts) {
+          setPosts((prev: any[]) =>
+            prev.filter((p: any) => p.post_id !== postId)
+          )
+        }
+        onShowToast?.('Post rejected successfully', 'success')
+      } else {
+        onShowToast?.(result.error || 'Failed to reject post', 'danger')
+      }
+
+      if (rejectTimeoutRef.current) {
+        clearTimeout(rejectTimeoutRef.current)
+        rejectTimeoutRef.current = null
+      }
+    }, 500)
   }
 
   const handleAcceptClick = async (e: React.MouseEvent) => {
     e.stopPropagation()
-    if (!postId || isProcessing || !user_id || !user?.user_id) return
 
-    setIsProcessing(true)
-    const result = await handleAccept(
-      postId,
-      user_id,
-      itemName,
-      description,
-      imageUrl || null,
-      user.user_id
-    )
-    setIsProcessing(false)
+    if (!postId || isProcessing || !user_id || !currentUserId) return
 
-    if (result.success) {
-      if (setPosts) {
-        setPosts((prev: any[]) => prev.filter((p: any) => p.post_id !== postId))
-      }
-      setToast({
-        show: true,
-        message: 'Post accepted successfully',
-        color: 'success'
-      })
-    } else {
-      setToast({
-        show: true,
-        message: result.error || 'Failed to accept post',
-        color: 'danger'
-      })
+    if (acceptTimeoutRef.current) {
+      clearTimeout(acceptTimeoutRef.current)
     }
+
+    acceptTimeoutRef.current = setTimeout(async () => {
+      setIsProcessing(true)
+      const result = await handleAccept(
+        postId,
+        user_id,
+        itemName,
+        description,
+        imageUrl || null,
+        currentUserId
+      )
+      setIsProcessing(false)
+
+      if (result.success) {
+        if (setPosts) {
+          setPosts((prev: any[]) =>
+            prev.filter((p: any) => p.post_id !== postId)
+          )
+        }
+        onShowToast?.('Post accepted successfully', 'success')
+      } else {
+        onShowToast?.(result.error || 'Failed to accept post', 'danger')
+      }
+
+      if (acceptTimeoutRef.current) {
+        clearTimeout(acceptTimeoutRef.current)
+        acceptTimeoutRef.current = null
+      }
+    }, 500)
   }
 
   // Staff-pending variant handlers for Match and Delete
@@ -185,34 +193,60 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
     e.stopPropagation()
     if (!postId || isProcessing || !user_id) return
 
-    setIsProcessing(true)
-    const result = await performMatch(
-      postId,
-      itemName,
-      description,
-      imageUrl || null,
-      user_id
-    )
-    setIsProcessing(false)
-
-    if (result.success) {
-      // Remove post from home page immediately
-      if (setPosts) {
-        setPosts((prev: any[]) => prev.filter((p: any) => p.post_id !== postId))
-      }
-      setToast({
-        show: true,
-        message: 'Post scheduled for matching',
-        color: 'success'
-      })
-    } else {
-      setToast({
-        show: true,
-        message: result.error || 'Failed to schedule matching',
-        color: 'danger'
-      })
+    if (matchTimeoutRef.current) {
+      clearTimeout(matchTimeoutRef.current)
     }
+
+    matchTimeoutRef.current = setTimeout(async () => {
+      setIsProcessing(true)
+      const result = await performMatch(
+        currentUserId || '',
+        postId,
+        itemName,
+        description,
+        imageUrl || null,
+        user_id
+      )
+      setIsProcessing(false)
+
+      if (result.success) {
+        // Remove post from home page immediately
+        if (setPosts) {
+          setPosts((prev: any[]) =>
+            prev.filter((p: any) => p.post_id !== postId)
+          )
+        }
+        onShowToast?.(
+          "Finding Similar Items in progress, we'll notify the owner once it has found similar items",
+          'success'
+        )
+      } else {
+        onShowToast?.(result.error || 'Failed to schedule matching', 'danger')
+      }
+
+      if (matchTimeoutRef.current) {
+        clearTimeout(matchTimeoutRef.current)
+        matchTimeoutRef.current = null
+      }
+    }, 500)
   }
+
+  useEffect(() => {
+    return () => {
+      if (rejectTimeoutRef.current) {
+        clearTimeout(rejectTimeoutRef.current)
+        rejectTimeoutRef.current = null
+      }
+      if (acceptTimeoutRef.current) {
+        clearTimeout(acceptTimeoutRef.current)
+        acceptTimeoutRef.current = null
+      }
+      if (matchTimeoutRef.current) {
+        clearTimeout(matchTimeoutRef.current)
+        matchTimeoutRef.current = null
+      }
+    }
+  }, [])
 
   return (
     <>
@@ -416,14 +450,6 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
         choices={Array.from(rejectReasons)}
         onSubmit={handleRejectChoice}
         onDidDismiss={() => setShowRejectModal(false)}
-      />
-
-      <IonToast
-        isOpen={toast.show}
-        onDidDismiss={() => setToast({ ...toast, show: false })}
-        message={toast.message}
-        duration={2000}
-        color={toast.color}
       />
     </>
   )

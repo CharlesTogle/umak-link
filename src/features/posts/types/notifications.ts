@@ -25,7 +25,6 @@ export interface NotificationData {
   data?: any
   sent_to?: string | null
   sent_by?: string | null
-  item_id?: string | null
   image_url?: string | null
 }
 

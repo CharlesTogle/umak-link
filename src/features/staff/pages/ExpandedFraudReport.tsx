@@ -2,12 +2,14 @@ import { memo, useEffect, useState, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { useNavigation } from '@/shared/hooks/useNavigation'
 import { supabase } from '@/shared/lib/supabase'
+import { getPostRecordByItemId } from '@/features/posts/data/posts'
+import type { PostRecordDetails } from '@/features/posts/data/posts'
+import type { PublicPost } from '@/features/posts/types/post'
 import {
   IonContent,
   IonCard,
   IonCardContent,
   IonAvatar,
-  IonImg,
   IonIcon,
   IonToast,
   IonText,
@@ -26,7 +28,10 @@ import { parseReasonForReporting } from '../utils/parseReasonForReporting'
 import { isConnected } from '@/shared/utils/networkCheck'
 import { useCallback } from 'react'
 import { useUser } from '@/features/auth/contexts/UserContext'
+import { type User } from '@/features/auth/contexts/UserContext'
 import PostSkeleton from '@/features/posts/components/PostSkeleton'
+import { sendFraudReportAcceptedEmail } from '@/shared/utils/emailService'
+import PostCard from '@/features/posts/components/PostCard'
 
 type RejectReasonKey =
   | 'insufficient_evidence'
@@ -52,10 +57,12 @@ const REJECT_REASONS: { key: RejectReasonKey; label: string }[] = [
 export default memo(function ExpandedFraudReport () {
   const { reportId } = useParams<{ reportId: string }>()
   const { navigate } = useNavigation()
-  const { user } = useUser()
 
   const [report, setReport] = useState<FraudReportPublic | null>(null)
   const [loading, setLoading] = useState(false)
+  const [linkedMissingItem, setLinkedMissingItem] = useState<
+    PublicPost | PostRecordDetails | null
+  >(null)
   const [toast, setToast] = useState<{ show: boolean; message: string }>({
     show: false,
     message: ''
@@ -80,7 +87,8 @@ export default memo(function ExpandedFraudReport () {
   const [showAcceptConfirmModal, setShowAcceptConfirmModal] = useState(false)
   const [closeReportConfirmed, setCloseReportConfirmed] = useState(false)
   const [showCloseChoiceModal, setShowCloseChoiceModal] = useState(false)
-
+  const { getUser } = useUser()
+  const [user, setUser] = useState<User | any>(null)
   // Debounce refs
   const acceptTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const rejectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -88,10 +96,23 @@ export default memo(function ExpandedFraudReport () {
   const reviewTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const deleteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const rejectChoices = REJECT_REASONS.map(r => r.label)
-  const closeReportChoices = [
-    'Yes, delete the claim and set item as unclaimed',
-    'No, keep the claim and keep item as claimed'
-  ]
+  const closeReportChoices = linkedMissingItem
+    ? [
+        'Yes, delete the claim and set item as unclaimed. The linked missing item will be reset to lost status.',
+        'No, keep the claim and keep item as claimed'
+      ]
+    : [
+        'Yes, delete the claim and set item as unclaimed',
+        'No, keep the claim and keep item as claimed'
+      ]
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      const u = await getUser()
+      setUser(u)
+    }
+    fetchUser()
+  }, [])
 
   const { details, reason } = parseReasonForReporting(
     report?.reason_for_reporting || ''
@@ -119,7 +140,19 @@ export default memo(function ExpandedFraudReport () {
         setLoading(false)
         return
       }
-      if (mounted) setReport(r)
+      if (mounted) {
+        setReport(r)
+
+        // Fetch linked missing item if it exists
+        if (r.linked_lost_item_id) {
+          const missingItem = await getPostRecordByItemId(r.linked_lost_item_id)
+          if (missingItem && mounted) {
+            setLinkedMissingItem(missingItem)
+          }
+        } else {
+          setLinkedMissingItem(null)
+        }
+      }
     } catch (err) {
       console.error('Error loading fraud report', err)
       setToast({ show: true, message: 'Failed to load report' })
@@ -166,6 +199,31 @@ export default memo(function ExpandedFraudReport () {
         })
 
         if (result.success) {
+          // Send email notification to claimer
+          if (
+            user &&
+            report.claimer_school_email &&
+            report.claimer_name &&
+            report.reporter_name
+          ) {
+            const emailResult = await sendFraudReportAcceptedEmail({
+              claimerEmail: report.claimer_school_email,
+              claimerName: report.claimer_name,
+              postTitle: report.item_name || 'Unknown Item',
+              reporterName: report.reporter_name,
+              staffName: user.user_name || 'Staff',
+              staffUuid: user.user_id
+            })
+
+            if (!emailResult.success) {
+              console.error(
+                'Failed to send email notification:',
+                emailResult.error
+              )
+              // Don't fail the entire operation if email fails
+            }
+          }
+
           setToast({
             show: true,
             message: 'Fraud report opened'
@@ -183,7 +241,7 @@ export default memo(function ExpandedFraudReport () {
       } finally {
         setIsProcessing(false)
       }
-    }, 300) // 300ms debounce
+    }, 500) // 500ms debounce
   }
 
   const handleAcceptClick = () => {
@@ -234,7 +292,7 @@ export default memo(function ExpandedFraudReport () {
       } finally {
         setIsProcessing(false)
       }
-    }, 300) // 300ms debounce
+    }, 500) // 500ms debounce
   }
 
   const handleCloseReport = () => {
@@ -286,7 +344,7 @@ export default memo(function ExpandedFraudReport () {
         setIsProcessing(false)
         setCloseReportConfirmed(false)
       }
-    }, 300) // 300ms debounce
+    }, 500) // 500ms debounce
   }
 
   const handleReviewReport = async () => {
@@ -320,7 +378,7 @@ export default memo(function ExpandedFraudReport () {
       } finally {
         setIsProcessing(false)
       }
-    }, 300) // 300ms debounce
+    }, 500) // 500ms debounce
   }
 
   const handleDeleteReport = async () => {
@@ -355,7 +413,7 @@ export default memo(function ExpandedFraudReport () {
       } finally {
         setIsProcessing(false)
       }
-    }, 300) // 300ms debounce
+    }, 500) // 500ms debounce
   }
 
   const getStatusColor = () => {
@@ -476,47 +534,53 @@ export default memo(function ExpandedFraudReport () {
                   )}
                 </div>
 
-                {/* Claimer preview card */}
-                <IonCard className='rounded-2xl mt-1'>
-                  <IonCardContent>
-                    <div className='flex flex-row items-center gap-2'>
-                      <IonAvatar slot='start' className='w-8 h-8'>
-                        {report?.poster_profile_picture_url ? (
-                          <LazyImage
-                            src={report.poster_profile_picture_url}
-                            alt={`${report.poster_name || 'poster'} profile`}
-                            className='w-full h-full object-cover rounded-full'
-                          />
-                        ) : (
-                          <div className='w-full h-full grid place-items-center bg-slate-100 text-slate-500 rounded-full'>
-                            <IonIcon icon={personCircle} className='text-2xl' />
-                          </div>
-                        )}
-                      </IonAvatar>
-                      <div className='font-medium font-default-font text-umak-blue truncate'>
-                        {report?.poster_name || 'Claimer'}
-                      </div>
-                    </div>
-                    <div className='h-px w-full my-2 bg-black'></div>
-                    <div className='flex justify-start items-center mt-3'>
-                      <div className='aspect-[16/13] overflow-hidden rounded-xl max-w-30 border-2 border-slate-900'>
-                        <IonImg
-                          className='w-full h-full object-cover'
-                          src={report?.item_image_url || undefined}
-                          alt={report?.item_name || ''}
-                        />
-                      </div>
-                      <div className='ml-4 max-w-1/2 max-h-2/3 overflow-hidden font-default-font font-bold text-black'>
-                        <p className='font-default-font font-bold! text-lg! truncate!'>
-                          {report?.item_name}
-                        </p>
-                        <p className='text-slate-900 pb-2 truncate!'>
-                          {report?.item_description}
-                        </p>
-                      </div>
-                    </div>
-                  </IonCardContent>
-                </IonCard>
+                {/* Reported Item */}
+                <div>
+                  <p className='font-bold! text-lg! text-black!'>
+                    Reported Item
+                  </p>
+                  <PostCard
+                    imgUrl={report?.item_image_url || ''}
+                    title={report?.item_name || ''}
+                    description={report?.item_description || ''}
+                    owner={report?.poster_name || 'Poster'}
+                    owner_profile_picture_url={
+                      report?.poster_profile_picture_url
+                    }
+                    onClick={() =>
+                      navigate(`/staff/post-records/${report.post_id}`)
+                    }
+                  />
+                </div>
+
+                {/* Linked Missing Item */}
+                {linkedMissingItem && (
+                  <div className='mt-4'>
+                    <p className='font-bold! text-lg! text-gray-900 mb-2'>
+                      Linked Missing Item
+                    </p>
+                    <PostCard
+                      imgUrl={linkedMissingItem.item_image_url || ''}
+                      title={linkedMissingItem.item_name}
+                      description={linkedMissingItem.item_description || ''}
+                      owner={
+                        'poster_name' in linkedMissingItem
+                          ? linkedMissingItem.poster_name
+                          : linkedMissingItem.username
+                      }
+                      owner_profile_picture_url={
+                        'poster_profile_picture_url' in linkedMissingItem
+                          ? linkedMissingItem.poster_profile_picture_url
+                          : linkedMissingItem.profilepicture_url
+                      }
+                      onClick={() =>
+                        navigate(
+                          `/staff/post-records/${linkedMissingItem.post_id}`
+                        )
+                      }
+                    />
+                  </div>
+                )}
 
                 {/* Proof of Report */}
                 {report.proof_image_url && (
@@ -732,14 +796,18 @@ export default memo(function ExpandedFraudReport () {
         isOpen={showCloseChoiceModal}
         header='Close Report - Claim Action'
         subheading1='Do you want to delete the claim record?'
-        subheading2='If you choose to delete, the item will be set as unclaimed.'
+        subheading2={
+          linkedMissingItem
+            ? 'If you choose to delete, the found item will be set as unclaimed and the linked missing item will be reset to lost status.'
+            : 'If you choose to delete, the item will be set as unclaimed.'
+        }
         choices={closeReportChoices}
         onSubmit={handleCloseReportSubmit}
         onDidDismiss={() => setShowCloseChoiceModal(false)}
       />
       <ConfirmationModal
         isOpen={showAcceptConfirmModal}
-        heading='Accept Report?'
+        heading='Accept report?'
         subheading="Once accepted by you, other staff won't be allowed to accept this report. An email will be sent to the claimer."
         onSubmit={handleAccept}
         onCancel={() => setShowAcceptConfirmModal(false)}

@@ -40,6 +40,10 @@ export default function StaffSearchItem () {
   })
   const [image, setImage] = useState<File | null>(null)
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([])
+  const [selectedPostStatuses, setSelectedPostStatuses] = useState<string[]>([])
+  const [claimFromDate, setClaimFromDate] = useState<string | null>(null)
+  const [claimToDate, setClaimToDate] = useState<string | null>(null)
   const [isSearching, setIsSearching] = useState(false)
   const [searchProgress, setSearchProgress] = useState({ current: 0, total: 0 })
   const [showToast, setShowToast] = useState(false)
@@ -121,10 +125,14 @@ export default function StaffSearchItem () {
       meridian: hasSelectedDate ? meridian : null,
       locationDetails,
       selectedCategories,
+      selectedStatuses,
+      selectedPostStatuses,
       image,
       onProgress: (current, total) => {
         setSearchProgress({ current, total })
-      }
+      },
+      claimFromDate,
+      claimToDate
     })
 
     if (!response.success) {
@@ -134,7 +142,8 @@ export default function StaffSearchItem () {
       return
     }
 
-    navigate('/staff/search/results')
+    const encodedTerm = encodeURIComponent(term)
+    navigate(`/staff/search/results?q=${encodedTerm}`)
   }
 
   // Handle advanced search submission
@@ -149,6 +158,10 @@ export default function StaffSearchItem () {
       meridian: hasSelectedDate ? meridian : null,
       locationDetails,
       selectedCategories,
+      selectedStatuses,
+      selectedPostStatuses,
+      claimFromDate,
+      claimToDate,
       image,
       onProgress: (current, total) => {
         setSearchProgress({ current, total })
@@ -167,8 +180,8 @@ export default function StaffSearchItem () {
       addToHistory(searchValue.trim())
     }
 
-    navigate('/staff/search/results')
-    setIsSearching(false)
+    const encodedValue = encodeURIComponent(searchValue)
+    navigate(`/staff/search/results?q=${encodedValue}`)
   }
 
   return (
@@ -228,7 +241,16 @@ export default function StaffSearchItem () {
             setImage={setImage}
             selectedCategories={selectedCategories}
             setSelectedCategories={setSelectedCategories}
+            selectedStatuses={selectedStatuses}
+            setSelectedStatuses={setSelectedStatuses}
+            selectedPostStatuses={selectedPostStatuses}
+            setSelectedPostStatuses={setSelectedPostStatuses}
+            claimFromDate={claimFromDate}
+            setClaimFromDate={setClaimFromDate}
+            claimToDate={claimToDate}
+            setClaimToDate={setClaimToDate}
             handleSearch={handleAdvancedSearch}
+            variant='staff'
           />
         </IonContent>
       )}

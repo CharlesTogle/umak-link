@@ -8,7 +8,7 @@ import {
   IonCard,
   IonCardContent
 } from '@ionic/react'
-import { funnelOutline, timeOutline } from 'ionicons/icons'
+import { funnelOutline } from 'ionicons/icons'
 
 export type FilterOption<T = string> = {
   value: T
@@ -69,17 +69,11 @@ export default function FilterSortBar<T extends string = string> ({
   filterModalSubtitle,
   hasFilterClear = false,
   hasFilterEnter = false,
-  sortOptions,
-  activeSort,
-  onSortChange,
-  sortModalTitle = 'Sort',
-  sortButtonLabel,
   className = '',
   breakpoints,
   initialBreakpoint
 }: FilterSortBarProps<T>) {
   const [isFilterOpen, setIsFilterOpen] = useState(false)
-  const [isSortOpen, setIsSortOpen] = useState(false)
 
   // Determine if we're using categories or flat list
   const usingCategories = !!filterCategories && filterCategories.length > 0
@@ -138,11 +132,6 @@ export default function FilterSortBar<T extends string = string> ({
     setIsFilterOpen(false)
   }
 
-  const handleSortClick = (value: string) => {
-    onSortChange(value)
-    setIsSortOpen(false)
-  }
-
   const FilterChip = ({
     option,
     categoryName
@@ -168,9 +157,7 @@ export default function FilterSortBar<T extends string = string> ({
     )
   }
 
-  // Find current sort option for button label
-  const currentSortOption = sortOptions.find(opt => opt.value === activeSort)
-  const displaySortLabel = sortButtonLabel || currentSortOption?.label || 'Sort'
+  // Find current sort option for button
 
   return (
     <>
@@ -193,18 +180,6 @@ export default function FilterSortBar<T extends string = string> ({
             >
               <IonIcon icon={funnelOutline} slot='start' className='mr-2' />
               Filter
-            </IonButton>
-            <IonButton
-              fill='outline'
-              onClick={() => setIsSortOpen(true)}
-              className='rounded-full'
-              style={{
-                '--border-color': 'var(--color-umak-blue)',
-                '--color': 'var(--color-umak-blue)'
-              }}
-            >
-              <IonIcon icon={timeOutline} slot='start' className='mr-2' />
-              {displaySortLabel}
             </IonButton>
           </div>
         </IonCardContent>
@@ -281,43 +256,6 @@ export default function FilterSortBar<T extends string = string> ({
               )}
             </div>
           )}
-        </div>
-      </IonModal>
-
-      {/* Sort Modal */}
-      <IonModal
-        isOpen={isSortOpen}
-        onDidDismiss={() => setIsSortOpen(false)}
-        backdropDismiss={true}
-        initialBreakpoint={0.2}
-        breakpoints={[0, 0.2, 0.35]}
-        className='font-default-font'
-        style={{ '--border-radius': '2rem' }}
-      >
-        <div className='flex flex-col items-center pb-4'>
-          <p className='my-4 text-base font-medium'>{sortModalTitle}</p>
-          <div className='flex w-full'>
-            {sortOptions.map(option => (
-              <button
-                key={option.value}
-                className='flex flex-col items-center justify-center w-full gap-2 py-6'
-                onClick={() => handleSortClick(option.value)}
-              >
-                {option.icon && (
-                  <IonIcon
-                    icon={option.icon}
-                    size='large'
-                    className='text-umak-blue'
-                  />
-                )}
-                <IonLabel
-                  className={activeSort === option.value ? 'font-semibold' : ''}
-                >
-                  {option.label}
-                </IonLabel>
-              </button>
-            ))}
-          </div>
         </div>
       </IonModal>
     </>

@@ -6,7 +6,7 @@ import { IonPage } from '@ionic/react'
 
 export default function AccountPage () {
   return (
-    <IonPage>
+    <IonPage className='h-full'>
       <Header logoShown={true} isProfileAndNotificationShown={true} />
       <UserCard />
       <div className='bg-default-bg pb-10 h-full'>

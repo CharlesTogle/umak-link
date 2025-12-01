@@ -1,10 +1,10 @@
-import { IonPage, IonContent } from '@ionic/react'
+import { IonContent } from '@ionic/react'
 import CatalogPostSkeleton from '../../../../shared/components/CatalogPostSkeleton'
 import Header from '@/shared/components/Header'
 
 export default function HomeSkeleton () {
   return (
-    <IonPage>
+    <div className='h-full'>
       <IonContent>
         <div className='h-screen overflow-y-hidden pointer-events-none'>
           <Header logoShown={true}></Header>
@@ -15,6 +15,6 @@ export default function HomeSkeleton () {
           </div>
         </div>
       </IonContent>
-    </IonPage>
+    </div>
   )
 }

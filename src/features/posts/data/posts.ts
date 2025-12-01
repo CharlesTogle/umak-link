@@ -33,6 +33,7 @@ export interface PostRecordDetails {
   poster_profile_picture_url: string | null
 
   // Claim details
+  claim_id: string | null
   claimer_name: string | null
   claimer_school_email: string | null
   claimer_contact_num: string | null
@@ -40,6 +41,8 @@ export interface PostRecordDetails {
   claim_processed_by_name: string | null
   claim_processed_by_email: string | null
   claim_processed_by_profile_picture_url: string | null
+  linked_lost_item_id: string | null
+  returned_at: string | null
 }
 
 export async function getTotalPostsCount (): Promise<number | null> {
@@ -55,7 +58,9 @@ export async function getTotalPostsCount (): Promise<number | null> {
   return count
 }
 
-export async function getMissingItem (itemId: string): Promise<PublicPost | null> {
+export async function getMissingItem (
+  itemId: string
+): Promise<PublicPost | null> {
   let query = supabase
     .from('post_public_view')
     .select(
@@ -249,6 +254,85 @@ export async function getPostFull (
     return data as PostRecordDetails
   } catch (error) {
     console.error('Exception in getPostFull:', error)
+    return null
+  }
+}
+
+export async function getPostRecordByItemId (
+  itemId: string
+): Promise<PublicPost | null> {
+  if (!itemId) return null
+
+  try {
+    const { data, error } = await supabase
+      .from('v_post_records_details')
+      .select('*')
+      .eq('item_id', itemId)
+      .single()
+
+    if (error) {
+      console.error('Error fetching post by item_id:', error)
+      return null
+    }
+
+    if (!data) return null
+
+    return data as PublicPost
+  } catch (error) {
+    console.error('Exception in getPostByItemId:', error)
+    return null
+  }
+}
+
+export async function getPostByItemId (
+  itemId: string
+): Promise<PublicPost | null> {
+  if (!itemId) return null
+
+  try {
+    const { data, error } = await supabase
+      .from('post_public_view')
+      .select('*')
+      .eq('item_id', itemId)
+      .single()
+
+    if (error) {
+      console.error('Error fetching post by item_id:', error)
+      return null
+    }
+
+    if (!data) return null
+
+    return data as PublicPost
+  } catch (error) {
+    console.error('Exception in getPostByItemId:', error)
+    return null
+  }
+}
+
+// Get found item post that has a specific missing item linked to it
+export async function getFoundPostByLinkedMissingItem (
+  missingItemId: string
+): Promise<PostRecordDetails | null> {
+  if (!missingItemId) return null
+
+  try {
+    const { data, error } = await supabase
+      .from('v_post_records_details')
+      .select('*')
+      .eq('linked_lost_item_id', missingItemId)
+      .single()
+
+    if (error) {
+      console.error('Error fetching found post by linked missing item:', error)
+      return null
+    }
+
+    if (!data) return null
+
+    return data as PostRecordDetails
+  } catch (error) {
+    console.error('Exception in getFoundPostByLinkedMissingItem:', error)
     return null
   }
 }

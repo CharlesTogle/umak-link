@@ -26,6 +26,7 @@ export async function refreshPublicPosts (
     .select(
       `
       post_id,
+      item_id,
       poster_name,
       poster_id,
       item_name,
@@ -61,6 +62,7 @@ export async function refreshPublicPosts (
 
   return (data ?? []).map((r: any) => ({
     user_id: r.poster_id,
+    item_id: r.item_id,
     username: r.poster_name,
     item_name: r.item_name,
     profilepicture_url: r.profile_picture_url,
@@ -87,7 +89,6 @@ export async function refreshPublicPosts (
   }))
 }
 
-// Refresh function for listStaffPosts - fetches posts by IDs using .in()
 export async function refreshStaffPosts (
   includeIds: string[]
 ): Promise<PublicPost[]> {
@@ -98,6 +99,7 @@ export async function refreshStaffPosts (
     .select(
       `
       post_id,
+      item_id,
       poster_name,
       poster_id,
       item_name,
@@ -130,6 +132,7 @@ export async function refreshStaffPosts (
 
   return (data ?? []).map((r: any) => ({
     user_id: r.poster_id,
+    item_id: r.item_id,
     username: r.poster_name,
     item_name: r.item_name,
     profilepicture_url: r.profile_picture_url,
@@ -168,6 +171,7 @@ export async function refreshOwnPosts (
     .select(
       `
       post_id,
+      item_id,
       poster_name,
       poster_id,
       item_name,
@@ -201,6 +205,7 @@ export async function refreshOwnPosts (
 
   return (data ?? []).map((r: any) => ({
     user_id: r.poster_id,
+    item_id: r.item_id,
     username: r.poster_name,
     item_name: r.item_name,
     profilepicture_url: r.profile_picture_url,
@@ -238,6 +243,7 @@ export function refreshByIds () {
       .select(
         `
       post_id,
+        item_id,
       poster_name,
       poster_id,
       item_name,
@@ -272,6 +278,7 @@ export function refreshByIds () {
 
     return (data ?? []).map((r: any) => ({
       user_id: r.poster_id,
+      item_id: r.item_id,
       username: r.poster_name,
       item_name: r.item_name,
       profilepicture_url: r.profile_picture_url,

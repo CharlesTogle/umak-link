@@ -16,7 +16,8 @@ import {
   IonActionSheet,
   IonFab,
   IonFabButton,
-  IonIcon
+  IonIcon,
+  IonLoading
 } from '@ionic/react'
 import { listOutline, documentTextOutline } from 'ionicons/icons'
 import { Keyboard } from '@capacitor/keyboard'
@@ -39,7 +40,9 @@ import { sharePost } from '@/shared/utils/shareUtils'
 import useNotifications from '@/features/user/hooks/useNotifications'
 import { add } from 'ionicons/icons'
 import { isConnected } from '@/shared/utils/networkCheck'
-import { IonLoading } from '@ionic/react'
+import { useUser } from '@/features/auth/contexts/UserContext'
+import { useAuditLogs } from '@/shared/hooks/useAuditLogs'
+import { ConfirmationModal } from '@/shared/components/ConfirmationModal'
 // Header Component
 const PostRecordsHeader = memo(
   ({ handleClick }: { handleClick: MouseEventHandler }) => {
@@ -73,10 +76,15 @@ export default function PostRecords () {
   const [sortDir, setSortDir] = useState<SortDirection>('desc')
   const [showActions, setShowActions] = useState(false)
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null)
+  const [showNotifyOwnerModal, setShowNotifyOwnerModal] = useState(false)
   const [isRefreshingContent, setRefreshingContent] = useState<boolean>(false)
+  const [isNotifyingOwner, setIsNotifyingOwner] = useState<boolean>(false)
   const contentRef = useRef<HTMLIonContentElement | null>(null)
+  const lastNotifyTimeRef = useRef<Map<string, number>>(new Map())
   const { navigate } = useNavigation()
   const { sendNotification } = useNotifications()
+  const { user, getUser } = useUser()
+  const { insertAuditLog } = useAuditLogs()
 
   // Handle filter changes - clear filters when 'all' is selected
   const handleFilterChange = (filters: Set<PostStatus | 'all'>) => {
@@ -108,8 +116,7 @@ export default function PostRecords () {
       options: [
         { value: 'Pending', label: 'Pending' },
         { value: 'Accepted', label: 'Accepted' },
-        { value: 'Rejected', label: 'Rejected' },
-        { value: 'Fraud', label: 'Fraud' }
+        { value: 'Rejected', label: 'Rejected' }
       ]
     },
     {
@@ -200,9 +207,6 @@ export default function PostRecords () {
       }
 
       await refreshPosts()
-      setToastMessage('Post Records updated successfully')
-      setToastColor('success')
-      setShowToast(true)
     }
 
     window.addEventListener('app:scrollToTop', handler as EventListener)
@@ -271,40 +275,93 @@ export default function PostRecords () {
         }
         break
       case 'notify':
-        try {
-          const post = filteredPosts.find(p => p.post_id === id)
-          if (!post) {
-            setToastMessage('Post not found')
-            setToastColor('danger')
-            setShowToast(true)
-            return
-          }
+        const currentTime = Date.now()
+        const lastNotifyTime = lastNotifyTimeRef.current.get(id) || 0
+        const timeSinceLastNotify = currentTime - lastNotifyTime
 
-          await sendNotification({
-            userId: post.user_id,
-            title: 'Great News! A Possible Match to Your Item',
-            message: `We have identified items that may possibly match your ${post.item_name}. Please proceed to the Security Office during office hours to verify if any of them belong to you.`,
-            type: 'match',
-            data: {
-              postId: id,
-              itemName: post.item_name,
-              link: `/user/post/view/${id}`
-            }
-          })
-
-          setToastMessage('Owner notified successfully')
-          setToastColor('success')
-          setShowToast(true)
-        } catch (error) {
-          console.error('Failed to notify owner:', error)
-          setToastMessage('Failed to notify owner')
+        if (timeSinceLastNotify < 10000) {
+          const remainingSeconds = Math.ceil(
+            (10000 - timeSinceLastNotify) / 1000
+          )
+          setToastMessage(
+            `Please wait ${remainingSeconds} seconds before notifying again`
+          )
           setToastColor('danger')
           setShowToast(true)
+          return
         }
+
+        setShowNotifyOwnerModal(true)
         break
       case 'claim':
         navigate(`/staff/post/claim/${id}`)
         break
+    }
+  }
+
+  const handleNotifyOwnerConfirm = async () => {
+    setShowNotifyOwnerModal(false)
+    const id = selectedPostId
+    if (!id) return
+
+    setIsNotifyingOwner(true)
+
+    try {
+      const post = filteredPosts.find(p => p.post_id === id)
+      if (!post) {
+        setToastMessage('Post not found')
+        setToastColor('danger')
+        setShowToast(true)
+        setIsNotifyingOwner(false)
+        return
+      }
+
+      // Get current user for audit log
+      let currentUser = user
+      if (!currentUser) {
+        currentUser = await getUser()
+      }
+
+      // Send notification to owner
+      await sendNotification({
+        userId: post.user_id,
+        title: 'Great News! A Possible Match to Your Item',
+        message: `We have identified items that may possibly match your ${post.item_name}. Please proceed to the Security Office during office hours to verify if any of them belong to you.`,
+        type: 'match',
+        data: {
+          postId: id,
+          itemName: post.item_name,
+          link: `/user/post/view/${id}`
+        }
+      })
+
+      // Insert audit log
+      if (currentUser?.user_id) {
+        await insertAuditLog({
+          user_id: currentUser.user_id,
+          action_type: 'notify_missing_item_owner',
+          details: {
+            post_id: id,
+            item_name: post.item_name,
+            owner_id: post.user_id,
+            message: 'Notified owner about similar items in security office'
+          }
+        })
+      }
+
+      // Record the notification time for debounce
+      lastNotifyTimeRef.current.set(id, Date.now())
+
+      setToastMessage('Owner notified successfully')
+      setToastColor('success')
+      setShowToast(true)
+    } catch (error) {
+      console.error('Failed to notify owner:', error)
+      setToastMessage('Failed to notify owner')
+      setToastColor('danger')
+      setShowToast(true)
+    } finally {
+      setIsNotifyingOwner(false)
     }
   }
   console.log(filteredPosts.length)
@@ -322,6 +379,9 @@ export default function PostRecords () {
 
       {isRefreshingContent && (
         <IonLoading isOpen message='Refreshing content...' spinner='crescent' />
+      )}
+      {isNotifyingOwner && (
+        <IonLoading isOpen message='Notifying owner...' spinner='crescent' />
       )}
       {loading ? (
         <>
@@ -364,7 +424,7 @@ export default function PostRecords () {
               <p>No posts match the selected filters</p>
             </div>
           ) : (
-            <div className='bg-default-bg pt-40'>
+            <div className='bg-white! pt-40'>
               <div className='mb-5'>
                 {!loading && (
                   <IonRefresher slot='fixed' onIonRefresh={handleRefresh}>
@@ -408,7 +468,7 @@ export default function PostRecords () {
                 )}
 
                 {!hasMore && !loading && filteredPosts.length > 0 && (
-                  <div className='text-center text-gray-500 '>
+                  <div className='text-center text-gray-500'>
                     You're all caught up!
                   </div>
                 )}
@@ -469,13 +529,23 @@ export default function PostRecords () {
           if (
             post &&
             post.item_type === 'found' &&
-            post.item_status === 'unclaimed'
+            post.item_status === 'unclaimed' &&
+            post.post_status === 'accepted'
           ) {
             buttons.push({
               text: 'Claim Item',
               handler: () => handleActionSheetClick('claim')
             })
           }
+
+          // Change Status: available for all posts
+          buttons.push({
+            text: 'Change Status',
+            handler: () => {
+              if (selectedPostId)
+                navigate(`/staff/post-record/view/${selectedPostId}`)
+            }
+          })
 
           // Cancel: always available
           buttons.push({
@@ -513,6 +583,17 @@ export default function PostRecords () {
 
           return buttons
         })()}
+      />
+
+      {/* Notify Owner Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showNotifyOwnerModal}
+        heading='Notify Owner'
+        subheading='Are you sure you want to notify the owner that similar items are in the security office?'
+        onSubmit={handleNotifyOwnerConfirm}
+        onCancel={() => setShowNotifyOwnerModal(false)}
+        submitLabel='Confirm'
+        cancelLabel='Cancel'
       />
     </IonContent>
   )

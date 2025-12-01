@@ -1,9 +1,13 @@
 import ApexCharts from 'apexcharts'
 import { useEffect, useRef, useState } from 'react'
-import { supabase } from '@/shared/lib/supabase'
+import { getDashboardStats } from '@/features/admin/data/dashboardStats'
 import fetchPaginatedRows from '@/shared/lib/supabasePaginatedFetch'
 import { downloadOutline } from 'ionicons/icons'
 import { IonIcon, IonButton } from '@ionic/react'
+import { supabase } from '@/shared/lib/supabase'
+import { Filesystem, Directory } from '@capacitor/filesystem'
+import { Share } from '@capacitor/share'
+import { Capacitor } from '@capacitor/core'
 
 interface DonutChartProps {
   data: {
@@ -61,7 +65,7 @@ export default function DonutChart ({ data, onLoad }: DonutChartProps) {
   const chartRef = useRef<HTMLDivElement>(null)
   const chartInstance = useRef<ApexCharts | null>(null)
   const [range, setRange] = useState<
-    'this_week' | 'this_month' | 'last_5_months' | 'last_year'
+    'all' | 'this_week' | 'this_month' | 'last_5_months' | 'last_year'
   >('this_week')
   const [fetched, setFetched] = useState<DonutChartProps['data'] | null>(null)
   const [loading, setLoading] = useState(false)
@@ -84,15 +88,14 @@ export default function DonutChart ({ data, onLoad }: DonutChartProps) {
         toolbar: { show: false },
         sparkline: { enabled: true }
       },
-      labels: ['Claimed', 'Unclaimed', 'To Review', 'Lost', 'Returned'],
+      labels: ['Claimed', 'Unclaimed', 'Lost', 'Returned'],
       series: [
         currentData.claimed,
         currentData.unclaimed,
-        currentData.toReview,
         currentData.lost,
         currentData.returned
       ],
-      colors: ['#16a34a', '#ef4444', '#f59e0b', '#6b7280', '#3b82f6'],
+      colors: ['#16a34a', '#ef4444', '#6b7280', '#3b82f6'],
       dataLabels: {
         enabled: true,
         formatter: function (val: number) {
@@ -126,7 +129,6 @@ export default function DonutChart ({ data, onLoad }: DonutChartProps) {
             const total =
               currentData.claimed +
               currentData.unclaimed +
-              currentData.toReview +
               (currentData.lost ?? 0) +
               (currentData.returned ?? 0)
             const percent = total > 0 ? ((val / total) * 100).toFixed(1) : '0.0'
@@ -170,77 +172,30 @@ export default function DonutChart ({ data, onLoad }: DonutChartProps) {
   useEffect(() => {
     let mounted = true
 
-    const getStartForRange = (r: typeof range) => {
-      const end = new Date()
-      switch (r) {
-        case 'this_week': {
-          const d = new Date()
-          const start = new Date(d)
-          start.setDate(d.getDate() - d.getDay())
-          start.setHours(0, 0, 0, 0)
-          return { start, end }
-        }
-        case 'this_month': {
-          const start = new Date(end.getFullYear(), end.getMonth(), 1)
-          start.setHours(0, 0, 0, 0)
-          return { start, end }
-        }
-        case 'last_5_months': {
-          const start = new Date(end.getFullYear(), end.getMonth() - 4, 1)
-          start.setHours(0, 0, 0, 0)
-          return { start, end }
-        }
-        case 'last_year': {
-          const start = new Date(
-            end.getFullYear() - 1,
-            end.getMonth(),
-            end.getDate()
-          )
-          start.setHours(0, 0, 0, 0)
-          return { start, end }
-        }
-      }
-    }
-
     const fetchCounts = async () => {
       setLoading(true)
-      const { start, end } = getStartForRange(range)
-
       try {
-        const { data: rows, error } = await supabase
-          .from('post_public_view')
-          .select('*')
-          .gte('submission_date', start.toISOString())
-          .lte('submission_date', end.toISOString())
-
-        if (error) {
-          console.error('Failed to fetch donut data', error)
-          setLoading(false)
-          return
+        const dateRangeMap: Record<string, string> = {
+          all: 'all',
+          this_week: 'week',
+          this_month: 'month',
+          last_5_months: 'month',
+          last_year: 'year'
         }
 
-        let claimed = 0
-        let toReview = 0
-        let unclaimed = 0
-        let lost = 0
-        let returned = 0
-
-        if (Array.isArray(rows)) {
-          for (const r of rows) {
-            const status = (r as any).status
-            const post_status = (r as any).post_status
-
-            if (status === 'claimed') claimed++
-            else if (status === 'lost') lost++
-            else if (status === 'returned') returned++
-            else if (post_status === 'pending') toReview++
-            else unclaimed++
-          }
-        }
+        const rpcRange = dateRangeMap[range] ?? 'all'
+        const stats = await getDashboardStats(rpcRange)
 
         if (!mounted) return
-        setFetched({ claimed, unclaimed, toReview, lost, returned })
-        setLoading(false)
+
+        // Map RPC fields to donut data
+        setFetched({
+          claimed: stats.claimedCount ?? 0,
+          unclaimed: stats.unclaimedCount ?? 0,
+          toReview: stats.toReviewCount ?? 0,
+          lost: stats.lostCount ?? 0,
+          returned: stats.returnedCount ?? 0
+        })
         // notify parent that donut finished loading data
         try {
           onLoad && onLoad()
@@ -248,7 +203,8 @@ export default function DonutChart ({ data, onLoad }: DonutChartProps) {
           // ignore
         }
       } catch (err) {
-        console.error(err)
+        console.error('Failed to fetch donut data', err)
+      } finally {
         setLoading(false)
       }
     }
@@ -306,16 +262,14 @@ export default function DonutChart ({ data, onLoad }: DonutChartProps) {
         const parts: string[] = []
         parts.push(header)
 
-        await fetchPaginatedRows({
+        const fetchParams: any = {
           supabase,
           table: 'post_public_view',
           select:
             'poster_name,item_name,item_description,last_seen_location,accepted_by_staff_name,submission_date,claimed_by_name,claimed_by_email,accepted_on_date',
           dateField: 'submission_date',
-          gte: start.toISOString(),
-          lte: end.toISOString(),
           batchSize: 10000,
-          onBatch: async rows => {
+          onBatch: async (rows: any[]) => {
             for (const r of rows) {
               const poster_name = (r as any).poster_name ?? ''
               const item_name = (r as any).item_name ?? ''
@@ -345,16 +299,97 @@ export default function DonutChart ({ data, onLoad }: DonutChartProps) {
               parts.push(escaped)
             }
           }
-        })
+        }
+
+        if (start && end) {
+          fetchParams.gte = start.toISOString()
+          fetchParams.lte = end.toISOString()
+        }
+
+        await fetchPaginatedRows(fetchParams)
 
         const csv = parts.join('\n')
+
+        // Use Capacitor Filesystem on native platforms; fallback to anchor download on web
+        const filename = `status-summary-detailed-${range}-${new Date()
+          .toISOString()
+          .slice(0, 10)}.csv`
+        const platform = Capacitor.getPlatform()
+        const toBase64 = (str: string) => {
+          try {
+            return btoa(unescape(encodeURIComponent(str)))
+          } catch (e) {
+            // Fallback: strip non-ASCII
+            return btoa(str)
+          }
+        }
+
+        if (platform !== 'web') {
+          try {
+            // No explicit Filesystem permission requests here — attempt write and let platform handle prompts
+
+            const base64 = toBase64(csv)
+            await Filesystem.writeFile({
+              path: filename,
+              data: base64,
+              directory: Directory.Documents
+            })
+
+            // Try to open the file URI so user can access/download it
+            try {
+              const uriResult = await Filesystem.getUri({
+                directory: Directory.Documents,
+                path: filename
+              })
+              if (uriResult?.uri) {
+                // Prefer convertFileSrc when available to get a web-safe URL
+                const fileUrl = (Capacitor as any).convertFileSrc
+                  ? (Capacitor as any).convertFileSrc(uriResult.uri)
+                  : uriResult.uri
+
+                try {
+                  // Prefer sharing the file with the system share sheet
+                  // Use native file URI when available (uriResult.uri)
+                  const shareUrl = uriResult.uri || fileUrl
+                  await Share.share({ title: filename, url: shareUrl })
+                  return
+                } catch (e) {
+                  console.warn(
+                    'Share.share failed for fileUrl, falling back to text/blob share',
+                    e
+                  )
+                }
+              }
+            } catch (e) {
+              console.warn('CSV written but could not get URI', e)
+            }
+
+            // Fallback: open a blob URL via Browser.open so native/web viewers can handle it
+            try {
+              // Fallback: share CSV text (apps can receive text content)
+              await Share.share({ title: filename, text: csv })
+              return
+            } catch (e) {
+              console.warn(
+                'Share.text fallback failed, will fall back to web download',
+                e
+              )
+            }
+          } catch (e) {
+            console.warn(
+              'Filesystem write failed, falling back to anchor download',
+              e
+            )
+            // continue to web fallback
+          }
+        }
+
+        // Web fallback: use blob + anchor
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
-        a.download = `status-summary-detailed-${range}-${new Date()
-          .toISOString()
-          .slice(0, 10)}.csv`
+        a.download = filename
         document.body.appendChild(a)
         a.click()
         document.body.removeChild(a)
@@ -374,7 +409,7 @@ export default function DonutChart ({ data, onLoad }: DonutChartProps) {
       {/* Header */}
       <div className='mb-3 flex items-center justify-between'>
         <div className='text-sm font-semibold text-[#1f2a66]'>
-          Status Summary
+          Item Status Report
         </div>
         <div>
           <select
@@ -383,6 +418,7 @@ export default function DonutChart ({ data, onLoad }: DonutChartProps) {
             className='text-xs font-medium text-[#1f2a66] rounded border border-[#e5e7eb] px-2 py-1'
             aria-label='Select timeframe'
           >
+            <option value='all'>All</option>
             <option value='this_week'>This Week</option>
             <option value='this_month'>This Month</option>
             <option value='last_5_months'>Last 5 Months</option>
@@ -400,7 +436,6 @@ export default function DonutChart ({ data, onLoad }: DonutChartProps) {
         <div className='flex flex-col gap-2 text-xs font-medium text-[#1f2a66]'>
           <LegendItem color='#16a34a' label='Claimed' />
           <LegendItem color='#ef4444' label='Unclaimed' />
-          <LegendItem color='#f59e0b' label='To Review' />
           <LegendItem color='#6b7280' label='Lost' />
           <LegendItem color='#3b82f6' label='Returned' />
         </div>

@@ -1,4 +1,5 @@
-import React from 'react'
+import React, { useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { IonIcon, IonButton } from '@ionic/react'
 import { alertCircle } from 'ionicons/icons'
 
@@ -21,13 +22,32 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
   submitLabel = 'Accept',
   cancelLabel = 'Cancel'
 }) => {
-  return (
+  const portalElRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    const el = document.createElement('div')
+    el.className = 'confirmation-modal-portal'
+    portalElRef.current = el
+    document.body.appendChild(el)
+    return () => {
+      if (portalElRef.current && portalElRef.current.parentNode) {
+        portalElRef.current.parentNode.removeChild(portalElRef.current)
+      }
+      portalElRef.current = null
+    }
+  }, [])
+
+  const modal = (
     <>
       {isOpen && (
-        <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/50'>
+        <div
+          className='fixed inset-0 flex items-center justify-center bg-black/50'
+          style={{ zIndex: 99999 }}
+        >
           <div className='w-full max-w-md rounded-lg bg-white p-6 shadow-lg mx-4'>
             <div className='flex flex-row'>
-              <div className='w-1/3 flex items-center'>
+              <div className='w-1/3 flex items-center mr-2'>
                 <IonIcon
                   icon={alertCircle}
                   className='text-umak-blue text-4xl'
@@ -63,9 +83,11 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
               <IonButton
                 fill='solid'
                 onClick={onSubmit}
-                style={{
-                  '--background': '#10B981'
-                }}
+                style={
+                  {
+                    '--background': 'var(--color-green-600)'
+                  } as any
+                }
                 className='text-white font-medium'
               >
                 {submitLabel}
@@ -76,4 +98,10 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
       )}
     </>
   )
+
+  if (portalElRef.current) {
+    return createPortal(modal, portalElRef.current)
+  }
+
+  return null
 }

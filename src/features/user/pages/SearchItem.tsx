@@ -41,6 +41,9 @@ export default function SearchItem () {
   })
   const [image, setImage] = useState<File | null>(null)
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([])
+  const [claimFromDate, setClaimFromDate] = useState<string | null>(null)
+  const [claimToDate, setClaimToDate] = useState<string | null>(null)
   const [isSearching, setIsSearching] = useState(false)
   const [searchProgress, setSearchProgress] = useState({ current: 0, total: 0 })
   const [showToast, setShowToast] = useState(false)
@@ -123,6 +126,9 @@ export default function SearchItem () {
       meridian: hasSelectedDate ? meridian : null,
       locationDetails,
       selectedCategories,
+      selectedStatuses,
+      claimFromDate,
+      claimToDate,
       image,
       onProgress: (current, total) => {
         setSearchProgress({ current, total })
@@ -136,7 +142,8 @@ export default function SearchItem () {
       return
     }
 
-    navigate('/user/search/results')
+    const encodedTerm = encodeURIComponent(term)
+    navigate(`/user/search/results?q=${encodedTerm}`)
   }
 
   // Handle advanced search submission
@@ -151,13 +158,14 @@ export default function SearchItem () {
       meridian: hasSelectedDate ? meridian : null,
       locationDetails,
       selectedCategories,
+      selectedStatuses,
+      claimFromDate,
+      claimToDate,
       image,
       onProgress: (current, total) => {
         setSearchProgress({ current, total })
       }
     })
-
-    // setIsSearching(false)/
 
     if (!response.success) {
       setToastMessage(response.message || 'Search failed. Please try again.')
@@ -171,7 +179,8 @@ export default function SearchItem () {
       addToHistory(searchValue.trim())
     }
 
-    navigate('/user/search/results')
+    const encodedValue = encodeURIComponent(searchValue)
+    navigate(`/user/search/results?q=${encodedValue}`)
   }
   return (
     <>
@@ -231,6 +240,13 @@ export default function SearchItem () {
             selectedCategories={selectedCategories}
             setSelectedCategories={setSelectedCategories}
             handleSearch={handleAdvancedSearch}
+            selectedStatuses={selectedStatuses}
+            setSelectedStatuses={setSelectedStatuses}
+            claimFromDate={claimFromDate}
+            setClaimFromDate={setClaimFromDate}
+            claimToDate={claimToDate}
+            setClaimToDate={setClaimToDate}
+            variant='user'
           />
         </IonContent>
       )}

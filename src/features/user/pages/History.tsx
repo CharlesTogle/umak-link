@@ -18,6 +18,7 @@ export default function History () {
   const [activeFilters, setActiveFilters] = useState<Set<PostStatus>>(new Set())
   const [sortDir, setSortDir] = useState<SortDirection>('desc')
   const [postCount, setPostCount] = useState<number | null>(null)
+  const [ownLoading, setOwnLoading] = useState(true)
   const contentRef = useRef<HTMLIonContentElement | null>(null)
   const { getUser } = useUser()
   const { navigate } = useNavigation()
@@ -49,12 +50,32 @@ export default function History () {
     sortDirection: sortDir
   })
 
+  useEffect(() => {
+    const initLoading = async () => {
+      console.log('start')
+      setOwnLoading(true)
+      await fetchPosts()
+      setOwnLoading(false)
+      console.log('end')
+    }
+    if (userId) {
+      initLoading()
+      console.log('History - Fetched posts for user:', userId)
+    }
+  }, [userId])
+
+  useEffect(() => {
+    console.log('History - Total Posts after filtering:', allPosts.length)
+  }, [allPosts.length])
+
   const posts = useFilterAndSortPosts({
     posts: allPosts,
     activeFilters,
     sortDirection: sortDir,
     filterMode: 'intersection'
   })
+
+  // Show skeleton while initial posts load for this user
 
   // Filter categories for FilterSortBar
   const filterCategories: FilterCategory<PostStatus>[] = [
@@ -109,7 +130,6 @@ export default function History () {
   }, [])
 
   const handleFilterChange = (newFilters: Set<PostStatus>) => {
-    console.log('History - New Filters:', newFilters)
     setActiveFilters(newFilters)
     setPostCount(posts.length)
   }
@@ -168,6 +188,7 @@ export default function History () {
           fetchNewPosts={fetchNewPosts}
           ref={contentRef}
           withDelete={true}
+          customLoading={ownLoading}
         />
       </div>
     </>

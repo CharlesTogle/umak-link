@@ -63,6 +63,7 @@ interface HandlerResult {
  * Handle matching a missing item with found items using AI-powered search
  */
 export async function handleMatch (
+  userId: string,
   postId: string,
   itemName: string,
   itemDescription: string,
@@ -88,12 +89,23 @@ export async function handleMatch (
       }
     }
 
+    const { data: staffData, error: staffError } = await supabase
+      .from('user_table')
+      .select('user_name')
+      .eq('user_id', userId)
+      .single()
+    if (staffError) {
+      console.error('Failed to fetch staff data for audit log')
+    }
     // Step 2: Create audit log
     const { insertAuditLog } = useAuditLogs()
     await insertAuditLog({
-      user_id: posterId,
+      user_id: userId,
       action_type: 'match_attempt',
       details: {
+        message: `${
+          staffData?.user_name || 'Staff'
+        } initiated match generation for post ${itemName}`,
         post_id: postId,
         item_name: itemName,
         timestamp: new Date().toISOString()
@@ -268,12 +280,23 @@ export async function handleDeleteSubmit (
   staffId: string
 ): Promise<HandlerResult> {
   try {
+    const { data: staffData, error: staffError } = await supabase
+      .from('user_table')
+      .select('user_name')
+      .eq('user_id', staffId)
+      .single()
+    if (staffError) {
+      console.error('Failed to fetch staff data for audit log')
+    }
     // Step 1: Create audit log
     const { insertAuditLog } = useAuditLogs()
     await insertAuditLog({
       user_id: staffId,
       action_type: 'post_deleted',
       details: {
+        message: `${
+          staffData?.user_name || 'Staff'
+        } deleted the post ${itemName}`,
         post_id: postId,
         reason,
         deleted_at: new Date().toISOString()
@@ -282,7 +305,7 @@ export async function handleDeleteSubmit (
 
     // Step 2: Hard delete the post
     const { error: deleteError } = await supabase
-      .from('posts')
+      .from('post_table')
       .delete()
       .eq('post_id', postId)
 
@@ -336,9 +359,9 @@ export async function handleRejectSubmit (
   try {
     // Step 1: Update post status to rejected
     const { error: updateError } = await supabase
-      .from('posts')
+      .from('post_table')
       .update({
-        post_status: 'rejected'
+        status: 'rejected'
       })
       .eq('post_id', postId)
 
@@ -350,12 +373,24 @@ export async function handleRejectSubmit (
       }
     }
 
+    const { data: staffData, error: staffError } = await supabase
+      .from('user_table')
+      .select('user_name')
+      .eq('user_id', staffId)
+      .single()
+    if (staffError) {
+      console.error('Failed to fetch staff data for audit log')
+    }
+
     // Step 2: Create audit log
     const { insertAuditLog } = useAuditLogs()
     await insertAuditLog({
       user_id: staffId,
       action_type: 'post_rejected',
       details: {
+        message: `${
+          staffData?.user_name || 'Staff'
+        } rejected the post ${itemName}`,
         post_id: postId,
         reason,
         rejected_at: new Date().toISOString()
@@ -421,12 +456,25 @@ export async function handleAccept (
       }
     }
 
+    const { data: staffData, error: staffError } = await supabase
+      .from('user_table')
+      .select('user_name')
+      .eq('user_id', staffId)
+      .single()
+    if (staffError) {
+      console.error('Failed to fetch staff data for audit log')
+    }
+
     // Step 2: Create audit log
     const { insertAuditLog } = useAuditLogs()
     await insertAuditLog({
       user_id: staffId,
       action_type: 'post_accepted',
       details: {
+        message: `${
+          staffData?.user_name || 'Staff'
+        } accepted the post ${itemName}`,
+        postTitle: itemName,
         post_id: postId,
         accepted_at: new Date().toISOString()
       }

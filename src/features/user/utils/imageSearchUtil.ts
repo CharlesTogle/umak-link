@@ -36,18 +36,20 @@ export async function generateImageSearchQuery (
 
   try {
     const base64ImageData = await fileToDataUrl(image)
-    const userPrompt = `Analyze this image of a lost or found item. Identify the main object, color, brand, and key descriptive features.
+    const userPrompt = `Analyze this image of a lost or found item. Identify the main object, its color, brand, model, material, and any fixed physical features visible in the image. Ignore subjective or decorative descriptors such as “gradient”, “sparkling”, “cute”, “stylish”, or any mood-based adjectives.
 
 Generate a search query string using these rules:
-1. Combine adjectives with the nouns they describe into single phrases using the word "AND". Example: "black AND bottle".
-2. Combine related adjectives with "OR" for flexibility. Example: "black OR matte OR shiny".
-3. Combine related nouns with "OR" only if they represent alternatives of the same type. Example: "bottle OR container".
-4. Do not match adjectives or nouns in isolation; always pair adjectives with their noun when relevant.
-5. Generate minimum of 10 keywords and a maximum of 20 keywords ONLY.
-IMPORTANT: DO NOT output anything else. NO sentences, NO notes, NO explanations, NO steps. Output ONLY the final search query string.
+1. Use only objective attributes: color, brand, model name/number, material, and physical parts (e.g., "dual camera", "leather strap").
+2. Do NOT include vague aesthetic descriptors such as gradient, shimmering, glossy, sparkling, shiny, silicone, square (unless the shape is a core physical property).
+3. Pair every adjective with the noun it describes using “AND”.
+4. Combine related adjectives with “OR” only if they describe the SAME attribute category (e.g., color variants).
+5. Combine related nouns with “OR” only if they represent alternatives of the same object type.
+6. Always output 10–20 combined keyword phrases.
+7. Output ONLY the final search query string. No sentences, no notes, no explanation.
 
 Example correct output:
-black AND bottle OR black AND flask OR blue AND bottle OR matte AND container OR durable OR reusable`
+black AND bottle OR black AND flask OR blue AND bottle OR matte AND container OR durable AND container OR stainless AND bottle
+`
 
     const result = await callGeminiVision(userPrompt, base64ImageData)
 

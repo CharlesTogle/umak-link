@@ -1,5 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
-import { IonContent, IonCard, IonCardContent } from '@ionic/react'
+import {
+  IonContent,
+  IonCard,
+  IonCardContent,
+  IonRefresher,
+  IonRefresherContent
+} from '@ionic/react'
 import { barChart } from 'ionicons/icons'
 import Header from '@/shared/components/Header'
 import { getDashboardStats } from '@/features/admin/data/dashboardStats'
@@ -13,7 +19,6 @@ export default function Dashboard () {
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [donutLoaded, setDonutLoaded] = useState(false)
-  const [systemLoaded, setSystemLoaded] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -32,10 +37,35 @@ export default function Dashboard () {
     load()
   }, [])
 
+  const handleRefresh = async (event: CustomEvent) => {
+    try {
+      await load()
+    } catch (err) {
+      console.error('Error refreshing dashboard:', err)
+    } finally {
+      // complete the refresher UI
+      try {
+        event.detail.complete()
+      } catch {
+        const target = event.target as any
+        target?.complete?.()
+      }
+    }
+  }
+
   return (
     <IonContent>
-      <Header logoShown isProfileAndNotificationShown />
-      <div>
+      <IonRefresher slot='fixed' onIonRefresh={handleRefresh}>
+        <IonRefresherContent
+          pullingText='Pull to refresh'
+          refreshingSpinner='crescent'
+          refreshingText='Refreshing data...'
+        />
+      </IonRefresher>
+      <div className='fixed w-full top-0 z-10'>
+        <Header logoShown isProfileAndNotificationShown />
+      </div>
+      <div className='mt-16'>
         <IonCard className='mt-3'>
           <IonCardContent>
             <CardHeader
@@ -90,13 +120,7 @@ export default function Dashboard () {
             </IonCard>
             <IonCard className='mx-4 mb-4'>
               <IonCardContent className='py-6'>
-                {!systemLoaded ? (
-                  <div className='p-4'>
-                    <div className='h-6 w-40 bg-gray-200 rounded mb-3 animate-pulse' />
-                    <div className='h-64 w-full bg-white rounded-xl border border-gray-200 animate-pulse' />
-                  </div>
-                ) : null}
-                <SystemStatsChart onLoad={() => setSystemLoaded(true)} />
+                <SystemStatsChart />
               </IonCardContent>
             </IonCard>
           </>

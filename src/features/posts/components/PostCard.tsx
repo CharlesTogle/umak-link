@@ -13,18 +13,23 @@ export default function PostCard ({
   title,
   description,
   owner,
-  owner_profile_picture_url
+  owner_profile_picture_url,
+  onClick
 }: {
   imgUrl: string
   title: string
   description: string
   owner: string
   owner_profile_picture_url?: string | null
+  onClick?: () => void
 }) {
   const [imageLoaded, setImageLoaded] = useState(false)
 
   return (
-    <IonCard className='rounded-2xl mt-4'>
+    <IonCard
+      className={`rounded-2xl mt-4 ${onClick ? 'cursor-pointer' : ''}`}
+      onClick={onClick}
+    >
       <IonCardContent>
         <div className='flex items-center space-x-2'>
           {owner_profile_picture_url ? (

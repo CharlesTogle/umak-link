@@ -14,13 +14,8 @@ import { useNavigation } from '../hooks/useNavigation'
 import { notifications, personCircle } from 'ionicons/icons'
 import { useUser } from '@/features/auth/contexts/UserContext'
 import { useUnreadNotificationCount } from '@/features/user/hooks/useUnreadNotificationCount'
-import createCache from '@/shared/lib/cache'
 import type { User } from '@/features/auth/contexts/UserContext'
 
-type CachedCount = {
-  count: number
-  timestamp: number
-}
 
 const toolbarStyle = {
   ['--background']: 'var(--color-umak-blue, #1D2981)'
@@ -39,7 +34,6 @@ function Header ({
   isNotificationPage?: boolean
 }) {
   const [profilePicUrl, setProfilePicUrl] = useState<string | null>(null)
-  const [cachedCount, setCachedCount] = useState<number>(0)
   const [user, setUser] = useState<User | null>(null)
   const profilePicRef = useRef<string | null>(null)
   const { navigate } = useNavigation()
@@ -53,36 +47,8 @@ function Header ({
     }
   }, [])
 
-  useEffect(() => {
-    if (!user?.user_id) return
-    const loadCachedCount = async () => {
-      try {
-        const userCountCache = createCache<CachedCount>({
-          keys: {
-            loadedKey: `LoadedNotificationCount:${user.user_id}`,
-            cacheKey: `CachedNotificationCount:${user.user_id}`
-          },
-          idSelector: () => 'count'
-        })
 
-        const cached = await userCountCache.loadCache()
-        if (cached.length > 0) {
-          const cachedData = cached[0]
-
-          setCachedCount(cachedData.count)
-        }
-      } catch (err) {
-        console.log('Header: No cached count available')
-      }
-    }
-
-    loadCachedCount()
-  }, [user?.user_id])
-
-  const { unreadCount, error } = useUnreadNotificationCount(
-    user?.user_id,
-    cachedCount
-  )
+  const { unreadCount, error } = useUnreadNotificationCount(user?.user_id)
   useEffect(() => {
     if (error) {
       console.warn('Notification count fetch error:', error.message)

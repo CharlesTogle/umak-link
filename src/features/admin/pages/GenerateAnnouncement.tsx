@@ -9,8 +9,12 @@ import {
 } from '@ionic/react'
 import Header from '@/shared/components/Header'
 import ImageUpload from '@/shared/components/ImageUpload'
-import { uploadAndGetPublicUrl } from '@/shared/utils/supabaseStorageUtils'
-import { supabase } from '@/shared/lib/supabase'
+import { useAuditLogs } from '@/shared/hooks/useAuditLogs'
+import {
+  generateAnnouncementAction,
+  debounce
+} from '@/features/admin/utils/generateAnnouncementUtil'
+import { ConfirmationModal } from '@/shared/components/ConfirmationModal'
 import TextArea from '@/shared/components/TextArea'
 import { useNavigation } from '@/shared/hooks/useNavigation'
 import FormSectionHeader from '@/shared/components/FormSectionHeader'
@@ -27,56 +31,59 @@ export default function GenerateAnnouncement () {
   })
   const [loading, setLoading] = useState(false)
   const { navigate } = useNavigation()
+  const { insertAuditLog } = useAuditLogs()
+  const [showConfirmPost, setShowConfirmPost] = useState(false)
+  const [showConfirmCancel, setShowConfirmCancel] = useState(false)
 
-  const handlePost = async () => {
+  const openConfirmPost = () => {
+    if (title.trim() === '' && description.trim() === '') {
+      setToast({ show: true, message: 'Title or Message must not be empty' })
+      return
+    }
+    setShowConfirmPost(true)
+  }
+
+  const openConfirmCancel = () => {
+    setShowConfirmCancel(true)
+  }
+
+  // Use a ref-backed callback so the debounced wrapper always calls the latest logic
+  const handlePostCall = async () => {
     setLoading(true)
     try {
-      let imageUrl = ''
-      if (image) {
-        const path = `announcements/${Date.now()}_${image.name}`
-        const blob = image
-        imageUrl = await uploadAndGetPublicUrl(
-          path,
-          blob,
-          image.type || 'image/jpeg'
-        )
-      }
-
-      // invoke edge function to notify users — payload uses message/description/image_url
-      const payload = {
-        user_id: '1a824e1b-7103-41f3-82a7-12aba52fbc09',
-        message: title || 'New Feature Available',
-        description:
-          description ||
-          'Check out our latest update with amazing new features!',
-        image_url: imageUrl || ''
-      }
-
-      try {
-        supabase.functions.invoke('send-global-announcements', {
-          body: payload
-        })
-      } catch (e) {
-        console.error('Failed to invoke edge function', e)
-      }
-
-      setToast({
-        show: true,
-        message: 'Announcement posted and notifications sent.'
+      const res = await generateAnnouncementAction({
+        title,
+        description,
+        image,
+        insertAuditLog
       })
-      setTitle('')
-      setDescription('')
-      setImage(null)
-      setTimeout(() => {
-        navigate('/admin/announcement')
-      }, 1000)
-    } catch (e) {
-      console.error('Failed to post announcement', e)
-      setToast({ show: true, message: 'Failed to post announcement' })
+
+      setToast({ show: true, message: res.message })
+
+      if (res.success) {
+        setTitle('')
+        setDescription('')
+        setImage(null)
+        setTimeout(() => {
+          navigate('/admin/announcement')
+        }, 1000)
+      }
     } finally {
       setLoading(false)
     }
   }
+
+  // Keep a stable debounced function that calls the latest handler via a ref
+  const handlePostRef = { current: handlePostCall }
+  // create debounced function (leading=true) and keep it stable
+  // we intentionally create it once per render here because the handler uses a ref to invoke latest
+  const debouncedHandlePost = debounce(
+    () => {
+      void handlePostRef.current()
+    },
+    1000,
+    true
+  )
 
   return (
     <>
@@ -89,7 +96,7 @@ export default function GenerateAnnouncement () {
                 '--box-shadow': 'none'
               } as any
             }
-            onClick={() => navigate('/admin/announcement')}
+            onClick={openConfirmCancel}
           >
             Cancel
           </IonButton>
@@ -101,7 +108,7 @@ export default function GenerateAnnouncement () {
                   '--box-shadow': 'none'
                 } as any
               }
-              onClick={handlePost}
+              onClick={openConfirmPost}
               disabled={loading}
             >
               {loading ? <IonSpinner name='crescent' /> : 'Post'}
@@ -114,7 +121,7 @@ export default function GenerateAnnouncement () {
           <IonCardContent>
             <div className='p-4'>
               <CardHeader icon={megaphone} title='Create Announcements' />
-              <FormSectionHeader header='Message' isRequired />
+              <FormSectionHeader header='Title' isRequired />
               <TextArea
                 value={title}
                 setValue={setTitle}
@@ -123,7 +130,7 @@ export default function GenerateAnnouncement () {
                 className='min-h-35! max-h-35!'
               />
 
-              <FormSectionHeader header='Description' isRequired />
+              <FormSectionHeader header='Message' isRequired />
               <TextArea
                 value={description}
                 setValue={setDescription}
@@ -138,9 +145,9 @@ export default function GenerateAnnouncement () {
                 onImageChange={setImage}
               />
 
-              <div className='mt-4'>
+              <div className='mt-4 mb-10'>
                 <IonButton
-                  onClick={handlePost}
+                  onClick={openConfirmPost}
                   disabled={loading}
                   expand='full'
                   style={{
@@ -150,7 +157,6 @@ export default function GenerateAnnouncement () {
                   {loading ? <IonSpinner name='crescent' /> : 'Post'}
                 </IonButton>
               </div>
-              {/* Post button moved to header */}
             </div>
           </IonCardContent>
         </IonCard>
@@ -161,6 +167,33 @@ export default function GenerateAnnouncement () {
         message={toast.message}
         duration={3000}
         onDidDismiss={() => setToast({ show: false, message: '' })}
+      />
+
+      {/* Confirmation modals */}
+      <ConfirmationModal
+        isOpen={showConfirmPost}
+        heading='Post announcement?'
+        subheading='Are you sure you want to post this announcement and send notifications to users?'
+        onSubmit={() => {
+          setShowConfirmPost(false)
+          void debouncedHandlePost()
+        }}
+        onCancel={() => setShowConfirmPost(false)}
+        submitLabel='Post'
+        cancelLabel='Cancel'
+      />
+
+      <ConfirmationModal
+        isOpen={showConfirmCancel}
+        heading='Discard announcement?'
+        subheading='Are you sure you want to discard this announcement? Unsaved changes will be lost.'
+        onSubmit={() => {
+          setShowConfirmCancel(false)
+          navigate('/admin/announcement')
+        }}
+        onCancel={() => setShowConfirmCancel(false)}
+        submitLabel='Discard'
+        cancelLabel='Keep editing'
       />
     </>
   )

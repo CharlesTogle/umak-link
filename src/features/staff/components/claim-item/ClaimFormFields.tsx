@@ -3,8 +3,8 @@ import { alertCircle } from 'ionicons/icons'
 import FormSectionHeader from '@/shared/components/FormSectionHeader'
 import DateTimeSelector from '@/shared/components/DateTimeSelector'
 import PostCard from '@/features/posts/components/PostCard'
-import PostSkeleton from '@/features/posts/components/PostSkeleton'
 import type { PublicPost } from '@/features/posts/types/post'
+import PostCardSkeleton from '@/features/posts/components/PostCardSkeleton'
 
 interface ClaimFormFieldsProps {
   contactNumber: string
@@ -77,7 +77,7 @@ export default function ClaimFormFields ({
           <FormSectionHeader header="Claimer's Lost Item Post" />
           {lostItemPostLoading ? (
             <div className='w-full grid place-items-center py-8'>
-              <PostSkeleton />
+              <PostCardSkeleton />
             </div>
           ) : lostItemPost ? (
             <PostCard

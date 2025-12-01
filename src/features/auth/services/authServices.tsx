@@ -5,6 +5,7 @@ import type { User } from '@/features/auth/contexts/UserContext'
 import { saveCachedImage } from '@/shared/utils/fileUtils'
 import { makeThumb } from '@/shared/utils/imageUtils'
 import { registerForPushNotifications } from '@/features/auth/services/registerForPushNotifications'
+import { Capacitor } from '@capacitor/core'
 
 export interface GoogleProfile {
   googleIdToken: string
@@ -151,6 +152,8 @@ export const authServices = {
   Logout: async (): Promise<{ error: string | null }> => {
     try {
       console.log('[authServices] Logout called')
+      const isWeb = Capacitor.getPlatform() === 'web'
+
       // 1. Sign out from Supabase
       const { error: supabaseError } = await supabase.auth.signOut()
 
@@ -158,22 +161,37 @@ export const authServices = {
         console.error('[authServices] Logout supabase error:', supabaseError)
         return { error: supabaseError.message }
       }
-      try {
-        googleLogout()
-      } catch (googleError) {
-        console.log(
-          '[authServices] Google logout not needed or failed:',
-          googleError
-        )
+
+      // 2. Google logout for web
+      if (isWeb) {
+        try {
+          googleLogout()
+        } catch (googleError) {
+          console.log(
+            '[authServices] Google logout not needed or failed:',
+            googleError
+          )
+        }
       }
-      try {
-        await SocialLogin.logout({ provider: 'google' })
-      } catch (socialError) {
-        console.log(
-          '[authServices] Social logout not needed or failed:',
-          socialError
-        )
+
+      // 3. SocialLogin logout for native (requires initialization first)
+      if (!isWeb) {
+        try {
+          const googleWebClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? ''
+          // Initialize before logout
+          await SocialLogin.initialize({
+            google: { webClientId: googleWebClientId, mode: 'online' }
+          })
+          await SocialLogin.logout({ provider: 'google' })
+          console.log('[authServices] Social logout successful')
+        } catch (socialError) {
+          console.log(
+            '[authServices] Social logout not needed or failed:',
+            socialError
+          )
+        }
       }
+
       return { error: null }
     } catch (error) {
       console.error('[authServices] Logout exception:', error)

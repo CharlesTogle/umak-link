@@ -1,4 +1,4 @@
-import { memo, useEffect, useState, useCallback } from 'react'
+import { memo, useEffect, useState, useCallback, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { useNavigation } from '@/shared/hooks/useNavigation'
 import {
@@ -19,22 +19,48 @@ import LazyImage from '@/shared/components/LazyImage'
 import { HeaderWithBackButton } from '@/shared/components/HeaderVariants'
 import Post from '@/features/posts/components/Post'
 import { sharePost } from '@/shared/utils/shareUtils'
-import { getPostFull } from '@/features/posts/data/posts'
+import { ConfirmationModal } from '@/shared/components/ConfirmationModal'
+import {
+  getPostFull,
+  getPostByItemId,
+  getPostRecordByItemId,
+  getFoundPostByLinkedMissingItem
+} from '@/features/posts/data/posts'
 import type { PostRecordDetails } from '@/features/posts/data/posts'
+import type { PublicPost } from '@/features/posts/types/post'
+import PostCard from '@/features/posts/components/PostCard'
 import { usePostActionsStaffServices } from '@/features/staff/hooks/usePostStaffServices'
 import { ChoiceModal } from '@/shared/components/ChoiceModal'
 import { rejectReasons } from '@/features/staff/utils/catalogPostHandlers'
 import useNotifications from '@/features/user/hooks/useNotifications'
 import { isConnected } from '@/shared/utils/networkCheck'
+import { useUser } from '@/features/auth/contexts/UserContext'
+import { useAuditLogs } from '@/shared/hooks/useAuditLogs'
 import PostSkeleton from '@/features/posts/components/PostSkeleton'
+import {
+  formatDateTime,
+  getStatusColor,
+  getStatusOptions,
+  getItemStatusOptions,
+  isItemStatusAllowed,
+  isPostStatusAllowed,
+  performStatusChangeOperation
+} from './ExpandedPostRecord.helpers'
 
 export default memo(function ExpandedPostRecord () {
   const { postId } = useParams<{ postId: string }>()
   const { navigate } = useNavigation()
-  const { updatePostStatusWithNotification } = usePostActionsStaffServices()
+  const { updatePostStatusWithNotification, updateItemStatus } =
+    usePostActionsStaffServices()
   const { sendNotification } = useNotifications()
+  const { user, getUser } = useUser()
+  const { insertAuditLog } = useAuditLogs()
 
   const [record, setRecord] = useState<PostRecordDetails | null>(null)
+  const [linkedPost, setLinkedPost] = useState<
+    PublicPost | PostRecordDetails | null
+  >(null)
+  const [loadingLinkedPost, setLoadingLinkedPost] = useState(false)
   const [loading, setLoading] = useState(false)
   const [toast, setToast] = useState<{ show: boolean; message: string }>({
     show: false,
@@ -47,7 +73,12 @@ export default memo(function ExpandedPostRecord () {
     null
   )
   const [showRejectionModal, setShowRejectionModal] = useState(false)
+  const [showUnclaimConfirmModal, setShowUnclaimConfirmModal] = useState(false)
+  const [showNotifyOwnerModal, setShowNotifyOwnerModal] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const statusChangeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  )
 
   const loadPost = useCallback(async () => {
     if (!postId) return
@@ -75,6 +106,41 @@ export default memo(function ExpandedPostRecord () {
       setRecord(data)
       setSelectedStatus(data.post_status)
       setSelectedItemStatus(data.item_status)
+
+      // Fetch linked post if available
+      setLoadingLinkedPost(true)
+      try {
+        let linked: PublicPost | PostRecordDetails | null = null
+
+        // For found items: get the linked missing item using linked_lost_item_id
+        if (data.item_type === 'found' && data.linked_lost_item_id) {
+          linked = await getPostRecordByItemId(data.linked_lost_item_id)
+        }
+        // For missing items with status 'returned': find the found item that has this missing item linked
+        else if (
+          data.item_type === 'missing' &&
+          data.item_status === 'returned' &&
+          data.item_id
+        ) {
+          linked = await getFoundPostByLinkedMissingItem(data.item_id)
+        }
+        // For missing items with status 'claimed': get the found item by item_id
+        else if (
+          data.item_type === 'missing' &&
+          data.item_status === 'claimed' &&
+          data.item_id
+        ) {
+          linked = await getPostByItemId(data.item_id)
+        }
+
+        if (linked) {
+          setLinkedPost(linked)
+        }
+      } catch (err) {
+        console.error('Error fetching linked post:', err)
+      } finally {
+        setLoadingLinkedPost(false)
+      }
     } catch (err) {
       console.error('Error loading post record', err)
       setToast({ show: true, message: 'Failed to load post record' })
@@ -86,18 +152,6 @@ export default memo(function ExpandedPostRecord () {
   useEffect(() => {
     loadPost()
   }, [loadPost])
-
-  const formatDateTime = (value?: string | null) => {
-    if (!value) return ''
-    const d = new Date(value)
-    return d.toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-  }
 
   const handleActionSheetClick = async (action: string) => {
     setShowActions(false)
@@ -121,29 +175,7 @@ export default memo(function ExpandedPostRecord () {
         }
         break
       case 'notify':
-        try {
-          await sendNotification({
-            userId: record.poster_id,
-            title: 'Great News! A Possible Match to Your Item',
-            message: `We have identified items that may possibly match your ${record.item_name}. Please proceed to the Security Office during office hours to verify if any of them belong to you.`,
-            type: 'match',
-            data: {
-              postId: record.post_id,
-              itemName: record.item_name,
-              link: `/user/post/view/${record.post_id}`
-            }
-          })
-          setToast({
-            show: true,
-            message: 'Notification sent to owner successfully'
-          })
-        } catch (error) {
-          console.error('Error sending notification:', error)
-          setToast({
-            show: true,
-            message: 'Failed to send notification to owner'
-          })
-        }
+        setShowNotifyOwnerModal(true)
         break
       case 'claim':
         navigate(`/staff/post/claim/${record.post_id}`)
@@ -151,79 +183,6 @@ export default memo(function ExpandedPostRecord () {
       case 'changeStatus':
         setShowStatusModal(true)
         break
-    }
-  }
-
-  const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'accepted':
-        return '#16a34a' // green-600
-      case 'rejected':
-        return '#C1272D' // umak-red
-      case 'pending':
-        return '#d97706' // amber-600
-      case 'claimed':
-      case 'returned':
-        return '#16a34a' // green-600
-      case 'unclaimed':
-      case 'lost':
-        return '#d97706' // amber-600
-      case 'fraud':
-        return '#b91c1c' // red-700
-      case 'discarded':
-        return '#C1272D' // umak-red
-      default:
-        return '#f59e0b' // amber-500
-    }
-  }
-
-  const getStatusOptions = () => {
-    return ['pending', 'accepted', 'rejected']
-  }
-
-  const getItemStatusOptions = () => {
-    if (!record) return []
-
-    // Filter based on item type
-    if (record.item_type === 'found') {
-      return ['claimed', 'unclaimed', 'discarded']
-    } else {
-      // missing items
-      return ['returned', 'lost']
-    }
-  }
-
-  // Validate if item status is allowed based on selected post status
-  const isItemStatusAllowed = (itemStatus: string) => {
-    if (!selectedStatus) return true
-
-    switch (selectedStatus) {
-      case 'pending':
-        return itemStatus === 'unclaimed'
-      case 'accepted':
-        return true // All item statuses allowed
-      case 'rejected':
-        return itemStatus === 'unclaimed' || itemStatus === 'discarded'
-      default:
-        return true
-    }
-  }
-
-  // Validate if post status is allowed based on selected item status
-  const isPostStatusAllowed = (postStatus: string) => {
-    if (!selectedItemStatus) return true
-
-    switch (selectedItemStatus) {
-      case 'claimed':
-      case 'returned':
-        return postStatus === 'accepted'
-      case 'unclaimed':
-      case 'lost':
-        return true // All post statuses allowed
-      case 'discarded':
-        return postStatus === 'rejected' || postStatus === 'accepted'
-      default:
-        return true
     }
   }
 
@@ -238,6 +197,16 @@ export default memo(function ExpandedPostRecord () {
   const handleApplyStatusChange = async () => {
     if (!record) return
 
+    // If a status change is already queued, inform the user and bail out
+    if (statusChangeTimeoutRef.current) {
+      setToast({
+        show: true,
+        message:
+          'This post and item status was just changed a second ago, please wait a few seconds before changing it again'
+      })
+      return
+    }
+
     // Validate that at least one status is selected
     if (!selectedStatus && !selectedItemStatus) {
       setToast({
@@ -247,38 +216,16 @@ export default memo(function ExpandedPostRecord () {
       return
     }
 
-    // If item status is claimed, redirect to claim page first
+    // If item status is claimed, redirect to claim page only if not previously claimed
     if (selectedItemStatus === 'claimed') {
-      // Update post status first if selected
-      if (selectedStatus) {
-        if (selectedStatus === 'rejected') {
-          setShowStatusModal(false)
-          setShowRejectionModal(true)
-          return
-        }
-
-        setIsSubmitting(true)
-        const result = await updatePostStatusWithNotification(
-          record.post_id,
-          selectedStatus as 'accepted' | 'rejected' | 'pending'
-        )
-        setIsSubmitting(false)
-
-        if (!result.success) {
-          setToast({
-            show: true,
-            message: result.error || 'Failed to update post status'
-          })
-          return
-        }
+      // Check if item was previously claimed
+      if (record.item_status !== 'claimed') {
+        setShowStatusModal(false)
+        setSelectedStatus(null)
+        setSelectedItemStatus(null)
+        navigate(`/staff/post/claim/${record.post_id}`)
+        return
       }
-
-      // Redirect to claim page
-      setShowStatusModal(false)
-      setSelectedStatus(null)
-      setSelectedItemStatus(null)
-      navigate(`/staff/post/claim/${record.post_id}`)
-      return
     }
 
     // If rejected is selected, show rejection reason modal
@@ -288,52 +235,72 @@ export default memo(function ExpandedPostRecord () {
       return
     }
 
-    // For other statuses, update normally
-    setIsSubmitting(true)
+    // If changing from claimed to any other status, show confirmation modal
+    if (
+      record.item_status === 'claimed' &&
+      selectedItemStatus &&
+      selectedItemStatus !== 'claimed'
+    ) {
+      setShowStatusModal(false)
+      setShowUnclaimConfirmModal(true)
+      return
+    }
 
-    // Update post status if selected
-    if (selectedStatus) {
-      const result = await updatePostStatusWithNotification(
-        record.post_id,
-        selectedStatus as 'accepted' | 'rejected' | 'pending'
-      )
+    // Proceed with status change
+    await performStatusChange()
+  }
+
+  const performStatusChange = async () => {
+    if (!record) return
+
+    setIsSubmitting(true)
+    statusChangeTimeoutRef.current = setTimeout(async () => {
+      const result = await performStatusChangeOperation({
+        record,
+        selectedStatus,
+        selectedItemStatus,
+        updatePostStatusWithNotification,
+        updateItemStatus
+      })
 
       if (!result.success) {
         setToast({
           show: true,
-          message: result.error || 'Failed to update post status'
+          message: result.error || 'Failed to apply status change'
         })
         setIsSubmitting(false)
         return
       }
-    }
 
-    // Update item status if selected (other than claimed)
-    if (selectedItemStatus) {
-      // TODO: Add API call to update item status
-      // For now, just show a message
       setToast({
         show: true,
-        message: `Item status will be changed to ${selectedItemStatus}`
+        message: 'Status updated successfully'
       })
-    }
 
-    setToast({
-      show: true,
-      message: 'Status updated successfully'
-    })
+      if (result.updatedRecord) {
+        setRecord(result.updatedRecord)
+      }
 
-    // Refresh the record
-    const updatedData = await getPostFull(record.post_id)
-    if (updatedData) {
-      setRecord(updatedData)
-    }
+      setIsSubmitting(false)
+      setShowStatusModal(false)
+      setSelectedStatus(null)
+      setSelectedItemStatus(null)
 
-    setIsSubmitting(false)
-    setShowStatusModal(false)
-    setSelectedStatus(null)
-    setSelectedItemStatus(null)
+      if (statusChangeTimeoutRef.current) {
+        clearTimeout(statusChangeTimeoutRef.current)
+        statusChangeTimeoutRef.current = null
+      }
+    }, 1000)
   }
+
+  useEffect(() => {
+    return () => {
+      if (statusChangeTimeoutRef.current) {
+        clearTimeout(statusChangeTimeoutRef.current)
+        statusChangeTimeoutRef.current = null
+      }
+    }
+  }, [])
 
   const handleRejectWithReason = async (choice: string) => {
     if (!record || !choice.trim()) {
@@ -374,12 +341,67 @@ export default memo(function ExpandedPostRecord () {
     setSelectedStatus(null)
   }
 
+  const handleUnclaimConfirm = async () => {
+    setShowUnclaimConfirmModal(false)
+    await performStatusChange()
+  }
+
+  const handleNotifyOwnerConfirm = async () => {
+    setShowNotifyOwnerModal(false)
+    if (!record) return
+
+    try {
+      // Get current user for audit log
+      let currentUser = user
+      if (!currentUser) {
+        currentUser = await getUser()
+      }
+
+      // Send notification to owner
+      await sendNotification({
+        userId: record.poster_id,
+        title: 'Great News! A Possible Match to Your Item',
+        message: `We have identified items that may possibly match your ${record.item_name}. Please proceed to the Security Office during office hours to verify if any of them belong to you.`,
+        type: 'match',
+        data: {
+          postId: record.post_id,
+          itemName: record.item_name,
+          link: `/user/post/view/${record.post_id}`
+        }
+      })
+
+      // Insert audit log
+      if (currentUser?.user_id) {
+        await insertAuditLog({
+          user_id: currentUser.user_id,
+          action_type: 'notify_missing_item_owner',
+          details: {
+            post_id: record.post_id,
+            item_name: record.item_name,
+            owner_id: record.poster_id,
+            poster_name: record.poster_name,
+            message: 'Notified owner about similar items in security office'
+          }
+        })
+      }
+
+      setToast({
+        show: true,
+        message: 'Notification sent to owner successfully'
+      })
+    } catch (error) {
+      console.error('Error sending notification:', error)
+      setToast({
+        show: true,
+        message: 'Failed to send notification to owner'
+      })
+    }
+  }
+
   return (
     <IonContent>
       <div className='fixed top-0 w-full z-10 max-h-screen'>
-        <HeaderWithBackButton
-          onBack={() => navigate('/staff/post-records', 'back')}
-        />
+        <HeaderWithBackButton onBack={() => window.history.back()} />
       </div>
 
       {loading && (
@@ -443,8 +465,53 @@ export default memo(function ExpandedPostRecord () {
               locationLastSeenAt={record.last_seen_location}
               itemStatus={record.item_status}
               showAnonIndicator={record.is_anonymous}
+              returnedAt={record.returned_at ?? null}
               onKebabButtonClick={() => setShowActions(true)}
             />
+
+            {/* Linked Post Card */}
+            {linkedPost && (
+              <div className='mt-6'>
+                <IonCard className='mb-4 border border-slate-200/70 shadow-sm'>
+                  <IonCardContent className='p-5'>
+                    <h3 className='text-lg font-bold text-gray-900 mb-3'>
+                      {record.item_status === 'returned'
+                        ? 'Claimed Item'
+                        : 'Returned Item'}
+                    </h3>
+                  </IonCardContent>
+                </IonCard>
+                {loadingLinkedPost ? (
+                  <PostCard
+                    imgUrl=''
+                    title='Loading...'
+                    description=''
+                    owner=''
+                  />
+                ) : (
+                  <PostCard
+                    imgUrl={linkedPost.item_image_url ?? ''}
+                    title={linkedPost.item_name ?? ''}
+                    description={linkedPost.item_description ?? ''}
+                    owner={
+                      linkedPost.is_anonymous
+                        ? 'Anonymous'
+                        : ('username' in linkedPost
+                            ? linkedPost.username
+                            : linkedPost.poster_name) ?? ''
+                    }
+                    owner_profile_picture_url={
+                      'profilepicture_url' in linkedPost
+                        ? linkedPost.profilepicture_url
+                        : linkedPost.poster_profile_picture_url
+                    }
+                    onClick={() =>
+                      navigate(`/staff/post-record/view/${linkedPost.post_id}`)
+                    }
+                  />
+                )}
+              </div>
+            )}
 
             {/* Additional Details Card */}
             <IonCard className='mb-4 border border-slate-200/70 shadow-sm'>
@@ -486,34 +553,48 @@ export default memo(function ExpandedPostRecord () {
                 </div>
 
                 {/* Claim Details */}
-                {record.claimer_name && (
+                {(record.claimer_name || record.item_status === 'returned') && (
                   <div className='mt-4 rounded-lg'>
                     <h3 className='text-lg! font-bold! text-gray-900 mb-3'>
-                      Claim Details
+                      {record.item_status === 'returned'
+                        ? 'Return Details'
+                        : 'Claim Details'}
                     </h3>
 
-                    {/* Claimer */}
-                    <div className='mb-4'>
-                      <p className='text-base! font-semibold! text-gray-700 mb-1'>
-                        Claimer
-                      </p>
-                      <p className='text-sm! font-medium! text-gray-900'>
-                        Name: {record.claimer_name}
-                      </p>
-                      <p className='text-sm! text-gray-600'>
-                        Email:
-                        {record.claimer_school_email || 'No email provided'}
-                      </p>
-                      {record.claimer_contact_num && (
-                        <p className='text-sm! text-gray-600'>
-                          Contact Number: {record.claimer_contact_num}
+                    {/* Claimer/Returner */}
+                    {record.claimer_name && record.item_status !== 'unclaimed' && (
+                      <div className='mb-4'>
+                        <p className='text-base! font-semibold! text-gray-700 mb-1'>
+                          {record.item_status === 'returned'
+                            ? 'Returned by'
+                            : 'Claimer'}
                         </p>
-                      )}
-                      <p className='text-xs text-gray-500'>
-                        Claimed at:{' '}
-                        {formatDateTime(record.claimed_at) || 'Unknown'}
-                      </p>
-                    </div>
+                        <p className='text-sm! font-medium! text-gray-900'>
+                          Name: {record.claimer_name}
+                        </p>
+                        <p className='text-sm! text-gray-600'>
+                          Email:
+                          {record.claimer_school_email || 'No email provided'}
+                        </p>
+                        {record.claimer_contact_num && (
+                          <p className='text-sm! text-gray-600'>
+                            Contact Number: {record.claimer_contact_num}
+                          </p>
+                        )}
+                        {record.item_status === 'returned' &&
+                        record.returned_at ? (
+                          <p className='text-xs text-gray-500'>
+                            Returned at:{' '}
+                            {formatDateTime(record.returned_at) || 'Unknown'}
+                          </p>
+                        ) : (
+                          <p className='text-xs text-gray-500'>
+                            Claimed at:{' '}
+                            {formatDateTime(record.claimed_at) || 'Unknown'}
+                          </p>
+                        )}
+                      </div>
+                    )}
 
                     {/* Claim Processed by */}
                     {record.claim_processed_by_name && (
@@ -591,11 +672,16 @@ export default memo(function ExpandedPostRecord () {
             })
           }
 
-          // Claim Item: always available
-          buttons.push({
-            text: 'Claim Item',
-            handler: () => handleActionSheetClick('claim')
-          })
+          if (
+            record &&
+            record.item_type === 'found' &&
+            record.item_status === 'unclaimed' &&
+            record.post_status === 'accepted'
+          )
+            buttons.push({
+              text: 'Claim Item',
+              handler: () => handleActionSheetClick('claim')
+            })
 
           // Change Status: always available
           buttons.push({
@@ -642,7 +728,10 @@ export default memo(function ExpandedPostRecord () {
             </h3>
             <div className='flex flex-wrap gap-2 mb-4'>
               {getStatusOptions().map(status => {
-                const isAllowed = isPostStatusAllowed(status)
+                const isAllowed = isPostStatusAllowed(
+                  status,
+                  selectedItemStatus
+                )
                 const isActive = isStatusActive(status)
                 return (
                   <IonChip
@@ -676,8 +765,8 @@ export default memo(function ExpandedPostRecord () {
               Item Status
             </h3>
             <div className='flex flex-wrap gap-2'>
-              {getItemStatusOptions().map(status => {
-                const isAllowed = isItemStatusAllowed(status)
+              {getItemStatusOptions(record?.item_type).map(status => {
+                const isAllowed = isItemStatusAllowed(status, selectedStatus)
                 const isActive = isItemStatusActive(status)
                 return (
                   <IonChip
@@ -748,6 +837,32 @@ export default memo(function ExpandedPostRecord () {
           setSelectedStatus(null)
           setSelectedItemStatus(null)
         }}
+      />
+
+      {/* Unclaim Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showUnclaimConfirmModal}
+        heading='Confirm Unclaim Action'
+        subheading='This action will delete the claim record and reset any linked missing item back to "lost" status. Are you sure you want to proceed?'
+        onSubmit={handleUnclaimConfirm}
+        onCancel={() => {
+          setShowUnclaimConfirmModal(false)
+          setSelectedStatus(null)
+          setSelectedItemStatus(null)
+        }}
+        submitLabel={isSubmitting ? 'Processing...' : 'Confirm'}
+        cancelLabel='Cancel'
+      />
+
+      {/* Notify Owner Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showNotifyOwnerModal}
+        heading='Notify Owner'
+        subheading='Are you sure you want to notify the owner that similar items are in the security office and that they can check whenever the security office is open?'
+        onSubmit={handleNotifyOwnerConfirm}
+        onCancel={() => setShowNotifyOwnerModal(false)}
+        submitLabel='Confirm'
+        cancelLabel='Cancel'
       />
     </IonContent>
   )

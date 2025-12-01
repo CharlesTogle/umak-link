@@ -24,4 +24,5 @@ export interface PublicPost {
   claim_id: string | null
   accepted_on_date: string | null
   item_type: string | null
+  returned_at?: string | null
 }

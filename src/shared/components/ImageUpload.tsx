@@ -5,7 +5,6 @@ import {
   refreshOutline,
   camera,
   images,
-  informationCircle,
   trashOutline
 } from 'ionicons/icons'
 import ActionModal from './ActionModal'
@@ -54,6 +53,8 @@ const ImageUploadSection: React.FC<ImageUploadSectionProps> = ({
   const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       onImageChange(e.target.files[0])
+      // Clear file input value so the same file can be selected again later
+      if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
 
@@ -63,10 +64,14 @@ const ImageUploadSection: React.FC<ImageUploadSectionProps> = ({
 
   const handleRemoveImage = () => {
     onImageChange(null)
+    // Also clear the hidden file input so user can re-upload same file
+    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   const handlePickFile = () => {
     closeModal()
+    // clear current value to ensure change event fires even for same file
+    if (fileInputRef.current) fileInputRef.current.value = ''
     // trigger native file picker
     fileInputRef.current?.click()
   }
@@ -217,11 +222,7 @@ const ImageUploadSection: React.FC<ImageUploadSectionProps> = ({
         isOpen={isOpen}
         onDidDismiss={closeModal}
         header={
-          <div className='flex flex-col items-center'>
-            <IonIcon
-              icon={informationCircle}
-              className='text-3xl text-umak-blue'
-            />
+          <div className='flex flex-col items-center pt-4'>
             <p>Select Picture Method</p>
           </div>
         }
@@ -245,8 +246,8 @@ const ImageUploadSection: React.FC<ImageUploadSectionProps> = ({
             }
           }
         ]}
-        initialBreakpoint={0.25}
-        breakpoints={[0, 0.25, 0.35]}
+        initialBreakpoint={0.2}
+        breakpoints={[0, 0.2]}
         backdropDismiss={true}
         className='category-selection-modal font-default-font'
       />

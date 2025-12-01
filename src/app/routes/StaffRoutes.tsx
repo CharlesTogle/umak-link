@@ -5,14 +5,14 @@ import PostRecords from '../../features/staff/pages/PostRecords'
 import FraudReport from '../../features/staff/pages/FraudReports'
 import ExpandedFraudReport from '../../features/staff/pages/ExpandedFraudReport'
 import ExpandedPostRecord from '../../features/staff/pages/ExpandedPostRecord'
-import Settings from '../../features/staff/pages/Settings'
+import Settings from '@/shared/pages/Settings'
 import ClaimItem from '../../features/staff/pages/ClaimItem'
 import NewPost from '../../features/staff/pages/NewPost'
 import Toolbar from '@/app/components/Toolbar'
 import { home, create, documentText, settings } from 'ionicons/icons'
 import Notifications from '@/features/user/pages/Notifications'
 import StaffSearchItem from '@/features/staff/pages/SearchItem'
-import StaffSearchResults from '@/features/staff/pages/SearchResults'
+import SearchResults from '@/features/staff/pages/SearchResults'
 
 export default function StaffRoutes () {
   return (
@@ -21,12 +21,9 @@ export default function StaffRoutes () {
         <Route exact path='/staff'>
           <Redirect to='/staff/home' />
         </Route>
+        <Route path='/staff/search/results' render={() => <SearchResults />} />
+        <Route exact path='/staff/search' render={() => <StaffSearchItem />} />
 
-        <Route path='/staff/search' render={() => <StaffSearchItem />} />
-        <Route
-          path='/staff/search/results'
-          render={() => <StaffSearchResults />}
-        />
         <Route
           exact
           path='/staff/post/claim/:postId'

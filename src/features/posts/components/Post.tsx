@@ -32,6 +32,8 @@ export type CatalogPostProps = {
   // Claimer details
   claimedByName?: string | null
   claimedAt?: string | null
+  // Returned details for missing items
+  returnedAt?: string | null
   // New props for external action sheet control
   actionSheetOpen?: boolean
   onActionSheetDismiss?: () => void
@@ -53,6 +55,7 @@ const Post: React.FC<CatalogPostProps> = ({
   showAnonIndicator = false,
   claimedByName = null,
   claimedAt = null,
+  returnedAt = null,
   actionSheetOpen = false,
   onActionSheetDismiss,
   actionSheetButtons
@@ -60,17 +63,25 @@ const Post: React.FC<CatalogPostProps> = ({
   const normalizedStatus = (itemStatus || '').toLowerCase()
 
   const getStatusColor = (status: string) => {
-    switch (status) {
+    switch (status.toLowerCase()) {
+      case 'accepted':
+        return '#16a34a' // green-600
+      case 'rejected':
+        return '#C1272D' // umak-red
+      case 'pending':
+        return '#d97706' // amber-600
       case 'claimed':
       case 'returned':
-        return '#2563eb' // blue-600
+        return '#16a34a' // green-600
       case 'unclaimed':
       case 'lost':
         return '#d97706' // amber-600
+      case 'fraud':
+        return '#b91c1c' // red-700
       case 'discarded':
-        return '#dc2626' // red-600
+        return '#C1272D' // umak-red
       default:
-        return '#6b7280' // gray-500
+        return '#f59e0b' // amber-500
     }
   }
 
@@ -191,6 +202,23 @@ const Post: React.FC<CatalogPostProps> = ({
                 </IonText>
               )}
             </div>
+          </div>
+        )}
+        {normalizedStatus === 'returned' && returnedAt && (
+          <div className='flex flex-col mt-4 text-xl text-slate-900'>
+            <IonText class='font-extrabold'>
+              <strong>Returned At:</strong>
+            </IonText>
+            <IonText className='text-base'>
+              {new Date(returnedAt).toLocaleString('en-US', {
+                month: '2-digit',
+                day: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+              })}
+            </IonText>
           </div>
         )}
       </IonCardContent>

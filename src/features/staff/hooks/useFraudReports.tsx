@@ -43,6 +43,7 @@ export interface FraudReportPublic {
   claimer_contact_num: string | null
   claimed_at: string | null
   claim_id: string | null
+  linked_lost_item_id: string | null
 
   // staff who processed the claim
   claim_processed_by_name: string | null
@@ -178,7 +179,6 @@ export function useFraudReports ({
     if (isFetchingRef.current) return
     isFetchingRef.current = true
     setIsFetching(true)
-
     try {
       // 1. Load from cache immediately for instant render
       const cachedReports = await cache.loadCache()
@@ -514,7 +514,7 @@ export function useFraudReports ({
         await sendNotification({
           userId: reporterId,
           title: 'Fraud Report Opened',
-          message: `Your report on "${postTitle}" has been opened and is being investigated. Thank you for helping keep UMatch safe.`,
+          message: `Your report on "${postTitle}" has been opened and is being investigated. Thank you for helping keep UMak LINK safe.`,
           type: 'acceptance'
         })
       }
@@ -661,7 +661,6 @@ export function useFraudReports ({
     reportId,
     postTitle,
     deleteClaim = false,
-    itemId,
     reporterId
   }: {
     reportId: string
@@ -687,51 +686,23 @@ export function useFraudReports ({
         console.error('Error fetching user data:', userError)
       }
 
-      // Get claim_id from the report to delete it
-      const { data: reportData, error: reportFetchError } = await supabase
-        .from('fraud_reports_public_v')
-        .select('claim_id')
-        .eq('report_id', reportId)
-        .single()
-
-      if (reportFetchError) {
-        console.error('Error fetching report claim_id:', reportFetchError)
-      }
-
-      // Delete claim record and update item status if deleteClaim is true
-      if (deleteClaim && reportData?.claim_id) {
-        // Delete claim record
-        const { error: claimDeleteError } = await supabase
-          .from('claim_table')
-          .delete()
-          .eq('claim_id', reportData.claim_id)
-
-        if (claimDeleteError) {
-          console.error('Error deleting claim record:', claimDeleteError)
-          throw claimDeleteError
+      // Call RPC to resolve the fraud report
+      // This handles: report status, post status, claim deletion, item status updates, and linked missing item cleanup
+      const { data: rpcResult, error: rpcError } = await supabase.rpc(
+        'resolve_fraud_report',
+        {
+          p_report_id: reportId,
+          p_delete_claim: deleteClaim,
+          p_processed_by_staff_id: user.id
         }
+      )
 
-        // Update item status to unclaimed
-        if (itemId) {
-          const { error: itemUpdateError } = await supabase
-            .from('item_table')
-            .update({ status: 'unclaimed' })
-            .eq('item_id', itemId)
+      if (rpcError) throw rpcError
 
-          if (itemUpdateError) {
-            console.error('Error updating item status:', itemUpdateError)
-            throw itemUpdateError
-          }
-        }
+      // Check RPC result
+      if (rpcResult && rpcResult.length > 0 && !rpcResult[0].success) {
+        throw new Error(rpcResult[0].message || 'Failed to resolve report')
       }
-
-      // Update report status to resolved
-      const { error: reportError } = await supabase
-        .from('fraud_reports_table')
-        .update({ report_status: 'resolved' })
-        .eq('report_id', reportId)
-
-      if (reportError) throw reportError
 
       // Add audit trail
       await insertAuditLog({
@@ -743,7 +714,8 @@ export function useFraudReports ({
           } closed the report on ${postTitle}`,
           post_title: postTitle,
           old_status: 'verified',
-          new_status: 'resolved'
+          new_status: 'resolved',
+          claim_deleted: deleteClaim
         }
       })
 

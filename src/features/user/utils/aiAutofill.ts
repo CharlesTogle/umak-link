@@ -109,9 +109,9 @@ export async function generateAndAutofillFields (
 
   console.log('[AI Autofill] Starting generation for empty fields...')
 
-  // Create a timeout promise that rejects after 10s
+  // Create a timeout promise that rejects after 15s
   const timeoutPromise = new Promise<never>((_, reject) =>
-    setTimeout(() => reject(new Error('ai_timeout')), 10000)
+    setTimeout(() => reject(new Error('ai_timeout')), 15000)
   )
 
   try {

@@ -73,8 +73,14 @@ export function usePostFetching (config: usePostFetchingConfig) {
       if (config.filterPosts) newPosts = config.filterPosts(newPosts)
 
       if (newPosts.length > 0) {
-        // Prepend new posts so newest appear first
-        const merged = sortPosts([...newPosts, ...posts])
+        let merged: PublicPost[]
+        if ((config.sortDirection ?? 'desc') === 'desc') {
+          // Prepend new posts for newest-first
+          merged = sortPosts([...newPosts, ...posts])
+        } else {
+          // Append new posts for oldest-first
+          merged = sortPosts([...posts, ...newPosts])
+        }
         setPosts(merged)
 
         // Add new post IDs to loaded set
@@ -232,8 +238,14 @@ export function usePostFetching (config: usePostFetchingConfig) {
           setHasMore(false)
         }
 
-        // Append new posts to existing posts
-        const merged = sortPosts([...posts, ...newPosts])
+        let merged: PublicPost[]
+        if ((config.sortDirection ?? 'desc') === 'desc') {
+          // Append new posts for newest-first
+          merged = sortPosts([...posts, ...newPosts])
+        } else {
+          // Prepend new posts for oldest-first
+          merged = sortPosts([...newPosts, ...posts])
+        }
         setPosts(merged)
 
         // Add new post IDs to loaded set

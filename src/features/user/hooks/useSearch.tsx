@@ -17,6 +17,9 @@ interface AdvancedSearchParams {
   selectedCategories: string[]
   image: File | null
   onProgress?: (step: number, totalSteps: number) => void
+  selectedStatuses: string[]
+  claimFromDate: string | null
+  claimToDate: string | null
 }
 
 interface SearchResult {
@@ -73,16 +76,14 @@ export default function useSearch () {
       locationDetails,
       selectedCategories,
       image,
-      onProgress
+      onProgress,
+      selectedStatuses,
+      claimFromDate,
+      claimToDate
     } = params
 
     // Use the context methods from the top-level context reference
     searchCtx.clearSearchResults()
-
-    // Validation: return null if search value is not provided
-    if (!searchValue || searchValue.trim() === '') {
-      return { success: false, message: 'Please provide a search term' }
-    }
 
     const shouldSkipImageAnalysis =
       searchValue &&
@@ -159,7 +160,12 @@ export default function useSearch () {
           Array.isArray(searchResult.categories) &&
           searchResult.categories.length > 0
             ? searchResult.categories[0]
-            : null
+            : null,
+        claimFromDate: claimFromDate ?? null,
+        claimToDate: claimToDate ?? null,
+        selectedStatuses: Array.isArray(selectedStatuses)
+          ? selectedStatuses
+          : []
       })
 
       const postIds: string[] = Array.isArray(data)
@@ -188,20 +194,32 @@ export default function useSearch () {
     lastSeenDate = null,
     limit = 10,
     locationLastSeen = null,
-    category = null
+    category = null,
+    claimFromDate = null,
+    claimToDate = null,
+    selectedStatuses = []
   }: {
     query: string
     lastSeenDate?: Date | null
     limit?: number
     locationLastSeen?: string | null
     category?: string | null
+    claimFromDate?: string | null
+    claimToDate?: string | null
+    selectedStatuses?: string[]
   }) {
     const { data, error } = await supabase.rpc('search_items_fts', {
       search_term: query,
       limit_count: limit,
       p_date: lastSeenDate ? lastSeenDate.toISOString().split('T')[0] : null,
-      p_category: category,
-      p_location_last_seen: locationLastSeen
+      p_category: category ? [category] : null,
+      p_location_last_seen: locationLastSeen,
+      p_claim_from: claimFromDate ? claimFromDate : null,
+      p_claim_to: claimToDate ? claimToDate : null,
+      p_item_status:
+        Array.isArray(selectedStatuses) && selectedStatuses.length > 0
+          ? selectedStatuses
+          : null
     })
 
     if (error) throw error

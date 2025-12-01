@@ -4,7 +4,7 @@ import type { PublicPost } from '@/features/posts/types/post'
 import { getPost } from '../data/posts'
 import Post from '@/features/posts/components/Post'
 import PostSkeleton from '../components/PostSkeleton'
-import Header from '@/shared/components/Header'
+import { HeaderWithBackButton } from '@/shared/components/HeaderVariants'
 import {
   IonContent,
   IonActionSheet,
@@ -78,7 +78,7 @@ export default function ExpandedPost () {
   if (!loading && offline && post === null) {
     return (
       <IonContent>
-        <Header isProfileAndNotificationShown={true} logoShown={true} />
+        <HeaderWithBackButton onBack={() => window.history.back()} />
         <div className='flex flex-col items-center justify-center h-full px-6 pt-20'>
           <div className='text-center mb-6'>
             <p className='text-xl font-semibold text-gray-800 mb-2'>
@@ -105,7 +105,7 @@ export default function ExpandedPost () {
   if (!loading && post === null) {
     return (
       <IonContent>
-        <Header isProfileAndNotificationShown={true} logoShown={true} />
+        <HeaderWithBackButton onBack={() => window.history.back()} />
         <div className='flex flex-col items-center justify-center h-full px-6 pt-20'>
           <div className='text-center mb-6'>
             <p className='text-xl font-semibold text-gray-800'>No post found</p>
@@ -128,11 +128,11 @@ export default function ExpandedPost () {
 
   return (
     <IonContent>
-      <div className='fixed top-0 w-full'>
-        <Header isProfileAndNotificationShown={true} logoShown={true} />
+      <div className='fixed top-0 w-full z-10'>
+        <HeaderWithBackButton onBack={() => window.history.back()} />
       </div>
 
-      <div className='pt-15'>
+      <div className='mt-16'>
         {loading ? (
           <PostSkeleton />
         ) : (

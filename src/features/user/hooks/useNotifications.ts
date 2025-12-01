@@ -116,7 +116,7 @@ export default function useNotifications (): UseNotificationsReturn {
       const { data, error } = await supabase
         .from('notification_view')
         .select(
-          'notification_id, type, title, description, is_read, data, created_at, sent_to, sent_by, item_id, image_url'
+          'notification_id, type, title, description, is_read, data, created_at, sent_to, sent_by, image_url'
         )
         .eq('sent_to', userId)
         .order('created_at', { ascending: false })
@@ -141,7 +141,6 @@ export default function useNotifications (): UseNotificationsReturn {
         data: r.data,
         sent_to: r.sent_to,
         sent_by: r.sent_by,
-        item_id: r.item_id,
         image_url: r.image_url
       }))
 

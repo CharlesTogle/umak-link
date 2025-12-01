@@ -14,15 +14,11 @@ import {
   IonButton,
   IonToast
 } from '@ionic/react'
-import {
-  peopleCircle,
-  personCircle,
-  alertCircle,
-  checkmarkCircle,
-  close
-} from 'ionicons/icons'
-import Header from '@/shared/components/Header'
-import { useState } from 'react'
+import { peopleCircle, personCircle, alertCircle, close } from 'ionicons/icons'
+import { HeaderWithButtons } from '@/shared/components/HeaderVariants'
+import { ConfirmationModal } from '@/shared/components/ConfirmationModal'
+import { useNavigation } from '@/shared/hooks/useNavigation'
+import { useState, useRef, useEffect } from 'react'
 import { useStaffSearch } from '../hooks/useStaffSearch'
 import { useAdminServices } from '../hooks/useAdminServices'
 
@@ -39,6 +35,7 @@ const SelectedUserCard = ({
   image?: string | null
   role: string
   onRemove: () => void
+  isDisabled?: boolean
 }) => (
   <IonCard className='rounded-2xl shadow-sm border border-slate-200/70 mb-3'>
     <IonCardContent className='p-4'>
@@ -63,6 +60,7 @@ const SelectedUserCard = ({
 
         <IonButton
           onClick={onRemove}
+          disabled={Boolean(onRemove && (onRemove as any) && false)}
           fill='clear'
           className='text-slate-500 hover:text-red-600'
           aria-label='Remove user'
@@ -85,8 +83,13 @@ export default function AddRole () {
 
   const { results, loading, error, search, clearResults } = useStaffSearch()
   const { updateUserRole } = useAdminServices()
+  const addTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const { navigate } = useNavigation()
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false)
+  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false)
 
-  const handleSearchChange = (e: CustomEvent) => {
+  const handleSearchChange = async (e: CustomEvent) => {
+    console.log('current usr')
     const value = e.detail.value || ''
     setSearchText(value)
     search(value)
@@ -123,56 +126,84 @@ export default function AddRole () {
   const handleAddStaff = async () => {
     if (selectedUsers.length === 0) return
 
-    setIsAdding(true)
-    let successCount = 0
-    let failedCount = 0
-
-    try {
-      // Add each user one by one
-      for (const user of selectedUsers) {
-        const success = await updateUserRole({
-          userId: user.id,
-          email: user.email,
-          name: user.name,
-          role: selectedRole
-        })
-        if (success) {
-          successCount++
-        } else {
-          failedCount++
-        }
-      }
-
-      // Show result message
-      if (successCount > 0 && failedCount === 0) {
-        setToastMessage(
-          `Successfully added ${successCount} staff member${
-            successCount > 1 ? 's' : ''
-          }!`
-        )
-        setShowSuccessToast(true)
-        // Reset form
-        setSelectedUsers([])
-        setSearchText('')
-      } else if (successCount > 0 && failedCount > 0) {
-        setToastMessage(
-          `Added ${successCount} successfully, ${failedCount} failed.`
-        )
-        setShowSuccessToast(true)
-        // Remove successfully added users from selection
-        setSelectedUsers([])
-      } else {
-        setToastMessage('Failed to add staff members. Please try again.')
-        setShowErrorToast(true)
-      }
-    } catch (error: any) {
-      console.error('Failed to add staff:', error)
-      setToastMessage(error.message || 'An error occurred. Please try again.')
-      setShowErrorToast(true)
-    } finally {
-      setIsAdding(false)
+    // Clear any existing timeout
+    if (addTimeoutRef.current) {
+      clearTimeout(addTimeoutRef.current)
     }
+
+    addTimeoutRef.current = setTimeout(async () => {
+      setIsAdding(true)
+      let successCount = 0
+      let failedCount = 0
+
+      try {
+        // Add each user one by one
+        for (const user of selectedUsers) {
+          const success = await updateUserRole({
+            userId: user.id,
+            email: user.email,
+            name: user.name,
+            role: selectedRole
+          })
+          if (success) {
+            successCount++
+          } else {
+            failedCount++
+          }
+        }
+
+        // Show result message
+        if (successCount > 0 && failedCount === 0) {
+          setToastMessage(
+            `Successfully added ${successCount} staff member${
+              successCount > 1 ? 's' : ''
+            }`
+          )
+          setShowSuccessToast(true)
+          // Reset form
+          setSelectedUsers([])
+          setSearchText('')
+          setTimeout(() => {
+            navigate('/admin/staff-management')
+          }, 1200)
+        } else if (successCount > 0 && failedCount > 0) {
+          setToastMessage(
+            `Added ${successCount} successfully, ${failedCount} failed.`
+          )
+          setShowSuccessToast(true)
+          // Remove successfully added users from selection
+          setSelectedUsers([])
+          // Navigate back to staff management after a short delay
+          setTimeout(() => {
+            navigate('/admin/staff-management')
+          }, 1200)
+        } else {
+          setToastMessage('Failed to add staff members. Please try again.')
+          setShowErrorToast(true)
+        }
+      } catch (error: any) {
+        console.error('Failed to add staff:', error)
+        setToastMessage(error.message || 'An error occurred. Please try again.')
+        setShowErrorToast(true)
+      } finally {
+        setIsAdding(false)
+      }
+
+      if (addTimeoutRef.current) {
+        clearTimeout(addTimeoutRef.current)
+        addTimeoutRef.current = null
+      }
+    }, 500)
   }
+
+  useEffect(() => {
+    return () => {
+      if (addTimeoutRef.current) {
+        clearTimeout(addTimeoutRef.current)
+        addTimeoutRef.current = null
+      }
+    }
+  }, [])
 
   const handleClearSelection = () => {
     setSelectedUsers([])
@@ -184,10 +215,33 @@ export default function AddRole () {
     setSelectedUsers(prev => prev.filter(user => user.id !== userId))
   }
 
+  const handleCancel = () => {
+    if (selectedUsers.length > 0) {
+      setShowCancelConfirm(true)
+    } else {
+      navigate('/admin/staff-management')
+    }
+  }
+
+  const handleSubmitClick = () => {
+    if (selectedUsers.length === 0) {
+      setToastMessage('No users selected')
+      setShowErrorToast(true)
+      return
+    }
+    setShowSubmitConfirm(true)
+  }
+
   return (
     <IonContent>
-      <Header logoShown isProfileAndNotificationShown />
-      <IonCard className='shadow-none!'>
+      <div className='fixed w-full top-0 z-10'>
+        <HeaderWithButtons
+          loading={isAdding}
+          onCancel={handleCancel}
+          onSubmit={handleSubmitClick}
+        />
+      </div>
+      <IonCard className='shadow-none! mt-16'>
         <IonCardContent className='min-h-75!'>
           <CardHeader title='Add Role' icon={peopleCircle} />
 
@@ -231,7 +285,7 @@ export default function AddRole () {
               value={searchText}
               onIonInput={handleSearchChange}
               placeholder='Start Typing to Search Users...'
-              debounce={0}
+              debounce={500}
               className='ion-no-padding relative'
               showClearButton={loading ? 'never' : 'focus'}
             />
@@ -313,7 +367,7 @@ export default function AddRole () {
                     Clear All
                   </IonButton>
                   <IonButton
-                    onClick={handleAddStaff}
+                    onClick={() => setShowSubmitConfirm(true)}
                     disabled={isAdding}
                     style={{ '--background': 'var(--color-umak-blue)' }}
                   >
@@ -345,6 +399,37 @@ export default function AddRole () {
         </IonCardContent>
       </IonCard>
 
+      {/* Confirmation modal: Cancel (discard changes) */}
+      <ConfirmationModal
+        isOpen={showCancelConfirm}
+        heading='Discard changes?'
+        subheading='Are you sure you want to discard selected users? This action cannot be undone.'
+        onSubmit={() => {
+          setShowCancelConfirm(false)
+          setSelectedUsers([])
+          setSearchText('')
+          clearResults()
+          navigate('/admin/staff-management', 'back')
+        }}
+        onCancel={() => setShowCancelConfirm(false)}
+        submitLabel='Discard'
+        cancelLabel='Keep editing'
+      />
+
+      {/* Confirmation modal: Submit (confirm role change) */}
+      <ConfirmationModal
+        isOpen={showSubmitConfirm}
+        heading='Confirm role assignment?'
+        subheading={`Are you sure you want to make these users ${selectedRole}s? Their role can be revoked later.`}
+        onSubmit={() => {
+          setShowSubmitConfirm(false)
+          handleAddStaff()
+        }}
+        onCancel={() => setShowSubmitConfirm(false)}
+        submitLabel='Confirm'
+        cancelLabel='Cancel'
+      />
+
       {/* Success Toast */}
       <IonToast
         isOpen={showSuccessToast}
@@ -353,7 +438,6 @@ export default function AddRole () {
         duration={3000}
         position='top'
         color='success'
-        icon={checkmarkCircle}
       />
 
       {/* Error Toast */}
@@ -364,7 +448,6 @@ export default function AddRole () {
         duration={4000}
         position='top'
         color='danger'
-        icon={alertCircle}
       />
     </IonContent>
   )

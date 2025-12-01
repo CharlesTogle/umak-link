@@ -35,14 +35,19 @@ export default function ReportPost () {
   const [showToast, setShowToast] = useState(false)
   const [toastMessage, setToastMessage] = useState('')
   const [toastColor, setToastColor] = useState<'danger' | 'success'>('danger')
-  const [showLeaveConfirmModal, setShowLeaveConfirmModal] = useState(false)
   const [showCancelModal, setShowCancelModal] = useState(false)
+  const [showDuplicateWarningModal, setShowDuplicateWarningModal] =
+    useState(false)
+  const [pendingSubmit, setPendingSubmit] = useState<
+    (() => Promise<any>) | null
+  >(null)
   const { reportPost } = usePostActions()
   const { getUser } = useUser()
   const { sendNotification } = useNotifications()
   const { postId } = useParams<{ postId: string }>()
   const { navigate } = useNavigation()
-  const submitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [showSubmitConfirmModal, setShowSubmitConfirmModal] = useState(false)
+  const submitDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     const getCurrentPost = async () => {
@@ -50,12 +55,10 @@ export default function ReportPost () {
 
       const fetchedPost = await getPost(postId as string)
       setPost(fetchedPost)
-      // loading handled implicitly by checking post state
     }
     getCurrentPost()
   }, [postId])
 
-  // Helper to check if form has unsaved changes
   const hasUnsavedChanges = () => {
     return (
       concern.trim() !== '' ||
@@ -68,7 +71,7 @@ export default function ReportPost () {
   // Detect when user tries to leave the page
   useIonViewWillLeave(() => {
     if (hasUnsavedChanges() && !submitting) {
-      setShowLeaveConfirmModal(true)
+      setShowCancelModal(true)
     }
   })
 
@@ -77,41 +80,127 @@ export default function ReportPost () {
   }
 
   const handleSubmitReport = async () => {
-    // Clear any existing timeout (debounce)
-    if (submitTimeoutRef.current) {
-      clearTimeout(submitTimeoutRef.current)
+    setShowSubmitConfirmModal(true)
+  }
+
+  const performSubmitReport = async () => {
+    if (!postId || submitting) return
+
+    // Validate required fields
+    if (!concern || (concern === 'Others' && !customConcernText.trim())) {
+      setToastMessage('Please select a concern')
+      setToastColor('danger')
+      setShowToast(true)
+      return
     }
 
-    // Debounce the submit action
-    submitTimeoutRef.current = setTimeout(async () => {
-      if (!postId || submitting) return
+    if (!reviewed) {
+      setToastMessage('Please review and confirm the details')
+      setToastColor('danger')
+      setShowToast(true)
+      return
+    }
 
-      // Validate required fields
-      if (!concern || (concern === 'Others' && !customConcernText.trim())) {
-        setToastMessage('Please select a concern')
+    // Check network connectivity
+    const status = await Network.getStatus()
+    if (status.connected === false) {
+      setToastMessage('You are not connected to the internet')
+      setToastColor('danger')
+      setShowToast(true)
+      return
+    }
+
+    setSubmitting(true)
+
+    try {
+      const user = await getUser()
+      if (!user) {
+        setToastMessage('User not authenticated')
         setToastColor('danger')
         setShowToast(true)
+        setSubmitting(false)
         return
       }
 
-      if (!reviewed) {
-        setToastMessage('Please review and confirm the details')
+      const result = await reportPost({
+        postId,
+        concern: concern === 'Others' ? customConcernText : concern,
+        additionalDetails,
+        proofImage: image,
+        claimerName: post?.claimed_by_name,
+        claimerEmail: post?.claimed_by_email,
+        claimerContact: post?.claimed_by_contact,
+        claimedAt: post?.claimed_at,
+        claimProcessedByStaffId: post?.claim_processed_by_staff_id,
+        claimId: post?.claim_id
+      })
+
+      // Handle duplicate self - block submission
+      if (result.hasDuplicateSelf) {
+        setToastMessage(
+          'You have already reported this item. Please wait for staff to review your previous report.'
+        )
         setToastColor('danger')
         setShowToast(true)
+        setSubmitting(false)
         return
       }
 
-      // Check network connectivity
-      const status = await Network.getStatus()
-      if (status.connected === false) {
-        setToastMessage('You are not connected to the internet')
-        setToastColor('danger')
-        setShowToast(true)
+      // Handle duplicate others - show warning modal
+      if (result.hasDuplicateOthers && result.submit) {
+        setPendingSubmit(() => result.submit)
+        setShowDuplicateWarningModal(true)
+        setSubmitting(false)
         return
       }
 
-      setSubmitting(true)
+      // No duplicates, proceed with submission
+      if (result.submit) {
+        const submitResult = await result.submit()
 
+        if (submitResult.error) {
+          setToastMessage(submitResult.error)
+          setToastColor('danger')
+          setShowToast(true)
+          setSubmitting(false)
+          return
+        }
+
+        // Send notification to self
+        sendNotification({
+          title: 'Report Submitted',
+          message: `Greetings! Your report for post "${post?.item_name}" has been submitted successfully. Thank you for helping us keep the community safe.`,
+          type: 'progress',
+          userId: user.user_id
+        })
+        // Success
+        setToastMessage('Report submitted successfully!')
+        setToastColor('success')
+        setShowToast(true)
+
+        // Navigate after a brief delay
+        setTimeout(() => {
+          navigate('/user/home')
+        }, 1500)
+      }
+    } catch (error) {
+      console.error('Error submitting report:', error)
+      setToastMessage('Failed to submit report')
+      setToastColor('danger')
+      setShowToast(true)
+      setSubmitting(false)
+    }
+  }
+
+  const handleDuplicateWarningProceed = async () => {
+    setShowDuplicateWarningModal(false)
+
+    if (!pendingSubmit) return
+
+    // Debounce duplicate-submit action to avoid accidental double submits
+    setSubmitting(true)
+    if (submitDebounceRef.current) clearTimeout(submitDebounceRef.current)
+    submitDebounceRef.current = setTimeout(async () => {
       try {
         const user = await getUser()
         if (!user) {
@@ -119,27 +208,18 @@ export default function ReportPost () {
           setToastColor('danger')
           setShowToast(true)
           setSubmitting(false)
+          setPendingSubmit(null)
           return
         }
 
-        const result = await reportPost({
-          postId,
-          concern: concern === 'Others' ? customConcernText : concern,
-          additionalDetails,
-          proofImage: image,
-          claimerName: post?.claimed_by_name,
-          claimerEmail: post?.claimed_by_email,
-          claimerContact: post?.claimed_by_contact,
-          claimedAt: post?.claimed_at,
-          claimProcessedByStaffId: post?.claim_processed_by_staff_id,
-          claimId: post?.claim_id
-        })
+        const result = await pendingSubmit()
 
         if (result.error) {
           setToastMessage(result.error)
           setToastColor('danger')
           setShowToast(true)
           setSubmitting(false)
+          setPendingSubmit(null)
           return
         }
 
@@ -165,13 +245,26 @@ export default function ReportPost () {
         setToastColor('danger')
         setShowToast(true)
         setSubmitting(false)
+      } finally {
+        setPendingSubmit(null)
       }
-    }, 300) // 300ms debounce
+    }, 500)
+  }
+
+  const handleDuplicateWarningCancel = () => {
+    setShowDuplicateWarningModal(false)
+    setPendingSubmit(null)
   }
 
   const handleCancel = () => {
     setShowCancelModal(true)
   }
+
+  useEffect(() => {
+    return () => {
+      if (submitDebounceRef.current) clearTimeout(submitDebounceRef.current)
+    }
+  }, [])
 
   return (
     <IonContent>
@@ -179,12 +272,14 @@ export default function ReportPost () {
         <ReportPostSkeleton />
       ) : (
         <>
-          <HeaderWithButtons
-            loading={submitting}
-            onCancel={() => handleCancel()}
-            onSubmit={() => handleSubmitReport()}
-          />
-          <IonCard>
+          <div className='fixed w-full z-10'>
+            <HeaderWithButtons
+              loading={submitting}
+              onCancel={() => handleCancel()}
+              onSubmit={() => handleSubmitReport()}
+            />
+          </div>
+          <IonCard className='mt-16'>
             <IonCardContent>
               <CardHeader
                 title='Fraud Report'
@@ -240,21 +335,37 @@ export default function ReportPost () {
             }}
             onCancel={() => setShowCancelModal(false)}
             submitLabel='Discard'
-            cancelLabel='Keep writing'
+            cancelLabel='Keep editing'
           />
 
-          {/* Leave Confirmation Modal */}
+          {/* Submit Confirmation Modal */}
           <ConfirmationModal
-            isOpen={showLeaveConfirmModal}
-            heading='Discard report?'
-            subheading='You have unsaved changes. Are you sure you want to leave without submitting your report?'
+            isOpen={showSubmitConfirmModal}
+            heading='Submit report?'
+            subheading='Once submitted, your report will be sent for review and processing.'
             onSubmit={() => {
-              setShowLeaveConfirmModal(false)
-              navigate('/user/home')
+              setShowSubmitConfirmModal(false)
+              // Debounce the actual submission to avoid double clicks
+              if (submitDebounceRef.current)
+                clearTimeout(submitDebounceRef.current)
+              submitDebounceRef.current = setTimeout(() => {
+                performSubmitReport()
+              }, 500)
             }}
-            onCancel={() => setShowLeaveConfirmModal(false)}
-            submitLabel='Discard'
-            cancelLabel='Keep writing'
+            onCancel={() => setShowSubmitConfirmModal(false)}
+            submitLabel='Submit'
+            cancelLabel='Keep editing'
+          />
+
+          {/* Duplicate Warning Modal */}
+          <ConfirmationModal
+            isOpen={showDuplicateWarningModal}
+            heading='Duplicate report?'
+            subheading='Someone has already reported this item with a similar concern. Submitting a duplicate report may result in your report being rejected.'
+            onSubmit={handleDuplicateWarningProceed}
+            onCancel={handleDuplicateWarningCancel}
+            submitLabel='Submit anyway'
+            cancelLabel='Cancel'
           />
         </>
       )}

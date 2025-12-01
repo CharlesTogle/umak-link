@@ -19,14 +19,14 @@ export default function SearchLoadingPage ({
 }: SearchLoadingPageProps) {
   const [messageIndex, setMessageIndex] = useState(0)
 
-    useEffect(() => {
-      // Cycle through messages every 2.5 seconds
-      const interval = setInterval(() => {
-        setMessageIndex(prev => (prev + 1) % LOADING_MESSAGES.length)
-      }, 2500)
+  useEffect(() => {
+    // Cycle through messages every 2.5 seconds
+    const interval = setInterval(() => {
+      setMessageIndex(prev => (prev + 1) % LOADING_MESSAGES.length)
+    }, 2500)
 
-      return () => clearInterval(interval)
-    }, [])
+    return () => clearInterval(interval)
+  }, [])
 
   // Calculate progress percentage if steps are provided
   const progressPercentage =

@@ -4,10 +4,13 @@ import { supabase } from '@/shared/lib/supabase'
 import { IonIcon } from '@ionic/react'
 import { downloadOutline } from 'ionicons/icons'
 import { IonButton } from '@ionic/react'
+import { Filesystem, Directory } from '@capacitor/filesystem'
+import { Share } from '@capacitor/share'
+import { Capacitor } from '@capacitor/core'
 
 interface ChartData {
   labels: string[]
-  series: number[][] // [missing, found, claimed]
+  series: number[][] // [missing, found, reports, pending]
 }
 
 // Skeleton loader component with line graph
@@ -123,7 +126,8 @@ export default function SystemStatsChart ({
       const weeks: string[] = []
       const missingData: number[] = []
       const foundData: number[] = []
-      const claimedData: number[] = []
+      const reportsData: number[] = []
+      const pendingData: number[] = []
 
       const today = new Date()
 
@@ -161,22 +165,32 @@ export default function SystemStatsChart ({
         // Push all three queries for this week into promises array
         promises.push(
           Promise.all([
+            // missing posts
             supabase
               .from('post_public_view')
               .select('*', { count: 'exact', head: true })
               .eq('item_type', 'missing')
               .gte('submission_date', weekStart.toISOString())
               .lte('submission_date', weekEnd.toISOString()),
+            // found posts
             supabase
               .from('post_public_view')
               .select('*', { count: 'exact', head: true })
               .eq('item_type', 'found')
               .gte('submission_date', weekStart.toISOString())
               .lte('submission_date', weekEnd.toISOString()),
+            // fraud reports (open or under_review)
+            supabase
+              .from('fraud_reports_table')
+              .select('*', { count: 'exact', head: true })
+              .in('report_status', ['open', 'under_review'])
+              .gte('date_reported', weekStart.toISOString())
+              .lte('date_reported', weekEnd.toISOString()),
+            // pending posts
             supabase
               .from('post_public_view')
               .select('*', { count: 'exact', head: true })
-              .eq('item_status', 'claimed')
+              .eq('post_status', 'pending')
               .gte('submission_date', weekStart.toISOString())
               .lte('submission_date', weekEnd.toISOString())
           ])
@@ -187,11 +201,14 @@ export default function SystemStatsChart ({
       const results = await Promise.all(promises)
 
       // Process results
-      results.forEach(([missingResult, foundResult, claimedResult]) => {
-        missingData.push(missingResult.count || 0)
-        foundData.push(foundResult.count || 0)
-        claimedData.push(claimedResult.count || 0)
-      })
+      results.forEach(
+        ([missingResult, foundResult, reportsResult, pendingResult]) => {
+          missingData.push(missingResult.count || 0)
+          foundData.push(foundResult.count || 0)
+          reportsData.push(reportsResult.count || 0)
+          pendingData.push(pendingResult.count || 0)
+        }
+      )
 
       // Trim leading zero weeks
       let firstNonZeroIndex = -1
@@ -199,7 +216,8 @@ export default function SystemStatsChart ({
         const anyNonZero =
           (missingData[idx] ?? 0) !== 0 ||
           (foundData[idx] ?? 0) !== 0 ||
-          (claimedData[idx] ?? 0) !== 0
+          (reportsData[idx] ?? 0) !== 0 ||
+          (pendingData[idx] ?? 0) !== 0
         if (anyNonZero) {
           firstNonZeroIndex = idx
           break
@@ -209,18 +227,20 @@ export default function SystemStatsChart ({
       let finalLabels = weeks
       let finalMissing = missingData
       let finalFound = foundData
-      let finalClaimed = claimedData
+      let finalReports = reportsData
+      let finalPending = pendingData
 
       if (firstNonZeroIndex > 0) {
         finalLabels = weeks.slice(firstNonZeroIndex)
         finalMissing = missingData.slice(firstNonZeroIndex)
         finalFound = foundData.slice(firstNonZeroIndex)
-        finalClaimed = claimedData.slice(firstNonZeroIndex)
+        finalReports = reportsData.slice(firstNonZeroIndex)
+        finalPending = pendingData.slice(firstNonZeroIndex)
       }
 
       setChartData({
         labels: finalLabels,
-        series: [finalMissing, finalFound, finalClaimed]
+        series: [finalMissing, finalFound, finalReports, finalPending]
       })
       // notify parent that the system stats finished loading
       try {
@@ -304,15 +324,75 @@ export default function SystemStatsChart ({
         }
 
         const csv = [header, ...csvRows].join('\n')
+
+        const filename = `system-stats-detailed-${new Date()
+          .toISOString()
+          .slice(0, 10)}.csv`
+        const platform = Capacitor.getPlatform()
+        const toBase64 = (str: string) => {
+          try {
+            return btoa(unescape(encodeURIComponent(str)))
+          } catch (e) {
+            return btoa(str)
+          }
+        }
+
+        if (platform !== 'web') {
+          try {
+            // No explicit Filesystem permission requests here — attempt write and let platform handle prompts
+
+            const base64 = toBase64(csv)
+            await Filesystem.writeFile({
+              path: filename,
+              data: base64,
+              directory: Directory.Documents
+            })
+
+            try {
+              const uriResult = await Filesystem.getUri({
+                directory: Directory.Documents,
+                path: filename
+              })
+              if (uriResult?.uri) {
+                const shareUrl = uriResult.uri
+                try {
+                  await Share.share({ title: filename, url: shareUrl })
+                  return
+                } catch (e) {
+                  console.warn(
+                    'Share.share failed for fileUrl, falling back to text/blob share',
+                    e
+                  )
+                }
+              }
+            } catch (e) {
+              console.warn('CSV written but could not open URI', e)
+            }
+            // Fallback: share CSV text (apps can receive text content)
+            try {
+              await Share.share({ title: filename, text: csv })
+              return
+            } catch (e) {
+              console.warn(
+                'Share.text fallback failed, will fall back to web download',
+                e
+              )
+            }
+          } catch (e) {
+            console.warn(
+              'Filesystem write failed, falling back to anchor download',
+              e
+            )
+          }
+        }
+
+        // Web fallback
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
         const url = URL.createObjectURL(blob)
 
         const link = document.createElement('a')
         link.href = url
-        link.setAttribute(
-          'download',
-          `system-stats-detailed-${new Date().toISOString().slice(0, 10)}.csv`
-        )
+        link.setAttribute('download', filename)
         document.body.appendChild(link)
         link.click()
         document.body.removeChild(link)
@@ -348,7 +428,7 @@ export default function SystemStatsChart ({
         curve: 'smooth',
         width: 3
       },
-      colors: ['#00c950', '#fe9a00', '#df0020'],
+      colors: ['#df0020', '#fe9a00', '#8b5cf6', '#6b7280'],
       xaxis: {
         categories: chartData.labels,
         labels: {
@@ -430,16 +510,20 @@ export default function SystemStatsChart ({
 
     const series = [
       {
-        name: 'Claimed',
-        data: chartData.series[2]
+        name: 'Missing',
+        data: chartData.series[0]
       },
       {
         name: 'Found',
         data: chartData.series[1]
       },
       {
-        name: 'Missing',
-        data: chartData.series[0]
+        name: 'Reports',
+        data: chartData.series[2]
+      },
+      {
+        name: 'Pending',
+        data: chartData.series[3]
       }
     ]
 
@@ -480,7 +564,7 @@ export default function SystemStatsChart ({
       {/* Header */}
       <div className='mb-2 flex items-center justify-between'>
         <span className='text-sm font-semibold text-[#1f2a66]'>
-          System Activity
+          Post Status Trend
         </span>
       </div>
 
@@ -493,9 +577,9 @@ export default function SystemStatsChart ({
         <div className='flex items-center gap-2'>
           <span
             className='inline-block h-3 w-3 rounded-full'
-            style={{ backgroundColor: '#00c950' }}
+            style={{ backgroundColor: '#df0020' }}
           />
-          <span className='text-sm text-gray-800'>Claimed</span>
+          <span className='text-sm text-gray-800'>Missing</span>
         </div>
         <div className='flex items-center gap-2'>
           <span
@@ -507,9 +591,16 @@ export default function SystemStatsChart ({
         <div className='flex items-center gap-2'>
           <span
             className='inline-block h-3 w-3 rounded-full'
-            style={{ backgroundColor: '#df0020' }}
+            style={{ backgroundColor: '#8b5cf6' }}
           />
-          <span className='text-sm text-gray-800'>Missing</span>
+          <span className='text-sm text-gray-800'>Reports</span>
+        </div>
+        <div className='flex items-center gap-2'>
+          <span
+            className='inline-block h-3 w-3 rounded-full'
+            style={{ backgroundColor: '#6b7280' }}
+          />
+          <span className='text-sm text-gray-800'>Pending</span>
         </div>
       </div>
 
