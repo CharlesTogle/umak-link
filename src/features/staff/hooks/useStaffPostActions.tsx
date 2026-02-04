@@ -3,6 +3,7 @@ import { supabase } from '@/shared/lib/supabase'
 import { useAuditLogs } from '@/shared/hooks/useAuditLogs'
 import { useUser } from '@/features/auth/contexts/UserContext'
 import { usePostActionsStaffServices } from './usePostStaffServices'
+import { postApiService } from '@/shared/services'
 
 interface MatchResult {
   success: boolean
@@ -110,15 +111,7 @@ export function useStaffPostActions () {
       })
 
       // Hard delete the post
-      const { error } = await supabase
-        .from('post_table')
-        .delete()
-        .eq('post_id', postId)
-
-      if (error) {
-        console.error('Error deleting post:', error)
-        return false
-      }
+      await postApiService.deletePost(parseInt(postId))
 
       // Dispatch event for post deletion
       window.dispatchEvent(

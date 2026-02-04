@@ -190,6 +190,31 @@ export const postApiService = {
   },
 
   /**
+   * Get user's posts
+   */
+  async getUserPosts(userId: string): Promise<PostRecord[]> {
+    try {
+      const response = await api.posts.listByUser(userId);
+      return response.posts;
+    } catch (error) {
+      console.error('[postApiService] Get user posts error:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Update staff assignment (staff only)
+   */
+  async updateStaffAssignment(postId: number, staffId: string): Promise<{ success: boolean }> {
+    try {
+      return await api.posts.updateStaffAssignment(postId, staffId);
+    } catch (error) {
+      console.error('[postApiService] Update staff assignment error:', error);
+      throw error;
+    }
+  },
+
+  /**
    * Update post status (staff only)
    */
   async updatePostStatus(

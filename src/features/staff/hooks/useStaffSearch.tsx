@@ -1,4 +1,4 @@
-import { supabase } from '@/shared/lib/supabase'
+import { searchApiService } from '@/shared/services'
 import { generateImageSearchQuery } from '@/features/user/utils/imageSearchUtil'
 import { useSearchContext } from '@/shared/contexts/SearchContext'
 
@@ -218,23 +218,21 @@ export default function useStaffSearch () {
     claimToDate?: string | null
     selectedStatuses?: string[]
   }) {
-    const { data, error } = await supabase.rpc('search_items_fts_staff', {
-      search_term: query,
-      limit_count: limit,
-      p_date: lastSeenDate ? lastSeenDate.toISOString().split('T')[0] : null,
-      p_category: category ? [category] : null,
-      p_location_last_seen: locationLastSeen,
-      p_claim_from: claimFromDate ? claimFromDate : null,
-      p_claim_to: claimToDate ? claimToDate : null,
-      p_item_status:
+    const data = await searchApiService.searchItemsStaff({
+      query: query,
+      limit: limit,
+      lastSeenDate: lastSeenDate ? lastSeenDate.toISOString().split('T')[0] : null,
+      category: category ? [category] : null,
+      locationLastSeen: locationLastSeen,
+      claimFrom: claimFromDate ? claimFromDate : null,
+      claimTo: claimToDate ? claimToDate : null,
+      itemStatus:
         Array.isArray(selectedStatuses) && selectedStatuses.length > 0
-          ? selectedStatuses
+          ? (selectedStatuses as any)
           : null
     })
 
-    if (error) throw error
-
-    console.log('Staff Search RPC Data:', data)
+    console.log('Staff Search API Data:', data)
     return data
   }
 

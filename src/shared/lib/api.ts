@@ -140,8 +140,77 @@ class ApiClient {
   // ============================================================================
 
   posts = {
+    // Comprehensive list with filtering
+    list: (params?: {
+      type?: 'public' | 'pending' | 'staff' | 'own';
+      item_type?: 'found' | 'missing';
+      status?: string;
+      poster_id?: string;
+      item_id?: string;
+      linked_item_id?: string;
+      post_ids?: string[];
+      exclude_ids?: string[];
+      limit?: number;
+      offset?: number;
+      include_count?: boolean;
+      order_by?: 'submission_date' | 'accepted_on_date';
+      order_direction?: 'asc' | 'desc';
+    }): Promise<PostListResponse> => {
+      const queryParams = new URLSearchParams();
+      if (params?.type) queryParams.set('type', params.type);
+      if (params?.item_type) queryParams.set('item_type', params.item_type);
+      if (params?.status) queryParams.set('status', params.status);
+      if (params?.poster_id) queryParams.set('poster_id', params.poster_id);
+      if (params?.item_id) queryParams.set('item_id', params.item_id);
+      if (params?.linked_item_id) queryParams.set('linked_item_id', params.linked_item_id);
+      if (params?.post_ids?.length) queryParams.set('post_ids', params.post_ids.join(','));
+      if (params?.exclude_ids?.length) queryParams.set('exclude_ids', params.exclude_ids.join(','));
+      if (params?.limit) queryParams.set('limit', params.limit.toString());
+      if (params?.offset) queryParams.set('offset', params.offset.toString());
+      if (params?.include_count) queryParams.set('include_count', 'true');
+      if (params?.order_by) queryParams.set('order_by', params.order_by);
+      if (params?.order_direction) queryParams.set('order_direction', params.order_direction);
+
+      const queryString = queryParams.toString();
+      return this.request<PostListResponse>(
+        'GET',
+        `/posts${queryString ? `?${queryString}` : ''}`
+      );
+    },
+
+    // Get total count
+    getCount: (params?: {
+      type?: 'public' | 'pending' | 'staff' | 'own';
+      item_type?: 'found' | 'missing';
+      status?: string;
+      poster_id?: string;
+    }): Promise<{ count: number }> => {
+      const queryParams = new URLSearchParams();
+      if (params?.type) queryParams.set('type', params.type);
+      if (params?.item_type) queryParams.set('item_type', params.item_type);
+      if (params?.status) queryParams.set('status', params.status);
+      if (params?.poster_id) queryParams.set('poster_id', params.poster_id);
+
+      const queryString = queryParams.toString();
+      return this.request<{ count: number }>(
+        'GET',
+        `/posts/count${queryString ? `?${queryString}` : ''}`
+      );
+    },
+
+    // Get post by item ID
+    getByItemId: (itemId: string): Promise<PostRecord> =>
+      this.request<PostRecord>('GET', `/posts/by-item/${itemId}`),
+
+    // Get post record details by item ID
+    getByItemIdDetails: (itemId: string): Promise<PostRecordDetails> =>
+      this.request<PostRecordDetails>('GET', `/posts/by-item-details/${itemId}`),
+
     listPublic: (): Promise<PostListResponse> =>
       this.request<PostListResponse>('GET', '/posts/public'),
+
+    listByUser: (userId: string): Promise<PostListResponse> =>
+      this.request<PostListResponse>('GET', `/posts/user/${userId}`),
 
     get: (id: number): Promise<PostRecord> =>
       this.request<PostRecord>('GET', `/posts/${id}`),
@@ -160,6 +229,9 @@ class ApiClient {
 
     updateStatus: (id: number, data: UpdatePostStatusRequest): Promise<{ success: boolean }> =>
       this.request<{ success: boolean }>('PUT', `/posts/${id}/status`, data),
+
+    updateStaffAssignment: (id: number, staffId: string): Promise<{ success: boolean }> =>
+      this.request<{ success: boolean }>('PUT', `/posts/${id}/staff-assignment`, { staff_id: staffId }),
 
     updateItemStatus: (itemId: string, data: UpdateItemStatusRequest): Promise<{ success: boolean }> =>
       this.request<{ success: boolean }>('PUT', `/posts/items/${itemId}/status`, data),
@@ -182,14 +254,45 @@ class ApiClient {
   // ============================================================================
 
   fraudReports = {
+    get: (id: string): Promise<any> =>
+      this.request<any>('GET', `/fraud-reports/${id}`),
+
+    getStatus: (id: string): Promise<{ report_status: string }> =>
+      this.request<{ report_status: string }>('GET', `/fraud-reports/${id}/status`),
+
     create: (data: FraudReportCreateRequest): Promise<{ success: boolean; report_id: string }> =>
       this.request<{ success: boolean; report_id: string }>('POST', '/fraud-reports', data),
 
-    list: (): Promise<FraudReportListResponse> =>
-      this.request<FraudReportListResponse>('GET', '/fraud-reports'),
+    list: (params?: {
+      limit?: number;
+      offset?: number;
+      exclude?: string[];
+      ids?: string[];
+      sort?: 'asc' | 'desc';
+    }): Promise<FraudReportListResponse> => {
+      const queryParams = new URLSearchParams();
+      if (params?.limit) queryParams.set('limit', params.limit.toString());
+      if (params?.offset) queryParams.set('offset', params.offset.toString());
+      if (params?.exclude?.length) queryParams.set('exclude', params.exclude.join(','));
+      if (params?.ids?.length) queryParams.set('ids', params.ids.join(','));
+      if (params?.sort) queryParams.set('sort', params.sort);
 
-    updateStatus: (id: string, data: FraudReportStatusRequest): Promise<{ success: boolean }> =>
-      this.request<{ success: boolean }>('PATCH', `/fraud-reports/${id}/status`, data),
+      const queryString = queryParams.toString();
+      return this.request<FraudReportListResponse>(
+        'GET',
+        `/fraud-reports${queryString ? `?${queryString}` : ''}`
+      );
+    },
+
+    updateStatus: (
+      id: string,
+      status: string,
+      processedByStaffId?: string
+    ): Promise<{ success: boolean }> =>
+      this.request<{ success: boolean }>('PUT', `/fraud-reports/${id}/status`, {
+        status,
+        processed_by_staff_id: processedByStaffId,
+      }),
 
     resolve: (id: string, data: FraudReportResolveRequest): Promise<{ success: boolean; data: unknown }> =>
       this.request<{ success: boolean; data: unknown }>('POST', `/fraud-reports/${id}/resolve`, data),
@@ -267,10 +370,60 @@ class ApiClient {
   };
 
   // ============================================================================
+  // Items
+  // ============================================================================
+
+  items = {
+    get: (itemId: string): Promise<any> =>
+      this.request<any>('GET', `/items/${itemId}`),
+
+    updateMetadata: (itemId: string, metadata: Record<string, any>): Promise<{ success: boolean }> =>
+      this.request<{ success: boolean }>('PUT', `/items/${itemId}/metadata`, { item_metadata: metadata }),
+  };
+
+  // ============================================================================
+  // Pending Matches
+  // ============================================================================
+
+  pendingMatches = {
+    create: (data: {
+      post_id: number;
+      poster_id: string;
+      status: string;
+      is_retriable: boolean;
+      failed_reason?: string;
+    }): Promise<{ success: boolean; id: string }> =>
+      this.request<{ success: boolean; id: string }>('POST', '/pending-matches', data),
+
+    list: (params?: {
+      limit?: number;
+      offset?: number;
+      status?: string;
+    }): Promise<{ pending_matches: any[]; count: number }> => {
+      const queryParams = new URLSearchParams();
+      if (params?.limit) queryParams.set('limit', params.limit.toString());
+      if (params?.offset) queryParams.set('offset', params.offset.toString());
+      if (params?.status) queryParams.set('status', params.status);
+
+      const queryString = queryParams.toString();
+      return this.request<{ pending_matches: any[]; count: number }>(
+        'GET',
+        `/pending-matches${queryString ? `?${queryString}` : ''}`
+      );
+    },
+
+    updateStatus: (id: string, status: string): Promise<{ success: boolean }> =>
+      this.request<{ success: boolean }>('PUT', `/pending-matches/${id}/status`, { status }),
+  };
+
+  // ============================================================================
   // Users
   // ============================================================================
 
   users = {
+    get: (userId: string): Promise<any> =>
+      this.request<any>('GET', `/users/${userId}`),
+
     search: (query: string): Promise<UserSearchResponse> =>
       this.request<UserSearchResponse>('GET', `/users/search?query=${encodeURIComponent(query)}`),
   };
@@ -296,6 +449,21 @@ class ApiClient {
       this.request<{ logs: unknown[] }>(
         'GET',
         `/admin/audit-logs?limit=${limit || 100}&offset=${offset || 0}`
+      ),
+
+    getAuditLog: (id: string): Promise<any> =>
+      this.request<any>('GET', `/admin/audit-logs/${id}`),
+
+    getAuditLogsByUser: (userId: string, limit?: number, offset?: number): Promise<{ logs: unknown[] }> =>
+      this.request<{ logs: unknown[] }>(
+        'GET',
+        `/admin/audit-logs/user/${userId}?limit=${limit || 100}&offset=${offset || 0}`
+      ),
+
+    getAuditLogsByAction: (actionType: string, limit?: number, offset?: number): Promise<{ logs: unknown[] }> =>
+      this.request<{ logs: unknown[] }>(
+        'GET',
+        `/admin/audit-logs/action/${actionType}?limit=${limit || 100}&offset=${offset || 0}`
       ),
   };
 }

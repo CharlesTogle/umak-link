@@ -8,6 +8,31 @@ import type { FraudReportCreateRequest, FraudReportPublic } from '@/shared/lib/a
 
 export const fraudReportApiService = {
   /**
+   * Get single fraud report (staff only)
+   */
+  async getReport(reportId: string): Promise<any> {
+    try {
+      return await api.fraudReports.get(reportId);
+    } catch (error) {
+      console.error('[fraudReportApiService] Get report error:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get fraud report status (staff only)
+   */
+  async getReportStatus(reportId: string): Promise<string> {
+    try {
+      const response = await api.fraudReports.getStatus(reportId);
+      return response.report_status;
+    } catch (error) {
+      console.error('[fraudReportApiService] Get report status error:', error);
+      throw error;
+    }
+  },
+
+  /**
    * Create a fraud report
    */
   async createReport(params: FraudReportCreateRequest): Promise<{ success: boolean; report_id: string }> {
@@ -20,11 +45,17 @@ export const fraudReportApiService = {
   },
 
   /**
-   * List all fraud reports (staff only)
+   * List fraud reports with pagination and filtering (staff only)
    */
-  async listReports(): Promise<FraudReportPublic[]> {
+  async listReports(params?: {
+    limit?: number;
+    offset?: number;
+    exclude?: string[];
+    ids?: string[];
+    sort?: 'asc' | 'desc';
+  }): Promise<FraudReportPublic[]> {
     try {
-      const response = await api.fraudReports.list();
+      const response = await api.fraudReports.list(params);
       return response.reports;
     } catch (error) {
       console.error('[fraudReportApiService] List reports error:', error);
@@ -35,9 +66,13 @@ export const fraudReportApiService = {
   /**
    * Update fraud report status (staff only)
    */
-  async updateStatus(reportId: string, status: string): Promise<{ success: boolean }> {
+  async updateStatus(
+    reportId: string,
+    status: string,
+    processedByStaffId?: string
+  ): Promise<{ success: boolean }> {
     try {
-      return await api.fraudReports.updateStatus(reportId, { status: status as any });
+      return await api.fraudReports.updateStatus(reportId, status, processedByStaffId);
     } catch (error) {
       console.error('[fraudReportApiService] Update status error:', error);
       throw error;

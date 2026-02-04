@@ -1,4 +1,4 @@
-import { supabase } from '@/shared/lib/supabase'
+import { adminApiService } from '@/shared/services'
 
 // Types
 export interface AuditLog {
@@ -31,16 +31,13 @@ export function useAuditLogs () {
     logData: CreateAuditLogInput
   ): Promise<AuditLog | null> => {
     try {
-      const { data, error } = await supabase.rpc(INSERT_AUDIT_LOG_RPC, {
-        p_user_id: logData.user_id,
-        p_action_type: logData.action_type,
-        p_details: logData.details || null
+      const data = await adminApiService.insertAuditLog({
+        userId: logData.user_id,
+        action: logData.action_type,
+        tableName: 'audit_table',
+        recordId: logData.user_id,
+        changes: logData.details || {}
       })
-
-      if (error) {
-        console.error('Error inserting audit log:', error)
-        return null
-      }
 
       return data
     } catch (error) {
@@ -56,17 +53,7 @@ export function useAuditLogs () {
    */
   const readAuditLog = async (logId: string): Promise<AuditLog | null> => {
     try {
-      const { data, error } = await supabase
-        .from('audit_logs')
-        .select('*')
-        .eq('log_id', logId)
-        .single()
-
-      if (error) {
-        console.error('Error reading audit log:', error)
-        return null
-      }
-
+      const data = await adminApiService.getAuditLog(logId)
       return data
     } catch (error) {
       console.error('Exception reading audit log:', error)
@@ -85,17 +72,7 @@ export function useAuditLogs () {
     offset: number = 0
   ): Promise<AuditLog[]> => {
     try {
-      const { data, error } = await supabase
-        .from('view_audit_logs_with_user_details')
-        .select('*')
-        .order('timestamp', { ascending: false })
-        .range(offset, offset + limit - 1)
-
-      if (error) {
-        console.error('Error reading all audit logs:', error)
-        return []
-      }
-
+      const data = await adminApiService.getAuditLogs(limit, offset)
       return data || []
     } catch (error) {
       console.error('Exception reading all audit logs:', error)
@@ -116,18 +93,7 @@ export function useAuditLogs () {
     offset: number = 0
   ): Promise<AuditLog[]> => {
     try {
-      const { data, error } = await supabase
-        .from('audit_logs')
-        .select('*')
-        .eq('user_id', userId)
-        .order('timestamp', { ascending: false })
-        .range(offset, offset + limit - 1)
-
-      if (error) {
-        console.error('Error reading user audit logs:', error)
-        return []
-      }
-
+      const data = await adminApiService.getAuditLogsByUser(userId, limit, offset)
       return data || []
     } catch (error) {
       console.error('Exception reading user audit logs:', error)
@@ -148,18 +114,7 @@ export function useAuditLogs () {
     offset: number = 0
   ): Promise<AuditLog[]> => {
     try {
-      const { data, error } = await supabase
-        .from('audit_logs')
-        .select('*')
-        .eq('action_type', actionType)
-        .order('timestamp', { ascending: false })
-        .range(offset, offset + limit - 1)
-
-      if (error) {
-        console.error('Error reading audit logs by action:', error)
-        return []
-      }
-
+      const data = await adminApiService.getAuditLogsByAction(actionType, limit, offset)
       return data || []
     } catch (error) {
       console.error('Exception reading audit logs by action:', error)

@@ -1,6 +1,7 @@
 import { supabase } from '@/shared/lib/supabase'
 import { uploadAndGetPublicUrl } from '@/shared/utils/supabaseStorageUtils'
 import { getPhilippineTimeISO } from '@/shared/utils/dateTimeHelpers'
+import { notificationApiService } from '@/shared/services'
 
 export type InsertAuditLogFn = (payload: any) => Promise<any>
 
@@ -53,11 +54,9 @@ export async function generateAnnouncementAction (options: {
     }
 
     try {
-      await supabase.functions.invoke('send-global-announcements', {
-        body: payload
-      })
+      await notificationApiService.sendAnnouncement(payload)
     } catch (e) {
-      console.error('Failed to invoke edge function', e)
+      console.error('Failed to send announcement', e)
     }
 
     try {

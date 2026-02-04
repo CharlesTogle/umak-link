@@ -55,6 +55,44 @@ export const adminApiService = {
       throw error;
     }
   },
+
+  /**
+   * Get single audit log (admin only)
+   */
+  async getAuditLog(id: string): Promise<any> {
+    try {
+      return await api.admin.getAuditLog(id);
+    } catch (error) {
+      console.error('[adminApiService] Get audit log error:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get audit logs by user (staff only)
+   */
+  async getAuditLogsByUser(userId: string, limit?: number, offset?: number): Promise<any[]> {
+    try {
+      const response = await api.admin.getAuditLogsByUser(userId, limit, offset);
+      return response.logs;
+    } catch (error) {
+      console.error('[adminApiService] Get user audit logs error:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get audit logs by action type (admin only)
+   */
+  async getAuditLogsByAction(actionType: string, limit?: number, offset?: number): Promise<any[]> {
+    try {
+      const response = await api.admin.getAuditLogsByAction(actionType, limit, offset);
+      return response.logs;
+    } catch (error) {
+      console.error('[adminApiService] Get audit logs by action error:', error);
+      throw error;
+    }
+  },
 };
 
 export default adminApiService;

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { supabase } from '@/shared/lib/supabase'
+import { claimApiService } from '@/shared/services'
 import { useNavigation } from '@/shared/hooks/useNavigation'
 import { useAuditLogs } from '@/shared/hooks/useAuditLogs'
 import { isConnected } from '@/shared/utils/networkCheck'
@@ -89,10 +89,10 @@ export function useClaimItemSubmit () {
         })
       }
 
-      // Call process_claim RPC
-      const { error } = await supabase.rpc('process_claim', {
-        found_post_id: Number(foundPostId),
-        claim_details: {
+      // Call process_claim API
+      await claimApiService.processClaim({
+        foundPostId: Number(foundPostId),
+        claimDetails: {
           claimer_name: claimerName,
           claimer_school_email: claimerEmail,
           claimer_contact_num: claimerContactNumber,
@@ -100,12 +100,8 @@ export function useClaimItemSubmit () {
           staff_id: staffId,
           staff_name: staffName
         },
-        missing_post_id: missingPostId ? Number(missingPostId) : null
+        missingPostId: missingPostId ? Number(missingPostId) : null
       })
-
-      if (error) {
-        throw error
-      }
 
       onSuccess('Item claimed successfully!')
 

@@ -1,9 +1,11 @@
 import { useState, useRef, useCallback } from 'react'
 import { Network } from '@capacitor/network'
-import { supabase } from '@/shared/lib/supabase'
 import createCache from '@/shared/lib/cache'
 import { useAuditLogs } from '@/shared/hooks/useAuditLogs'
 import useNotifications from '@/features/user/hooks/useNotifications'
+import { fraudReportApiService, postApiService } from '@/shared/services'
+import api from '@/shared/lib/api'
+import { useUser } from '@/features/auth/contexts/UserContext'
 
 export interface FraudReportPublic {
   // fraud report
@@ -92,6 +94,7 @@ export function useFraudReports ({
   const hasRefreshedCacheRef = useRef(false)
   const { insertAuditLog } = useAuditLogs()
   const { sendNotification } = useNotifications()
+  const { user } = useUser()
 
   // Create cache instance with idSelector
   const cache = useRef(
@@ -137,21 +140,11 @@ export function useFraudReports ({
       const exclude = Array.from(loadedIdsRef.current)
 
       // Fetch all reports not in the exclude list
-      let query = supabase
-        .from('fraud_reports_public_v')
-        .select('*')
-        .order('date_reported', { ascending: sortDirection === 'asc' })
-        .limit(pageSize)
-
-      if (exclude.length > 0) {
-        query = query.not('report_id', 'in', `(${exclude.join(',')})`)
-      }
-
-      const { data, error } = await query
-
-      if (error) throw error
-
-      const newReports = (data || []) as FraudReportPublic[]
+      const newReports = await fraudReportApiService.listReports({
+        limit: pageSize,
+        exclude: exclude.length > 0 ? exclude : undefined,
+        sort: sortDirection
+      }) as FraudReportPublic[]
 
       if (newReports.length > 0) {
         // Prepend new reports so newest appear first
@@ -204,14 +197,9 @@ export function useFraudReports ({
         const cachedIds = Array.from(cachedLoadedIds)
 
         // Fetch fresh versions of cached reports
-        const { data, error } = await supabase
-          .from('fraud_reports_public_v')
-          .select('*')
-          .in('report_id', cachedIds)
-
-        if (error) throw error
-
-        const refreshedReports = (data || []) as FraudReportPublic[]
+        const refreshedReports = await fraudReportApiService.listReports({
+          ids: cachedIds
+        }) as FraudReportPublic[]
 
         if (refreshedReports.length > 0) {
           // Update state with refreshed data
@@ -232,15 +220,10 @@ export function useFraudReports ({
 
       // 4. If no cached reports, fetch initial batch
       if (cachedReports.length === 0) {
-        const { data, error } = await supabase
-          .from('fraud_reports_public_v')
-          .select('*')
-          .order('date_reported', { ascending: sortDirection === 'asc' })
-          .limit(pageSize)
-
-        if (error) throw error
-
-        const initialReports = (data || []) as FraudReportPublic[]
+        const initialReports = await fraudReportApiService.listReports({
+          limit: pageSize,
+          sort: sortDirection
+        }) as FraudReportPublic[]
 
         if (initialReports.length > 0) {
           setReports(sortReports(initialReports))
@@ -295,21 +278,11 @@ export function useFraudReports ({
       // Fetch older reports excluding already loaded ones
       const exclude = Array.from(loadedIdsRef.current)
 
-      let query = supabase
-        .from('fraud_reports_public_v')
-        .select('*')
-        .order('date_reported', { ascending: sortDirection === 'asc' })
-        .limit(pageSize)
-
-      if (exclude.length > 0) {
-        query = query.not('report_id', 'in', `(${exclude.join(',')})`)
-      }
-
-      const { data, error } = await query
-
-      if (error) throw error
-
-      const newReports = (data || []) as FraudReportPublic[]
+      const newReports = await fraudReportApiService.listReports({
+        limit: pageSize,
+        exclude: exclude.length > 0 ? exclude : undefined,
+        sort: sortDirection
+      }) as FraudReportPublic[]
 
       if (newReports.length > 0) {
         // Check if more reports available
@@ -365,14 +338,9 @@ export function useFraudReports ({
       }
 
       // Fetch fresh versions of loaded reports
-      const { data, error } = await supabase
-        .from('fraud_reports_public_v')
-        .select('*')
-        .in('report_id', loadedIds)
-
-      if (error) throw error
-
-      const refreshedReports = (data || []) as FraudReportPublic[]
+      const refreshedReports = await fraudReportApiService.listReports({
+        ids: loadedIds
+      }) as FraudReportPublic[]
 
       if (refreshedReports.length > 0) {
         // Replace state with refreshed data
@@ -407,20 +375,9 @@ export function useFraudReports ({
         if (found) return found
 
         // If not found in cache, query server
-        const { data, error } = await supabase
-          .from('fraud_reports_public_v')
-          .select('*')
-          .eq('report_id', reportId)
-          .limit(1)
+        const report = await fraudReportApiService.getReport(reportId) as FraudReportPublic
 
-        if (error) {
-          console.error('Error fetching single fraud report:', error)
-          return null
-        }
-
-        if (!data || data.length === 0) return null
-
-        const report = data[0] as FraudReportPublic
+        if (!report) return null
 
         // Merge into local state + cache (best-effort)
         setReports(prev => {
@@ -455,49 +412,37 @@ export function useFraudReports ({
     reporterId?: string | null
   }) => {
     try {
-      const {
-        data: { user }
-      } = await supabase.auth.getUser()
-      if (!user) throw new Error('User not authenticated')
+      if (!user?.user_id) throw new Error('User not authenticated')
 
       // Get user details for audit log
-      const { data: userData, error: userError } = await supabase
-        .from('user_table')
-        .select('user_name')
-        .eq('user_id', user.id)
-        .single()
-
-      if (userError) {
-        console.error('Error fetching user data:', userError)
+      let userData = null
+      try {
+        const userInfo = await api.users.get(user.user_id)
+        userData = { user_name: userInfo.user_name }
+      } catch (error) {
+        console.error('Error fetching user data:', error)
       }
 
       // Get old report status before update
-      const { data: reportData, error: reportFetchError } = await supabase
-        .from('fraud_reports_table')
-        .select('report_status')
-        .eq('report_id', reportId)
-        .single()
-
-      if (reportFetchError) {
-        console.error('Error fetching report status:', reportFetchError)
+      let oldStatus = 'under_review'
+      try {
+        oldStatus = await fraudReportApiService.getReportStatus(reportId)
+      } catch (error) {
+        console.error('Error fetching report status:', error)
       }
 
-      const oldStatus = reportData?.report_status || 'under_review'
+      // Update report status
+      const updateResult = await fraudReportApiService.updateStatus(
+        reportId,
+        'open',
+        user.user_id
+      )
 
-      const { error: reportError } = await supabase
-        .from('fraud_reports_table')
-        .update({
-          report_status: 'open',
-          processed_by_staff_id: user.id
-        })
-        .eq('report_id', reportId)
-
-      if (reportError) throw reportError
+      if (!updateResult.success) throw new Error('Failed to update report status')
 
       // Add audit trail with correct structure
-
       await insertAuditLog({
-        user_id: user.id,
+        user_id: user.user_id,
         action_type: 'verified_report',
         details: {
           message: `${
@@ -560,56 +505,45 @@ export function useFraudReports ({
     reason: string
   }) => {
     try {
-      const {
-        data: { user }
-      } = await supabase.auth.getUser()
-      if (!user) throw new Error('User not authenticated')
+      if (!user?.user_id) throw new Error('User not authenticated')
 
       // Get user details for audit log
-      const { data: userData, error: userError } = await supabase
-        .from('user_table')
-        .select('user_name')
-        .eq('user_id', user.id)
-        .single()
-
-      if (userError) {
-        console.error('Error fetching user data:', userError)
+      let userData = null
+      try {
+        const userInfo = await api.users.get(user.user_id)
+        userData = { user_name: userInfo.user_name }
+      } catch (error) {
+        console.error('Error fetching user data:', error)
       }
 
       // Get old report status before update
-      const { data: reportData, error: reportFetchError } = await supabase
-        .from('fraud_reports_table')
-        .select('report_status')
-        .eq('report_id', reportId)
-        .single()
-
-      if (reportFetchError) {
-        console.error('Error fetching report status:', reportFetchError)
+      let oldStatus = 'under_review'
+      try {
+        oldStatus = await fraudReportApiService.getReportStatus(reportId)
+      } catch (error) {
+        console.error('Error fetching report status:', error)
       }
 
-      const oldStatus = reportData?.report_status || 'under_review'
-
       // Update report status to rejected
-      const { error: reportError } = await supabase
-        .from('fraud_reports_table')
-        .update({
-          report_status: 'rejected',
-          processed_by_staff_id: user.id
-        })
-        .eq('report_id', reportId)
+      const reportUpdateResult = await fraudReportApiService.updateStatus(
+        reportId,
+        'rejected',
+        user.user_id
+      )
 
-      const { error: updateStatusError } = await supabase
-        .from('post_table')
-        .update({ status: 'accepted' })
-        .eq('post_id', postId)
+      if (!reportUpdateResult.success) throw new Error('Failed to update report status')
 
-      if (updateStatusError) throw updateStatusError
+      // Update post status back to accepted
+      const postUpdateResult = await postApiService.updatePostStatus(
+        parseInt(postId),
+        'accepted'
+      )
 
-      if (reportError) throw reportError
+      if (!postUpdateResult.success) throw new Error('Failed to update post status')
 
       // Add audit trail with correct structure
       await insertAuditLog({
-        user_id: user.id,
+        user_id: user.user_id,
         action_type: 'rejected_report',
         details: {
           message: `${
@@ -670,43 +604,24 @@ export function useFraudReports ({
     reporterId?: string | null
   }) => {
     try {
-      const {
-        data: { user }
-      } = await supabase.auth.getUser()
-      if (!user) throw new Error('User not authenticated')
+      if (!user?.user_id) throw new Error('User not authenticated')
 
       // Get user details for audit log
-      const { data: userData, error: userError } = await supabase
-        .from('user_table')
-        .select('user_name')
-        .eq('user_id', user.id)
-        .single()
-
-      if (userError) {
-        console.error('Error fetching user data:', userError)
+      let userData = null
+      try {
+        const userInfo = await api.users.get(user.user_id)
+        userData = { user_name: userInfo.user_name }
+      } catch (error) {
+        console.error('Error fetching user data:', error)
       }
 
-      // Call RPC to resolve the fraud report
+      // Call API to resolve the fraud report
       // This handles: report status, post status, claim deletion, item status updates, and linked missing item cleanup
-      const { data: rpcResult, error: rpcError } = await supabase.rpc(
-        'resolve_fraud_report',
-        {
-          p_report_id: reportId,
-          p_delete_claim: deleteClaim,
-          p_processed_by_staff_id: user.id
-        }
-      )
-
-      if (rpcError) throw rpcError
-
-      // Check RPC result
-      if (rpcResult && rpcResult.length > 0 && !rpcResult[0].success) {
-        throw new Error(rpcResult[0].message || 'Failed to resolve report')
-      }
+      await fraudReportApiService.resolveReport(reportId, deleteClaim)
 
       // Add audit trail
       await insertAuditLog({
-        user_id: user.id,
+        user_id: user.user_id,
         action_type: 'closed_report',
         details: {
           message: `${

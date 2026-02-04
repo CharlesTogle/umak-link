@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { supabase } from '@/shared/lib/supabase'
+import { searchApiService } from '@/shared/services'
 import { useUser } from '@/features/auth/contexts/UserContext'
 
 interface SearchResult {
@@ -128,20 +128,13 @@ export function useStaffSearch (): UseStaffSearchReturn {
           let data: any
           let rpcError: any
 
-          if (isAdmin) {
-            const result = await supabase.rpc('search_users_secure', {
-              search_query: trimmedQuery,
-              search_limit: 10
-            })
-            data = result.data
-            rpcError = result.error
-          } else {
-            const result = await supabase.rpc('search_users_secure_staff', {
-              search_query: trimmedQuery,
-              search_limit: 10
-            })
-            data = result.data
-            rpcError = result.error
+          try {
+            // Backend API handles role-based search automatically
+            data = await searchApiService.searchUsers(trimmedQuery)
+            rpcError = null
+          } catch (error) {
+            data = null
+            rpcError = error
           }
 
           // Check if request was aborted

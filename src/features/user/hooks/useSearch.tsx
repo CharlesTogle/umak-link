@@ -1,4 +1,4 @@
-import { supabase } from '@/shared/lib/supabase'
+import { searchApiService } from '@/shared/services'
 import { generateImageSearchQuery } from '@/features/user/utils/imageSearchUtil'
 import { useSearchContext } from '@/shared/contexts/SearchContext'
 
@@ -208,23 +208,21 @@ export default function useSearch () {
     claimToDate?: string | null
     selectedStatuses?: string[]
   }) {
-    const { data, error } = await supabase.rpc('search_items_fts', {
-      search_term: query,
-      limit_count: limit,
-      p_date: lastSeenDate ? lastSeenDate.toISOString().split('T')[0] : null,
-      p_category: category ? [category] : null,
-      p_location_last_seen: locationLastSeen,
-      p_claim_from: claimFromDate ? claimFromDate : null,
-      p_claim_to: claimToDate ? claimToDate : null,
-      p_item_status:
+    const data = await searchApiService.searchItems({
+      query: query,
+      limit: limit,
+      last_seen_date: lastSeenDate ? lastSeenDate.toISOString().split('T')[0] : null,
+      category: category ? [category] : null,
+      location_last_seen: locationLastSeen,
+      claim_from: claimFromDate,
+      claim_to: claimToDate,
+      item_status:
         Array.isArray(selectedStatuses) && selectedStatuses.length > 0
-          ? selectedStatuses
-          : null
+          ? (selectedStatuses as any)
+          : null,
     })
 
-    if (error) throw error
-
-    console.log('Search RPC Data:', data)
+    console.log('Search API Data:', data)
     return data
   }
 

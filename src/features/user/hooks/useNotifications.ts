@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { supabase } from '@/shared/lib/supabase'
+import { notificationApiService } from '@/shared/services'
 import createCache from '@/shared/lib/cache'
 import type { NotificationData } from '@/features/posts/types/notifications'
 
@@ -57,15 +57,13 @@ export default function useNotifications (): UseNotificationsReturn {
           return
         }
 
-        // Send notification using the edge function
-        await supabase.functions.invoke('send-notification', {
-          body: {
-            user_id: userId,
-            title: title,
-            body: message,
-            type: type,
-            data: data || {}
-          }
+        // Send notification via API
+        await notificationApiService.sendNotification({
+          user_id: userId,
+          title: title,
+          body: message,
+          type: type,
+          data: data || {}
         })
       } catch (error) {
         console.error('Error sending notification:', error)
@@ -86,17 +84,8 @@ export default function useNotifications (): UseNotificationsReturn {
   const getNotificationCount = useCallback(
     async (userId: string): Promise<number> => {
       try {
-        const { count, error } = await supabase
-          .from('notification_view')
-          .select('notification_id', { count: 'exact', head: true })
-          .eq('sent_to', userId)
-          .eq('is_read', false)
-
-        if (error) {
-          console.error('Error fetching notification count:', error)
-          return 0
-        }
-        return count ?? 0
+        const count = await notificationApiService.getUnreadCount()
+        return count
       } catch (error) {
         console.error('Error fetching notification count:', error)
         return 0
@@ -113,14 +102,11 @@ export default function useNotifications (): UseNotificationsReturn {
         return []
       }
       const cache = makeCacheForUser(userId)
-      const { data, error } = await supabase
-        .from('notification_view')
-        .select(
-          'notification_id, type, title, description, is_read, data, created_at, sent_to, sent_by, image_url'
-        )
-        .eq('sent_to', userId)
-        .order('created_at', { ascending: false })
-      if (error) {
+
+      let data
+      try {
+        data = await notificationApiService.listNotifications()
+      } catch (error) {
         console.error(
           'Failed to load notifications, falling back to cache',
           error
@@ -135,11 +121,11 @@ export default function useNotifications (): UseNotificationsReturn {
         notification_id: r.notification_id,
         type: r.type,
         title: r.title,
-        description: r.description,
+        description: r.description || r.body,
         is_read: r.is_read,
         created_at: r.created_at,
         data: r.data,
-        sent_to: r.sent_to,
+        sent_to: r.sent_to || userId,
         sent_by: r.sent_by,
         image_url: r.image_url
       }))
@@ -163,15 +149,7 @@ export default function useNotifications (): UseNotificationsReturn {
 
   const markAsRead = useCallback(async (notificationId: string) => {
     try {
-      const { error } = await supabase
-        .from('notification_table')
-        .update({ is_read: true })
-        .eq('notification_id', notificationId)
-
-      if (error) {
-        console.error('Failed to mark notification read', error)
-        return false
-      }
+      await notificationApiService.markAsRead(Number(notificationId))
       setNotifications(prev => {
         const updated = prev.map(n =>
           n.notification_id === notificationId ? { ...n, is_read: true } : n
@@ -208,15 +186,7 @@ export default function useNotifications (): UseNotificationsReturn {
 
   const deleteNotification = useCallback(async (notificationId: string) => {
     try {
-      const { error } = await supabase
-        .from('notification_table')
-        .delete()
-        .eq('notification_id', notificationId)
-
-      if (error) {
-        console.error('Failed to delete notification', error)
-        return false
-      }
+      await notificationApiService.deleteNotification(Number(notificationId))
       setNotifications(prev => {
         const updated = prev.filter(n => n.notification_id !== notificationId)
         ;(async () => {

@@ -5,7 +5,7 @@ import {
   type EditPostInput
 } from '../services/postServices'
 import useNotifications from './useNotifications'
-import { supabase } from '@/shared/lib/supabase'
+import { postApiService } from '@/shared/services'
 
 /**
  * Hook to access post services with automatic user context injection.
@@ -194,23 +194,7 @@ export function usePostActions () {
     }
 
     try {
-      const { data, error } = await supabase.rpc('delete_post_by_id', {
-        p_post_id: parseInt(postId)
-      })
-
-      if (error) {
-        console.error('Error deleting post:', error)
-        return { success: false, error: error.message }
-      }
-
-      if (!data || data.length === 0 || !data[0].out_deleted) {
-        return {
-          success: false,
-          error: 'Post not found or could not be deleted'
-        }
-      }
-
-      const result = data[0]
+      await postApiService.deletePost(parseInt(postId))
 
       // Send notification
       sendNotification({

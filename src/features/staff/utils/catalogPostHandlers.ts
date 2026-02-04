@@ -1,4 +1,5 @@
-import { supabase } from '@/shared/lib/supabase'
+import { searchApiService, notificationApiService, postApiService, pendingMatchApiService, itemApiService } from '@/shared/services'
+import api from '@/shared/lib/api'
 import { generateImageSearchQuery } from '@/features/user/utils/imageSearchUtil'
 import { generateItemMetadata } from '@/shared/lib/geminiApi'
 import type { PublicPost } from '@/features/posts/types/post'
@@ -72,30 +73,28 @@ export async function handleMatch (
 ): Promise<MatchResult> {
   try {
     // Step 1: Update post status to 'accepted' immediately for user feedback
-    const { error: updateError } = await supabase
-      .from('post_table')
-      .update({
-        status: 'accepted'
-      })
-      .eq('post_id', parseInt(postId))
+    const updateResult = await postApiService.updatePostStatus(
+      parseInt(postId),
+      'accepted'
+    )
 
-    if (updateError) {
-      console.error('Failed to update post status:', updateError)
+    if (!updateResult.success) {
+      console.error('Failed to update post status')
       return {
         success: false,
         matches: [],
         total_matches: 0,
-        error: updateError.message
+        error: 'Failed to update post status'
       }
     }
 
-    const { data: staffData, error: staffError } = await supabase
-      .from('user_table')
-      .select('user_name')
-      .eq('user_id', userId)
-      .single()
-    if (staffError) {
-      console.error('Failed to fetch staff data for audit log')
+    // Fetch staff data for audit log
+    let staffData = null
+    try {
+      const userData = await api.users.get(userId)
+      staffData = { user_name: userData.user_name }
+    } catch (error) {
+      console.error('Failed to fetch staff data for audit log:', error)
     }
     // Step 2: Create audit log
     const { insertAuditLog } = useAuditLogs()
@@ -195,44 +194,34 @@ async function generateMatchesInBackground (
     // Step 3: If image search failed or rate limit hit, add to pending_match table for retry
     if (shouldAddToPending && itemImageUrl) {
       try {
-        const { error: queueError } = await supabase
-          .from('pending_match')
-          .insert({
-            post_id: parseInt(postId),
-            poster_id: posterId,
-            status: 'pending',
-            is_retriable: true,
-            failed_reason: failureReason
-          })
-
-        if (queueError) {
-          console.error('Failed to add to pending_match queue:', queueError)
-        } else {
-          console.log('Added to pending_match queue for retry')
-        }
+        await pendingMatchApiService.createPendingMatch({
+          post_id: parseInt(postId),
+          poster_id: posterId,
+          status: 'pending',
+          is_retriable: true,
+          failed_reason: failureReason
+        })
+        console.log('Added to pending_match queue for retry')
       } catch (queueError) {
         console.error('Failed to add to pending_match queue:', queueError)
       }
     }
 
     // Step 4: Search for matching found items
-    const { data: searchResults, error: searchError } = await supabase.rpc(
-      'search_items_fts',
-      {
-        search_term: searchQuery,
-        limit_count: 10,
-        p_date: null,
-        p_category: null,
-        p_location_last_seen: null
-      }
-    )
-
-    if (searchError) {
+    let matches: PublicPost[] = []
+    try {
+      const searchResults = await searchApiService.searchItems({
+        query: searchQuery,
+        limit: 10,
+        lastSeenDate: null,
+        category: null,
+        locationLastSeen: null
+      })
+      matches = searchResults as PublicPost[]
+    } catch (searchError) {
       console.error('Background search error:', searchError)
       return
     }
-
-    const matches: PublicPost[] = searchResults as PublicPost[]
     console.log(`Found ${matches.length} potential matches for post ${postId}`)
 
     // Step 5: Send notification to poster if matches found
@@ -243,17 +232,15 @@ async function generateMatchesInBackground (
           matches.length === 1 ? 'item' : 'items'
         } that might match your post.`
 
-        await supabase.functions.invoke('send-notification', {
-          body: {
-            user_id: posterId,
-            title: 'Found Similar Items',
-            body: notificationBody,
-            type: 'match',
-            data: {
-              postId: String(postId),
-              matched_post_ids: JSON.stringify(matchedPostIds),
-              link: `/user/matches/`
-            }
+        await notificationApiService.sendNotification({
+          user_id: posterId,
+          title: 'Found Similar Items',
+          body: notificationBody,
+          type: 'match',
+          data: {
+            postId: String(postId),
+            matched_post_ids: JSON.stringify(matchedPostIds),
+            link: `/user/matches/`
           }
         })
 
@@ -280,14 +267,15 @@ export async function handleDeleteSubmit (
   staffId: string
 ): Promise<HandlerResult> {
   try {
-    const { data: staffData, error: staffError } = await supabase
-      .from('user_table')
-      .select('user_name')
-      .eq('user_id', staffId)
-      .single()
-    if (staffError) {
-      console.error('Failed to fetch staff data for audit log')
+    // Fetch staff data for audit log
+    let staffData = null
+    try {
+      const userData = await api.users.get(staffId)
+      staffData = { user_name: userData.user_name }
+    } catch (error) {
+      console.error('Failed to fetch staff data for audit log:', error)
     }
+
     // Step 1: Create audit log
     const { insertAuditLog } = useAuditLogs()
     await insertAuditLog({
@@ -304,32 +292,27 @@ export async function handleDeleteSubmit (
     })
 
     // Step 2: Hard delete the post
-    const { error: deleteError } = await supabase
-      .from('post_table')
-      .delete()
-      .eq('post_id', postId)
+    const deleteResult = await postApiService.deletePost(parseInt(postId))
 
-    if (deleteError) {
-      console.error('Delete error:', deleteError)
+    if (!deleteResult.success) {
+      console.error('Delete error')
       return {
         success: false,
-        error: deleteError.message
+        error: 'Failed to delete post'
       }
     }
 
     // Step 3: Send notification to poster
     try {
-      await supabase.functions.invoke('send-notification', {
-        body: {
-          user_id: posterId,
-          title: 'Post Deleted',
-          body: `Your missing item post "${itemName}" has been deleted. Reason: ${reason}`,
-          type: 'post_deleted',
-          data: {
-            postId: postId,
-            reason,
-            item_name: itemName
-          }
+      await notificationApiService.sendNotification({
+        user_id: posterId,
+        title: 'Post Deleted',
+        body: `Your missing item post "${itemName}" has been deleted. Reason: ${reason}`,
+        type: 'post_deleted',
+        data: {
+          postId: postId,
+          reason,
+          item_name: itemName
         }
       })
     } catch (notifError) {
@@ -358,28 +341,27 @@ export async function handleRejectSubmit (
 ): Promise<HandlerResult> {
   try {
     // Step 1: Update post status to rejected
-    const { error: updateError } = await supabase
-      .from('post_table')
-      .update({
-        status: 'rejected'
-      })
-      .eq('post_id', postId)
+    const updateResult = await postApiService.updatePostStatus(
+      parseInt(postId),
+      'rejected',
+      reason
+    )
 
-    if (updateError) {
-      console.error('Reject error:', updateError)
+    if (!updateResult.success) {
+      console.error('Reject error')
       return {
         success: false,
-        error: updateError.message
+        error: 'Failed to reject post'
       }
     }
 
-    const { data: staffData, error: staffError } = await supabase
-      .from('user_table')
-      .select('user_name')
-      .eq('user_id', staffId)
-      .single()
-    if (staffError) {
-      console.error('Failed to fetch staff data for audit log')
+    // Fetch staff data for audit log
+    let staffData = null
+    try {
+      const userData = await api.users.get(staffId)
+      staffData = { user_name: userData.user_name }
+    } catch (error) {
+      console.error('Failed to fetch staff data for audit log:', error)
     }
 
     // Step 2: Create audit log
@@ -399,17 +381,15 @@ export async function handleRejectSubmit (
 
     // Step 3: Send notification to poster
     try {
-      await supabase.functions.invoke('send-notification', {
-        body: {
-          user_id: posterId,
-          title: 'Post Rejected',
-          body: `Your found item post "${itemName}" has been rejected. Reason: ${reason}`,
-          type: 'post_rejected',
-          data: {
-            postId: postId,
-            reason,
-            item_name: itemName
-          }
+      await notificationApiService.sendNotification({
+        user_id: posterId,
+        title: 'Post Rejected',
+        body: `Your found item post "${itemName}" has been rejected. Reason: ${reason}`,
+        type: 'post_rejected',
+        data: {
+          postId: postId,
+          reason,
+          item_name: itemName
         }
       })
     } catch (notifError) {
@@ -438,31 +418,37 @@ export async function handleAccept (
   staffId: string
 ): Promise<HandlerResult> {
   try {
-    // Step 1: Update post status to accepted with acceptance details
-    const { error: updateError } = await supabase
-      .from('post_table')
-      .update({
-        status: 'accepted',
-        accepted_on_date: new Date().toISOString(),
-        accepted_by_staff_id: staffId
-      })
-      .eq('post_id', parseInt(postId))
+    // Step 1: Update post status to accepted
+    const updateResult = await postApiService.updatePostStatus(
+      parseInt(postId),
+      'accepted'
+    )
 
-    if (updateError) {
-      console.error('Accept error:', updateError)
+    if (!updateResult.success) {
+      console.error('Accept error')
       return {
         success: false,
-        error: updateError.message
+        error: 'Failed to accept post'
       }
     }
 
-    const { data: staffData, error: staffError } = await supabase
-      .from('user_table')
-      .select('user_name')
-      .eq('user_id', staffId)
-      .single()
-    if (staffError) {
-      console.error('Failed to fetch staff data for audit log')
+    // Step 2: Update staff assignment
+    const staffResult = await postApiService.updateStaffAssignment(
+      parseInt(postId),
+      staffId
+    )
+
+    if (!staffResult.success) {
+      console.error('Failed to update staff assignment')
+    }
+
+    // Fetch staff data for audit log
+    let staffData = null
+    try {
+      const userData = await api.users.get(staffId)
+      staffData = { user_name: userData.user_name }
+    } catch (error) {
+      console.error('Failed to fetch staff data for audit log:', error)
     }
 
     // Step 2: Create audit log
@@ -482,16 +468,14 @@ export async function handleAccept (
 
     // Step 3: Send notification to poster
     try {
-      await supabase.functions.invoke('send-notification', {
-        body: {
-          user_id: posterId,
-          title: 'Post Accepted',
-          body: `Your found item post "${itemName}" has been accepted and is now visible to users.`,
-          type: 'accept',
-          data: {
-            postId: postId,
-            item_name: itemName
-          }
+      await notificationApiService.sendNotification({
+        user_id: posterId,
+        title: 'Post Accepted',
+        body: `Your found item post "${itemName}" has been accepted and is now visible to users.`,
+        type: 'accept',
+        data: {
+          postId: postId,
+          item_name: itemName
         }
       })
     } catch (notifError) {
@@ -531,32 +515,26 @@ async function generateItemMetadataInBackground (
   try {
     console.log(`Generating metadata for post ${postId}...`)
 
-    // Step 1: Get the item_id from post_table
-    const { data: postData, error: postError } = await supabase
-      .from('post_table')
-      .select('item_id')
-      .eq('post_id', parseInt(postId))
-      .single()
-
-    if (postError || !postData?.item_id) {
-      console.error(`Failed to get item_id for post ${postId}:`, postError)
+    // Step 1: Get the full post data including item_id
+    let itemId: string
+    try {
+      const postData = await postApiService.getFullPost(parseInt(postId))
+      if (!postData.item_id) {
+        console.error(`Post ${postId} has no item_id`)
+        return
+      }
+      itemId = postData.item_id
+    } catch (error) {
+      console.error(`Failed to get post data for post ${postId}:`, error)
       return
     }
 
-    const itemId = postData.item_id
-
     // Step 2: Check if item already has metadata
-    const { data: itemData, error: itemError } = await supabase
-      .from('item_table')
-      .select('item_metadata')
-      .eq('item_id', itemId)
-      .single()
-
-    if (itemError) {
-      console.error(
-        `Failed to check item metadata for item ${itemId}:`,
-        itemError
-      )
+    let itemData: any
+    try {
+      itemData = await api.items.get(itemId)
+    } catch (error) {
+      console.error(`Failed to check item metadata for item ${itemId}:`, error)
       return
     }
 
@@ -592,21 +570,15 @@ async function generateItemMetadataInBackground (
 
     if (result.success && result.metadata) {
       // Step 5: Update item_table with generated metadata
-      const { error: updateError } = await supabase
-        .from('item_table')
-        .update({
-          item_metadata: result.metadata
-        })
-        .eq('item_id', itemId)
-
-      if (updateError) {
+      try {
+        await itemApiService.updateMetadata(itemId, result.metadata)
+        console.log(
+          `Metadata successfully generated for item ${itemId} (post ${postId})`
+        )
+      } catch (updateError) {
         console.error(
           `Failed to update metadata for item ${itemId}:`,
           updateError
-        )
-      } else {
-        console.log(
-          `Metadata successfully generated for item ${itemId} (post ${postId})`
         )
       }
     } else {

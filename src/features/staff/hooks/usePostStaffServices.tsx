@@ -1,10 +1,9 @@
-import { supabase } from '@/shared/lib/supabase'
+import { postApiService, itemApiService } from '@/shared/services'
+import api from '@/shared/lib/api'
 import { useAuditLogs } from '@/shared/hooks/useAuditLogs'
 import { useUser } from '@/features/auth/contexts/UserContext'
 import useNotifications from '@/features/user/hooks/useNotifications'
-import { makeDisplay } from '@/shared/utils/imageUtils'
-import { uploadAndGetPublicUrl } from '@/shared/utils/supabaseStorageUtils'
-import { computeBlockHash64 } from '@/shared/utils/hashUtils'
+import { generateItemMetadata } from '@/shared/lib/geminiApi'
 
 export interface CreateStaffPostInput {
   item: {
@@ -55,94 +54,20 @@ export function usePostActionsStaffServices () {
 
       console.log('[staffPostServices] Creating post:', postData)
 
-      // 1) Compress image
-      const displayBlob = await makeDisplay(postData.image)
+      // Create post via API (handles image upload, hashing, and post creation)
+      const result = await postApiService.createPost({
+        userId: currentUser.user_id,
+        item: postData.item,
+        category: postData.category,
+        lastSeenISO: postData.lastSeenISO,
+        locationDetails: postData.locationDetails,
+        imageName: `${Date.now()}.webp`,
+        image: postData.image,
+        anonymous: postData.anonymous
+      })
 
-      // 2) Generate paths
-      const basePath = `posts/${currentUser.user_id}/${Date.now()}`
-      const displayPath = `${basePath}.webp`
-
-      const displayUrl = await uploadAndGetPublicUrl(
-        displayPath,
-        displayBlob,
-        'image/webp'
-      )
-
-      // Parse lastSeenISO to extract date and time
-      const lastSeenDate = new Date(postData.lastSeenISO)
-      const lastSeenHours = lastSeenDate.getHours()
-      const lastSeenMinutes = lastSeenDate.getMinutes()
-
-      // Build location path array
-      const locationPath: Array<{
-        name: string
-        type: 'level1' | 'level2' | 'level3'
-      }> = []
-
-      const level1 = postData.locationDetails.level1?.trim()
-      if (level1) {
-        locationPath.push({ name: level1, type: 'level1' })
-      }
-
-      const level2 = postData.locationDetails.level2?.trim()
-      if (level2 && level2 !== 'Not Applicable') {
-        locationPath.push({ name: level2, type: 'level2' })
-      }
-
-      const level3 = postData.locationDetails.level3?.trim()
-      if (level3 && level3 !== 'Not Applicable') {
-        locationPath.push({ name: level3, type: 'level3' })
-      }
-
-      const imageHash = await computeBlockHash64(postData.image)
-
-      const { data, error } = await supabase.rpc(
-        'create_post_with_item_date_time_location',
-        {
-          p_poster_id: currentUser.user_id,
-          p_item_name: postData.item.title,
-          p_item_description: postData.item.desc,
-          p_item_type: postData.item.type,
-          p_image_hash: imageHash,
-          p_image_link: displayUrl,
-          p_last_seen_date: lastSeenDate,
-          p_last_seen_hours: lastSeenHours,
-          p_last_seen_minutes: lastSeenMinutes,
-          p_location_path: locationPath,
-          p_item_status: postData.item.type === 'found' ? 'unclaimed' : 'lost',
-          p_category: postData.category,
-          p_post_status: 'accepted', // Staff posts are auto-accepted
-          p_is_anonymous: postData.anonymous
-        }
-      )
-
-      if (error) {
-        console.error('[staffPostServices] Error creating post:', error)
-
-        // Check for duplicate post constraint violation
-        if (
-          error.code === '23505' &&
-          error.message?.includes('ux_post_unique_combination')
-        ) {
-          return {
-            post: null,
-            error:
-              'A post with the same details (item, location, and time) already exists. Please check your recent posts or modify the details.'
-          }
-        }
-
-        return { post: null, error: error.message }
-      }
-
-      console.log('[staffPostServices] Post created successfully:', data)
-
-      // Extract post_id from RPC response (returns array with single object)
-      const postId = data?.[0]?.out_post_id
-
-      if (!postId) {
-        console.error('[staffPostServices] No post_id returned from RPC:', data)
-        return { post: null, error: 'Failed to get post_id' }
-      }
+      const postId = result.post_id
+      console.log('[staffPostServices] Post created successfully:', postId)
 
       // Log the action
       await insertAuditLog({
@@ -158,17 +83,9 @@ export function usePostActionsStaffServices () {
         }
       })
 
-      // Generate metadata in background (non-blocking)
-      if (displayUrl) {
-        generateItemMetadataInBackground(
-          postId,
-          postData.item.title,
-          postData.item.desc,
-          displayUrl
-        )
-      }
+      // Note: Metadata generation is now handled by the backend
 
-      return { post: data, error: null }
+      return { post: { post_id: postId }, error: null }
     } catch (error) {
       console.error('[staffPostServices] Exception creating post:', error)
       return { post: null, error: 'Failed to create post' }
@@ -190,34 +107,31 @@ export function usePostActionsStaffServices () {
         `[staffPostServices] Generating metadata for post ${postId}...`
       )
 
-      // Step 1: Get the item_id from post_table
-      const { data: postData, error: postError } = await supabase
-        .from('post_table')
-        .select('item_id')
-        .eq('post_id', postId)
-        .single()
-
-      if (postError || !postData?.item_id) {
+      // Step 1: Get the full post data including item_id
+      let itemId: string
+      try {
+        const postData = await postApiService.getFullPost(postId)
+        if (!postData.item_id) {
+          console.error(`[staffPostServices] Post ${postId} has no item_id`)
+          return
+        }
+        itemId = postData.item_id
+      } catch (error) {
         console.error(
-          `[staffPostServices] Failed to get item_id for post ${postId}:`,
-          postError
+          `[staffPostServices] Failed to get post data for post ${postId}:`,
+          error
         )
         return
       }
 
-      const itemId = postData.item_id
-
       // Step 2: Check if item already has metadata
-      const { data: itemData, error: itemError } = await supabase
-        .from('item_table')
-        .select('item_metadata')
-        .eq('item_id', itemId)
-        .single()
-
-      if (itemError) {
+      let itemData: any
+      try {
+        itemData = await api.items.get(itemId)
+      } catch (error) {
         console.error(
           `[staffPostServices] Failed to check item metadata for item ${itemId}:`,
-          itemError
+          error
         )
         return
       }
@@ -230,27 +144,48 @@ export function usePostActionsStaffServices () {
         return
       }
 
-      // Step 3: Invoke edge function to generate metadata
-      const { error: metadataError } = await supabase.functions.invoke(
-        'generate-metadata',
-        {
-          body: {
-            post_id: postId,
-            image_url: itemImageUrl,
-            item_name: itemName,
-            item_description: itemDescription
-          }
+      // Step 3: Generate metadata using AI and update via API
+      try {
+        // Fetch image and convert to base64
+        const response = await fetch(itemImageUrl)
+        if (!response.ok) {
+          console.error(`[staffPostServices] Failed to fetch image from ${itemImageUrl}`)
+          return
         }
-      )
+        const blob = await response.blob()
 
-      if (metadataError) {
+        // Convert blob to base64
+        const reader = new FileReader()
+        const base64Promise = new Promise<string>((resolve, reject) => {
+          reader.onloadend = () => resolve(reader.result as string)
+          reader.onerror = reject
+          reader.readAsDataURL(blob)
+        })
+        const base64Image = await base64Promise
+
+        // Generate metadata using AI
+        const result = await generateItemMetadata({
+          itemName,
+          itemDescription,
+          image: base64Image
+        })
+
+        if (result.success && result.metadata) {
+          // Update item metadata via API
+          await itemApiService.updateMetadata(itemId, result.metadata)
+          console.log(
+            `[staffPostServices] Metadata successfully generated for item ${itemId} (post ${postId})`
+          )
+        } else {
+          console.error(
+            `[staffPostServices] Metadata generation failed for post ${postId}:`,
+            result.error
+          )
+        }
+      } catch (metadataError: any) {
         console.error(
           `[staffPostServices] Metadata generation failed for post ${postId}:`,
           metadataError
-        )
-      } else {
-        console.log(
-          `[staffPostServices] Metadata successfully generated for item ${itemId} (post ${postId})`
         )
       }
     } catch (error: any) {
@@ -280,37 +215,27 @@ export function usePostActionsStaffServices () {
       }
 
       // Fetch post and item details before update
-      const { data: postData, error: postError } = await supabase
-        .from('post_table')
-        .select('item_id, status')
-        .eq('post_id', postId)
-        .single()
-
-      if (postError) {
-        console.error('Error fetching post data:', postError)
+      let postData: any
+      let itemData: any
+      try {
+        postData = await postApiService.getFullPost(parseInt(postId))
+        itemData = await api.items.get(postData.item_id)
+      } catch (error) {
+        console.error('Error fetching post/item data:', error)
         return false
-      }
-
-      const { data: itemData, error: itemError } = await supabase
-        .from('item_table')
-        .select('item_name')
-        .eq('item_id', postData?.item_id)
-        .single()
-
-      if (itemError) {
-        console.error('Error fetching item name:', itemError)
       }
 
       const oldStatus = postData?.status
       const itemName = itemData?.item_name || 'Unknown Item'
 
-      const { error } = await supabase
-        .from('post_table')
-        .update({ status: newStatus })
-        .eq('post_id', postId)
+      // Update post status via API
+      const updateResult = await postApiService.updatePostStatus(
+        parseInt(postId),
+        newStatus
+      )
 
-      if (error) {
-        console.error('Error changing post status:', error)
+      if (!updateResult.success) {
+        console.error('Error changing post status')
         return false
       }
 
@@ -351,25 +276,17 @@ export function usePostActionsStaffServices () {
   ): Promise<{ success: boolean; error?: string }> => {
     try {
       // Fetch post details including poster info before status change
-      const { data: postData, error: postError } = await supabase
-        .from('post_table')
-        .select('item_id, poster_id')
-        .eq('post_id', postId)
-        .single()
-
-      if (postError) {
-        console.error('Error fetching post data:', postError)
-        return { success: false, error: postError.message }
-      }
-
-      const { data: itemData, error: itemError } = await supabase
-        .from('item_table')
-        .select('item_name')
-        .eq('item_id', postData?.item_id)
-        .single()
-
-      if (itemError) {
-        console.error('Error fetching item name:', itemError)
+      let postData: any
+      let itemData: any
+      try {
+        postData = await postApiService.getFullPost(parseInt(postId))
+        itemData = await api.items.get(postData.item_id)
+      } catch (error) {
+        console.error('Error fetching post/item data:', error)
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to fetch data'
+        }
       }
 
       const itemName = itemData?.item_name || 'Unknown Item'
@@ -382,16 +299,17 @@ export function usePostActionsStaffServices () {
         return { success: false, error: 'Failed to update post status' }
       }
 
-      // Add rejection reason if status is rejected
+      // Update with rejection reason if status is rejected (handled by API)
       if (newStatus === 'rejected' && rejectionReason) {
-        const { error: reasonError } = await supabase
-          .from('post_table')
-          .update({ rejection_reason: rejectionReason })
-          .eq('post_id', postId)
+        const updateResult = await postApiService.updatePostStatus(
+          parseInt(postId),
+          newStatus,
+          rejectionReason
+        )
 
-        if (reasonError) {
-          console.error('Error updating rejection reason:', reasonError)
-          return { success: false, error: reasonError.message }
+        if (!updateResult.success) {
+          console.error('Error updating rejection reason')
+          return { success: false, error: 'Failed to update rejection reason' }
         }
       }
 
@@ -461,15 +379,17 @@ export function usePostActionsStaffServices () {
       }
 
       // Fetch post and item details
-      const { data: postData, error: postError } = await supabase
-        .from('post_table')
-        .select('item_id, poster_id')
-        .eq('post_id', postId)
-        .single()
-
-      if (postError) {
-        console.error('Error fetching post data:', postError)
-        return { success: false, error: postError.message }
+      let postData: any
+      let itemData: any
+      try {
+        postData = await postApiService.getFullPost(parseInt(postId))
+        itemData = await api.items.get(postData.item_id)
+      } catch (error) {
+        console.error('Error fetching post/item data:', error)
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to fetch data'
+        }
       }
 
       const itemId = postData?.item_id
@@ -479,30 +399,18 @@ export function usePostActionsStaffServices () {
         return { success: false, error: 'Item ID not found' }
       }
 
-      // Get current item status for audit log
-      const { data: itemData, error: itemFetchError } = await supabase
-        .from('item_table')
-        .select('status, item_name')
-        .eq('item_id', itemId)
-        .single()
-
-      if (itemFetchError) {
-        console.error('Error fetching item data:', itemFetchError)
-        return { success: false, error: itemFetchError.message }
-      }
-
       const oldStatus = itemData?.status
       const itemName = itemData?.item_name || 'Unknown Item'
 
-      // Update item status
-      const { error: updateError } = await supabase
-        .from('item_table')
-        .update({ status: newItemStatus })
-        .eq('item_id', itemId)
+      // Update item status via API
+      const updateResult = await postApiService.updateItemStatus(
+        itemId,
+        newItemStatus
+      )
 
-      if (updateError) {
-        console.error('Error updating item status:', updateError)
-        return { success: false, error: updateError.message }
+      if (!updateResult.success) {
+        console.error('Error updating item status')
+        return { success: false, error: 'Failed to update item status' }
       }
 
       // Log the action

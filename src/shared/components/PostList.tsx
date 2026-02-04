@@ -22,7 +22,7 @@ import { useNavigation } from '@/shared/hooks/useNavigation'
 import { sharePost, getPostShareUrl } from '@/shared/utils/shareUtils'
 import { Share } from '@capacitor/share'
 import { isConnected } from '@/shared/utils/networkCheck'
-import { supabase } from '@/shared/lib/supabase'
+import { postApiService } from '@/shared/services'
 import { usePostActionsStaffServices } from '@/features/staff/hooks/usePostStaffServices'
 import { ChoiceModal } from '@/shared/components/ChoiceModal'
 import { rejectReasons } from '@/features/staff/utils/catalogPostHandlers'
@@ -131,22 +131,13 @@ export default function PostList ({
         return
       }
 
-      const { error } = await supabase.rpc('delete_post_by_id', {
-        p_post_id: parseInt(postId)
-      })
+      await postApiService.deletePost(parseInt(postId))
 
-      if (error) {
-        console.error('Error deleting post:', error)
-        setToastMessage('Failed to delete post')
-        setToastColor('danger')
-        setShowToast(true)
-      } else {
-        // Remove post from local state
-        setPosts(prevPosts => prevPosts.filter(p => p.post_id !== postId))
-        setToastMessage('Post deleted successfully')
-        setToastColor('success')
-        setShowToast(true)
-      }
+      // Remove post from local state
+      setPosts(prevPosts => prevPosts.filter(p => p.post_id !== postId))
+      setToastMessage('Post deleted successfully')
+      setToastColor('success')
+      setShowToast(true)
     } catch (err) {
       console.error('Unexpected error deleting post:', err)
       setToastMessage('Failed to delete post')
