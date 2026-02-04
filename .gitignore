@@ -54,3 +54,4 @@ Carthage
 *.xcframework.zip
 /src/prompts
 sendnotifs.js
+android/app/google-services.json
