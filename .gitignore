@@ -53,5 +53,4 @@ capacitor-build.log
 Carthage
 *.xcframework.zip
 /src/prompts
-capacitor.config.ts
 sendnotifs.js
