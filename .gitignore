@@ -54,5 +54,4 @@ Carthage
 *.xcframework.zip
 /src/prompts
 capacitor.config.ts
-/android
 sendnotifs.js

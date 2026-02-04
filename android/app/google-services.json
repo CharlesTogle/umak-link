@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "323536023373",
+    "project_id": "umatch-b07ee",
+    "storage_bucket": "umatch-b07ee.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:323536023373:android:5e21608e8c11e47228d104",
+        "android_client_info": {
+          "package_name": "com.umaklink.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCo0lWlGavrxIf2fUzj9Z5x-4gOFFM8fhg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
