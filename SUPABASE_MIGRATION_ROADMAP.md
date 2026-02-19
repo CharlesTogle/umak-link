@@ -1,8 +1,8 @@
 # Supabase to Backend API Migration Roadmap
 
 **Project:** UMak-LINK Lost & Found System
-**Last Updated:** 2026-02-04
-**Status:** Phase 1 Complete (45/45 calls), Phase 2 In Progress (7/37 calls)
+**Last Updated:** 2026-02-19
+**Status:** Phase 1 Complete (45/45 calls), Phase 2 In Progress (20/37 calls)
 
 ---
 
@@ -10,13 +10,13 @@
 
 ### Overall Progress
 - **Total Supabase Calls:** ~149 calls identified
-- **Migrated:** 52 calls (35%)
-- **Remaining:** 97 calls (65%)
-- **Backend Endpoints Created:** 73 endpoints across 13 routes
+- **Migrated:** 65 calls (44%)
+- **Remaining:** 84 calls (56%)
+- **Backend Endpoints Created:** 77+ endpoints across 13 routes
 
 ### Migration Phases
 1. ✅ **Phase 1 (Critical):** 45/45 (100%) - COMPLETE
-2. 🔄 **Phase 2 (High Priority):** 7/37 (19%) - IN PROGRESS
+2. 🔄 **Phase 2 (High Priority):** 20/37 (54%) - IN PROGRESS
 3. ⏳ **Phase 3 (Medium Priority):** 0/20 (0%) - PENDING
 4. ⏳ **Phase 4 (Low Priority):** 0/47 (0%) - PENDING
 
@@ -164,30 +164,30 @@ PUT /posts/:id/edit-with-image
 
 ---
 
-#### 2. posts.ts ⏳
+#### 2. posts.ts ✅
 **Location:** `src/features/posts/data/posts.ts`
-**Status:** 0/13 (0%)
+**Status:** 13/13 (100%)
 
-**All Calls (13):**
-1. `getTotalPostsCount()` - Get post count with filters
-2. `getMissingItem()` - Get missing post by item ID
-3. `getPost()` - Get single found post
-4. `getPostFull()` - Get full post details
-5. `getPostRecordByItemId()` - Get post by item ID
-6. `getPostByItemId()` - Get post by item ID (duplicate?)
-7. `getFoundPostByLinkedMissingItem()` - Get by linked item
-8. `listOwnPosts()` - List user's posts (2 queries: count + data)
-9. `listPublicPosts()` - List public posts
-10. `listPendingPosts()` - List pending posts
-11. `listStaffPosts()` - List all posts for staff
-12. `listPostsByIds()` - List posts by ID array
+**Migrated Functions:**
+1. ✅ `getTotalPostsCount()` - `api.posts.getCount({type: 'public', item_type: 'found'})`
+2. ✅ `getMissingItem()` - `api.posts.list({item_id, item_type: 'missing', limit: 1})`
+3. ✅ `getPost()` - `api.posts.get(postId)`
+4. ✅ `getPostFull()` - `api.posts.getFull(postId)`
+5. ✅ `getPostRecordByItemId()` - `api.posts.getByItemIdDetails(itemId)`
+6. ✅ `getPostByItemId()` - `api.posts.getByItemId(itemId)`
+7. ✅ `getFoundPostByLinkedMissingItem()` - `api.posts.list({linked_item_id, limit: 1})`
+8. ✅ `listOwnPosts()` - `api.posts.list({type: 'own', poster_id, exclude_ids, limit, include_count: true})`
+9. ✅ `listPublicPosts()` - `api.posts.list({type: 'public', exclude_ids, limit, order_by: 'accepted_on_date'})`
+10. ✅ `listPendingPosts()` - `api.posts.list({type: 'pending', exclude_ids, limit})`
+11. ✅ `listStaffPosts()` - `api.posts.list({type: 'staff', exclude_ids, limit})`
+12. ✅ `listPostsByIds()` - `api.posts.list({post_ids: idsArray, limit})`
 
-**Required Backend Endpoints:**
+**Backend Endpoints Created:**
 ```
-GET /posts/count?item_type=found&status=accepted
+✅ GET /posts/count?type=public&item_type=found
   - Return total count with filters
 
-GET /posts?
+✅ GET /posts?
   type=public|pending|staff|own
   &item_type=found|missing
   &status=accepted|rejected|pending|reported
