@@ -124,6 +124,21 @@ class ApiClient {
   }
 
   // ============================================================================
+  // Email
+  // ============================================================================
+
+  email = {
+    send: (data: {
+      to: string;
+      subject: string;
+      html: string;
+      senderUuid: string;
+      from?: string;
+    }): Promise<{ success: boolean; message?: string; error?: string; to?: string }> =>
+      this.request('POST', '/email/send', data),
+  };
+
+  // ============================================================================
   // Authentication
   // ============================================================================
 
@@ -395,8 +410,16 @@ class ApiClient {
     send: (data: SendGlobalAnnouncementRequest): Promise<{ success: boolean }> =>
       this.request<{ success: boolean }>('POST', '/announcements/send', data),
 
-    list: (): Promise<{ announcements: AnnouncementRecord[] }> =>
-      this.request<{ announcements: AnnouncementRecord[] }>('GET', '/announcements'),
+    list: (params?: { limit?: number; offset?: number }): Promise<{
+      announcements: AnnouncementRecord[];
+      count: number;
+    }> => {
+      const queryParams = new URLSearchParams();
+      if (params?.limit) queryParams.set('limit', params.limit.toString());
+      if (params?.offset) queryParams.set('offset', params.offset.toString());
+      const queryString = queryParams.toString();
+      return this.request('GET', `/announcements${queryString ? `?${queryString}` : ''}`);
+    },
   };
 
   // ============================================================================
@@ -536,6 +559,17 @@ class ApiClient {
       this.request<{ logs: unknown[] }>(
         'GET',
         `/admin/audit-logs/action/${actionType}?limit=${limit || 100}&offset=${offset || 0}`
+      ),
+
+    getWeeklyStats: (): Promise<{
+      weeks: string[];
+      series: { missing: number[]; found: number[]; reports: number[]; pending: number[] };
+    }> => this.request('GET', '/admin/stats/weekly'),
+
+    getExportData: (startDate: string, endDate: string): Promise<{ rows: any[] }> =>
+      this.request(
+        'GET',
+        `/admin/stats/export?start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}`
       ),
   };
 }

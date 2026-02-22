@@ -1,4 +1,4 @@
-import { supabase } from '@/shared/lib/supabase'
+import api from '@/shared/lib/api'
 
 interface SendEmailParams {
   to: string
@@ -16,7 +16,7 @@ interface EmailResponse {
 }
 
 /**
- * Send an email via the Supabase Edge Function
+ * Send an email via the backend API
  * @param params Email parameters
  * @returns Promise with success status and message
  */
@@ -24,37 +24,15 @@ export async function sendEmail (
   params: SendEmailParams
 ): Promise<EmailResponse> {
   try {
-    const { data, error } = await supabase.functions.invoke('send-email', {
-      body: {
-        to: params.to,
-        subject: params.subject,
-        html: params.html,
-        senderUuid: params.senderUuid,
-        from: params.from
-      }
+    const response = await api.email.send({
+      to: params.to,
+      subject: params.subject,
+      html: params.html,
+      senderUuid: params.senderUuid,
+      from: params.from
     })
 
-    if (error) {
-      console.error('Error invoking send-email function:', error)
-      return {
-        success: false,
-        error: error.message || 'Failed to send email'
-      }
-    }
-
-    if (data?.error) {
-      console.error('Email function returned error:', data.error)
-      return {
-        success: false,
-        error: data.message || data.error
-      }
-    }
-
-    return {
-      success: true,
-      message: data?.message || 'Email sent successfully',
-      to: data?.to
-    }
+    return response
   } catch (err) {
     console.error('Exception sending email:', err)
     return {

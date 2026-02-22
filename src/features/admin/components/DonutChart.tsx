@@ -1,10 +1,9 @@
 import ApexCharts from 'apexcharts'
 import { useEffect, useRef, useState } from 'react'
 import { getDashboardStats } from '@/features/admin/data/dashboardStats'
-import fetchPaginatedRows from '@/shared/lib/supabasePaginatedFetch'
+import api from '@/shared/lib/api'
 import { downloadOutline } from 'ionicons/icons'
 import { IonIcon, IonButton } from '@ionic/react'
-import { supabase } from '@/shared/lib/supabase'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
 import { Capacitor } from '@capacitor/core'
@@ -216,7 +215,7 @@ export default function DonutChart ({ data, onLoad }: DonutChartProps) {
   }, [range])
 
   // CSV download
-  const handleDownload = () => {
+  const handleDownload = async () => {
     // Determine start/end for the selected range
     const end = new Date()
     let start = new Date()
@@ -245,159 +244,131 @@ export default function DonutChart ({ data, onLoad }: DonutChartProps) {
       }
     }
 
-    ;(async () => {
-      try {
-        const header = [
-          'poster_name',
-          'item_name',
-          'item_description',
-          'last_seen_location',
-          'accepted_by_staff_name',
-          'submission_date',
-          'claimed_by_name',
-          'claimed_by_email',
-          'accepted_on_date'
-        ].join(',')
+    try {
+      const { rows } = await api.admin.getExportData(
+        start.toISOString(),
+        end.toISOString()
+      )
 
-        const parts: string[] = []
-        parts.push(header)
+      const header = [
+        'poster_name',
+        'item_name',
+        'item_description',
+        'last_seen_location',
+        'accepted_by_staff_name',
+        'submission_date',
+        'claimed_by_name',
+        'claimed_by_email',
+        'accepted_on_date'
+      ].join(',')
 
-        const fetchParams: any = {
-          supabase,
-          table: 'post_public_view',
-          select:
-            'poster_name,item_name,item_description,last_seen_location,accepted_by_staff_name,submission_date,claimed_by_name,claimed_by_email,accepted_on_date',
-          dateField: 'submission_date',
-          batchSize: 10000,
-          onBatch: async (rows: any[]) => {
-            for (const r of rows) {
-              const poster_name = (r as any).poster_name ?? ''
-              const item_name = (r as any).item_name ?? ''
-              const item_description = (r as any).item_description ?? ''
-              const last_seen_location = (r as any).last_seen_location ?? ''
-              const accepted_by_staff_name =
-                (r as any).accepted_by_staff_name ?? ''
-              const submission_date = (r as any).submission_date ?? ''
-              const claimed_by_name = (r as any).claimed_by_name ?? ''
-              const claimed_by_email = (r as any).claimed_by_email ?? ''
-              const accepted_on_date = (r as any).accepted_on_date ?? ''
+      const csvRows: string[] = []
+      if (Array.isArray(rows)) {
+        for (const r of rows) {
+          const poster_name = (r as any).poster_name ?? ''
+          const item_name = (r as any).item_name ?? ''
+          const item_description = (r as any).item_description ?? ''
+          const last_seen_location = (r as any).last_seen_location ?? ''
+          const accepted_by_staff_name = (r as any).accepted_by_staff_name ?? ''
+          const submission_date = (r as any).submission_date ?? ''
+          const claimed_by_name = (r as any).claimed_by_name ?? ''
+          const claimed_by_email = (r as any).claimed_by_email ?? ''
+          const accepted_on_date = (r as any).accepted_on_date ?? ''
 
-              const escaped = [
-                poster_name,
-                item_name,
-                item_description,
-                last_seen_location,
-                accepted_by_staff_name,
-                submission_date,
-                claimed_by_name,
-                claimed_by_email,
-                accepted_on_date
-              ]
-                .map((c: any) => `"${String(c).replace(/"/g, '""')}"`)
-                .join(',')
+          const escaped = [
+            poster_name,
+            item_name,
+            item_description,
+            last_seen_location,
+            accepted_by_staff_name,
+            submission_date,
+            claimed_by_name,
+            claimed_by_email,
+            accepted_on_date
+          ]
+            .map((c: any) => `"${String(c).replace(/"/g, '""')}"`)
+            .join(',')
 
-              parts.push(escaped)
-            }
-          }
+          csvRows.push(escaped)
         }
+      }
 
-        if (start && end) {
-          fetchParams.gte = start.toISOString()
-          fetchParams.lte = end.toISOString()
+      const csv = [header, ...csvRows].join('\n')
+
+      // Use Capacitor Filesystem on native platforms; fallback to anchor download on web
+      const filename = `status-summary-detailed-${range}-${new Date()
+        .toISOString()
+        .slice(0, 10)}.csv`
+      const platform = Capacitor.getPlatform()
+      const toBase64 = (str: string) => {
+        try {
+          return btoa(unescape(encodeURIComponent(str)))
+        } catch (e) {
+          return btoa(str)
         }
+      }
 
-        await fetchPaginatedRows(fetchParams)
+      if (platform !== 'web') {
+        try {
+          const base64 = toBase64(csv)
+          await Filesystem.writeFile({
+            path: filename,
+            data: base64,
+            directory: Directory.Documents
+          })
 
-        const csv = parts.join('\n')
-
-        // Use Capacitor Filesystem on native platforms; fallback to anchor download on web
-        const filename = `status-summary-detailed-${range}-${new Date()
-          .toISOString()
-          .slice(0, 10)}.csv`
-        const platform = Capacitor.getPlatform()
-        const toBase64 = (str: string) => {
           try {
-            return btoa(unescape(encodeURIComponent(str)))
-          } catch (e) {
-            // Fallback: strip non-ASCII
-            return btoa(str)
-          }
-        }
-
-        if (platform !== 'web') {
-          try {
-            // No explicit Filesystem permission requests here — attempt write and let platform handle prompts
-
-            const base64 = toBase64(csv)
-            await Filesystem.writeFile({
-              path: filename,
-              data: base64,
-              directory: Directory.Documents
+            const uriResult = await Filesystem.getUri({
+              directory: Directory.Documents,
+              path: filename
             })
-
-            // Try to open the file URI so user can access/download it
-            try {
-              const uriResult = await Filesystem.getUri({
-                directory: Directory.Documents,
-                path: filename
-              })
-              if (uriResult?.uri) {
-                // Prefer convertFileSrc when available to get a web-safe URL
-                const fileUrl = (Capacitor as any).convertFileSrc
-                  ? (Capacitor as any).convertFileSrc(uriResult.uri)
-                  : uriResult.uri
-
-                try {
-                  // Prefer sharing the file with the system share sheet
-                  // Use native file URI when available (uriResult.uri)
-                  const shareUrl = uriResult.uri || fileUrl
-                  await Share.share({ title: filename, url: shareUrl })
-                  return
-                } catch (e) {
-                  console.warn(
-                    'Share.share failed for fileUrl, falling back to text/blob share',
-                    e
-                  )
-                }
+            if (uriResult?.uri) {
+              const shareUrl = uriResult.uri
+              try {
+                await Share.share({ title: filename, url: shareUrl })
+                return
+              } catch (e) {
+                console.warn(
+                  'Share.share failed for fileUrl, falling back to text/blob share',
+                  e
+                )
               }
-            } catch (e) {
-              console.warn('CSV written but could not get URI', e)
             }
+          } catch (e) {
+            console.warn('CSV written but could not get URI', e)
+          }
 
-            // Fallback: open a blob URL via Browser.open so native/web viewers can handle it
-            try {
-              // Fallback: share CSV text (apps can receive text content)
-              await Share.share({ title: filename, text: csv })
-              return
-            } catch (e) {
-              console.warn(
-                'Share.text fallback failed, will fall back to web download',
-                e
-              )
-            }
+          // Fallback: share CSV text (apps can receive text content)
+          try {
+            await Share.share({ title: filename, text: csv })
+            return
           } catch (e) {
             console.warn(
-              'Filesystem write failed, falling back to anchor download',
+              'Share.text fallback failed, will fall back to web download',
               e
             )
-            // continue to web fallback
           }
+        } catch (e) {
+          console.warn(
+            'Filesystem write failed, falling back to anchor download',
+            e
+          )
         }
-
-        // Web fallback: use blob + anchor
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = filename
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(url)
-      } catch (e) {
-        console.error('Error generating donut detailed CSV', e)
       }
-    })()
+
+      // Web fallback: use blob + anchor
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      console.error('Error generating donut detailed CSV', e)
+    }
   }
 
   if (loading) {

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import ApexCharts from 'apexcharts'
-import { supabase } from '@/shared/lib/supabase'
+import api from '@/shared/lib/api'
 import { IonIcon } from '@ionic/react'
 import { downloadOutline } from 'ionicons/icons'
 import { IonButton } from '@ionic/react'
@@ -123,125 +123,44 @@ export default function SystemStatsChart ({
     try {
       setLoading(true)
 
-      const weeks: string[] = []
-      const missingData: number[] = []
-      const foundData: number[] = []
-      const reportsData: number[] = []
-      const pendingData: number[] = []
-
-      const today = new Date()
-
-      // Optimize: Fetch all data in parallel instead of sequentially
-      const promises = []
-
-      for (let i = 11; i >= 0; i--) {
-        const weekStart = new Date(today)
-        weekStart.setDate(weekStart.getDate() - weekStart.getDay() - i * 7)
-        weekStart.setHours(0, 0, 0, 0)
-
-        const weekEnd = new Date(weekStart)
-        weekEnd.setDate(weekEnd.getDate() + 6)
-        weekEnd.setHours(23, 59, 59, 999)
-
-        const monthNames = [
-          'Jan',
-          'Feb',
-          'Mar',
-          'Apr',
-          'May',
-          'Jun',
-          'Jul',
-          'Aug',
-          'Sep',
-          'Oct',
-          'Nov',
-          'Dec'
-        ]
-        const weekLabel = `${
-          monthNames[weekStart.getMonth()]
-        } ${weekStart.getDate()}`
-        weeks.push(weekLabel)
-
-        // Push all three queries for this week into promises array
-        promises.push(
-          Promise.all([
-            // missing posts
-            supabase
-              .from('post_public_view')
-              .select('*', { count: 'exact', head: true })
-              .eq('item_type', 'missing')
-              .gte('submission_date', weekStart.toISOString())
-              .lte('submission_date', weekEnd.toISOString()),
-            // found posts
-            supabase
-              .from('post_public_view')
-              .select('*', { count: 'exact', head: true })
-              .eq('item_type', 'found')
-              .gte('submission_date', weekStart.toISOString())
-              .lte('submission_date', weekEnd.toISOString()),
-            // fraud reports (open or under_review)
-            supabase
-              .from('fraud_reports_table')
-              .select('*', { count: 'exact', head: true })
-              .in('report_status', ['open', 'under_review'])
-              .gte('date_reported', weekStart.toISOString())
-              .lte('date_reported', weekEnd.toISOString()),
-            // pending posts
-            supabase
-              .from('post_public_view')
-              .select('*', { count: 'exact', head: true })
-              .eq('post_status', 'pending')
-              .gte('submission_date', weekStart.toISOString())
-              .lte('submission_date', weekEnd.toISOString())
-          ])
-        )
-      }
-
-      // Wait for all queries to complete
-      const results = await Promise.all(promises)
-
-      // Process results
-      results.forEach(
-        ([missingResult, foundResult, reportsResult, pendingResult]) => {
-          missingData.push(missingResult.count || 0)
-          foundData.push(foundResult.count || 0)
-          reportsData.push(reportsResult.count || 0)
-          pendingData.push(pendingResult.count || 0)
-        }
-      )
+      const stats = await api.admin.getWeeklyStats()
 
       // Trim leading zero weeks
       let firstNonZeroIndex = -1
-      for (let idx = 0; idx < weeks.length; idx++) {
+      for (let idx = 0; idx < stats.weeks.length; idx++) {
         const anyNonZero =
-          (missingData[idx] ?? 0) !== 0 ||
-          (foundData[idx] ?? 0) !== 0 ||
-          (reportsData[idx] ?? 0) !== 0 ||
-          (pendingData[idx] ?? 0) !== 0
+          (stats.series.missing[idx] ?? 0) !== 0 ||
+          (stats.series.found[idx] ?? 0) !== 0 ||
+          (stats.series.reports[idx] ?? 0) !== 0 ||
+          (stats.series.pending[idx] ?? 0) !== 0
         if (anyNonZero) {
           firstNonZeroIndex = idx
           break
         }
       }
 
-      let finalLabels = weeks
-      let finalMissing = missingData
-      let finalFound = foundData
-      let finalReports = reportsData
-      let finalPending = pendingData
-
       if (firstNonZeroIndex > 0) {
-        finalLabels = weeks.slice(firstNonZeroIndex)
-        finalMissing = missingData.slice(firstNonZeroIndex)
-        finalFound = foundData.slice(firstNonZeroIndex)
-        finalReports = reportsData.slice(firstNonZeroIndex)
-        finalPending = pendingData.slice(firstNonZeroIndex)
+        setChartData({
+          labels: stats.weeks.slice(firstNonZeroIndex),
+          series: [
+            stats.series.missing.slice(firstNonZeroIndex),
+            stats.series.found.slice(firstNonZeroIndex),
+            stats.series.reports.slice(firstNonZeroIndex),
+            stats.series.pending.slice(firstNonZeroIndex)
+          ]
+        })
+      } else {
+        setChartData({
+          labels: stats.weeks,
+          series: [
+            stats.series.missing,
+            stats.series.found,
+            stats.series.reports,
+            stats.series.pending
+          ]
+        })
       }
 
-      setChartData({
-        labels: finalLabels,
-        series: [finalMissing, finalFound, finalReports, finalPending]
-      })
       // notify parent that the system stats finished loading
       try {
         onLoad && onLoad()
@@ -255,7 +174,7 @@ export default function SystemStatsChart ({
     }
   }
 
-  const handleDownloadCsv = () => {
+  const handleDownloadCsv = async () => {
     if (!chartData) return
 
     // Compute a conservative start/end range covering the displayed weeks
@@ -264,143 +183,131 @@ export default function SystemStatsChart ({
     const start = new Date()
     start.setDate(end.getDate() - weeksShown * 7)
     start.setHours(0, 0, 0, 0)
-    ;(async () => {
-      try {
-        const { data: rows, error } = await supabase
-          .from('post_public_view')
-          .select(
-            'poster_name,item_name,item_description,last_seen_location,accepted_by_staff_name,submission_date,claimed_by_name,claimed_by_email,accepted_on_date'
-          )
-          .gte('submission_date', start.toISOString())
-          .lte('submission_date', end.toISOString())
 
-        if (error) {
-          console.error('Failed to fetch detailed CSV rows', error)
-          return
+    try {
+      const { rows } = await api.admin.getExportData(
+        start.toISOString(),
+        end.toISOString()
+      )
+
+      const header = [
+        'poster_name',
+        'item_name',
+        'item_description',
+        'last_seen_location',
+        'accepted_by_staff_name',
+        'submission_date',
+        'claimed_by_name',
+        'claimed_by_email',
+        'accepted_on_date'
+      ].join(',')
+
+      const csvRows: string[] = []
+      if (Array.isArray(rows)) {
+        for (const r of rows) {
+          const poster_name = (r as any).poster_name ?? ''
+          const item_name = (r as any).item_name ?? ''
+          const item_description = (r as any).item_description ?? ''
+          const last_seen_location = (r as any).last_seen_location ?? ''
+          const accepted_by_staff_name = (r as any).accepted_by_staff_name ?? ''
+          const submission_date = (r as any).submission_date ?? ''
+          const claimed_by_name = (r as any).claimed_by_name ?? ''
+          const claimed_by_email = (r as any).claimed_by_email ?? ''
+          const accepted_on_date = (r as any).accepted_on_date ?? ''
+
+          const escaped = [
+            poster_name,
+            item_name,
+            item_description,
+            last_seen_location,
+            accepted_by_staff_name,
+            submission_date,
+            claimed_by_name,
+            claimed_by_email,
+            accepted_on_date
+          ]
+            .map((c: any) => `"${String(c).replace(/"/g, '""')}"`)
+            .join(',')
+
+          csvRows.push(escaped)
         }
+      }
 
-        const header = [
-          'poster_name',
-          'item_name',
-          'item_description',
-          'last_seen_location',
-          'accepted_by_staff_name',
-          'submission_date',
-          'claimed_by_name',
-          'claimed_by_email',
-          'accepted_on_date'
-        ].join(',')
+      const csv = [header, ...csvRows].join('\n')
 
-        const csvRows: string[] = []
-        if (Array.isArray(rows)) {
-          for (const r of rows) {
-            const poster_name = (r as any).poster_name ?? ''
-            const item_name = (r as any).item_name ?? ''
-            const item_description = (r as any).item_description ?? ''
-            const last_seen_location = (r as any).last_seen_location ?? ''
-            const accepted_by_staff_name =
-              (r as any).accepted_by_staff_name ?? ''
-            const submission_date = (r as any).submission_date ?? ''
-            const claimed_by_name = (r as any).claimed_by_name ?? ''
-            const claimed_by_email = (r as any).claimed_by_email ?? ''
-            const accepted_on_date = (r as any).accepted_on_date ?? ''
-
-            const escaped = [
-              poster_name,
-              item_name,
-              item_description,
-              last_seen_location,
-              accepted_by_staff_name,
-              submission_date,
-              claimed_by_name,
-              claimed_by_email,
-              accepted_on_date
-            ]
-              .map((c: any) => `"${String(c).replace(/"/g, '""')}"`)
-              .join(',')
-
-            csvRows.push(escaped)
-          }
+      const filename = `system-stats-detailed-${new Date()
+        .toISOString()
+        .slice(0, 10)}.csv`
+      const platform = Capacitor.getPlatform()
+      const toBase64 = (str: string) => {
+        try {
+          return btoa(unescape(encodeURIComponent(str)))
+        } catch (e) {
+          return btoa(str)
         }
+      }
 
-        const csv = [header, ...csvRows].join('\n')
+      if (platform !== 'web') {
+        try {
+          const base64 = toBase64(csv)
+          await Filesystem.writeFile({
+            path: filename,
+            data: base64,
+            directory: Directory.Documents
+          })
 
-        const filename = `system-stats-detailed-${new Date()
-          .toISOString()
-          .slice(0, 10)}.csv`
-        const platform = Capacitor.getPlatform()
-        const toBase64 = (str: string) => {
           try {
-            return btoa(unescape(encodeURIComponent(str)))
-          } catch (e) {
-            return btoa(str)
-          }
-        }
-
-        if (platform !== 'web') {
-          try {
-            // No explicit Filesystem permission requests here — attempt write and let platform handle prompts
-
-            const base64 = toBase64(csv)
-            await Filesystem.writeFile({
-              path: filename,
-              data: base64,
-              directory: Directory.Documents
+            const uriResult = await Filesystem.getUri({
+              directory: Directory.Documents,
+              path: filename
             })
-
-            try {
-              const uriResult = await Filesystem.getUri({
-                directory: Directory.Documents,
-                path: filename
-              })
-              if (uriResult?.uri) {
-                const shareUrl = uriResult.uri
-                try {
-                  await Share.share({ title: filename, url: shareUrl })
-                  return
-                } catch (e) {
-                  console.warn(
-                    'Share.share failed for fileUrl, falling back to text/blob share',
-                    e
-                  )
-                }
+            if (uriResult?.uri) {
+              const shareUrl = uriResult.uri
+              try {
+                await Share.share({ title: filename, url: shareUrl })
+                return
+              } catch (e) {
+                console.warn(
+                  'Share.share failed for fileUrl, falling back to text/blob share',
+                  e
+                )
               }
-            } catch (e) {
-              console.warn('CSV written but could not open URI', e)
             }
-            // Fallback: share CSV text (apps can receive text content)
-            try {
-              await Share.share({ title: filename, text: csv })
-              return
-            } catch (e) {
-              console.warn(
-                'Share.text fallback failed, will fall back to web download',
-                e
-              )
-            }
+          } catch (e) {
+            console.warn('CSV written but could not open URI', e)
+          }
+          // Fallback: share CSV text (apps can receive text content)
+          try {
+            await Share.share({ title: filename, text: csv })
+            return
           } catch (e) {
             console.warn(
-              'Filesystem write failed, falling back to anchor download',
+              'Share.text fallback failed, will fall back to web download',
               e
             )
           }
+        } catch (e) {
+          console.warn(
+            'Filesystem write failed, falling back to anchor download',
+            e
+          )
         }
-
-        // Web fallback
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-        const url = URL.createObjectURL(blob)
-
-        const link = document.createElement('a')
-        link.href = url
-        link.setAttribute('download', filename)
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-        URL.revokeObjectURL(url)
-      } catch (e) {
-        console.error('Error generating detailed CSV', e)
       }
-    })()
+
+      // Web fallback
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', filename)
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      console.error('Error generating detailed CSV', e)
+    }
   }
 
   // Render chart when data changes

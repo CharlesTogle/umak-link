@@ -15,7 +15,7 @@ import { megaphone } from 'ionicons/icons'
 import { chevronDown, documentText } from 'ionicons/icons'
 import Header from '@/shared/components/Header'
 import AccordionList from '@/shared/components/AccordionList'
-import { supabase } from '@/shared/lib/supabase'
+import api from '@/shared/lib/api'
 import { formatTimestamp } from '@/shared/utils/formatTimeStamp'
 import CardHeader from '@/shared/components/CardHeader'
 import ExpandableImage from '@/shared/components/ExpandableImage'
@@ -50,19 +50,10 @@ export default function Announcement () {
 
       try {
         const currentOffset = isInitial ? 0 : offset
-        const { data, error, count } = await supabase
-          .from('global_announcement_view')
-          .select('id, created_at, message, description, image_url', {
-            count: 'exact'
-          })
-          .order('created_at', { ascending: false })
-          .range(currentOffset, currentOffset + PAGE_SIZE - 1)
-
-        if (error) {
-          console.warn('Failed to load announcements', error)
-          if (isInitial) setAnnouncements([])
-          return
-        }
+        const { announcements: data, count } = await api.announcements.list({
+          limit: PAGE_SIZE,
+          offset: currentOffset
+        })
 
         const newData = data ?? []
 
@@ -78,6 +69,7 @@ export default function Announcement () {
         setHasMore(count ? currentOffset + PAGE_SIZE < count : false)
       } catch (e) {
         console.error('Error loading announcements', e)
+        if (isInitial) setAnnouncements([])
       } finally {
         if (isInitial) setLoading(false)
       }
