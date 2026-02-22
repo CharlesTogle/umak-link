@@ -5,7 +5,7 @@ import {
   type EditPostInput
 } from '../services/postServices'
 import useNotifications from './useNotifications'
-import { postApiService } from '@/shared/services'
+import { postApiService, fraudReportApiService } from '@/shared/services'
 
 /**
  * Hook to access post services with automatic user context injection.
@@ -126,37 +126,21 @@ export function usePostActions () {
       }
     }
 
-    // Check if user has already reported this post
-    const { count: duplicateSelfCount, error: duplicateSelfError } =
-      await supabase
-        .from('fraud_reports_table')
-        .select('*', { count: 'exact', head: true })
-        .eq('post_id', postId)
-        .eq('reported_by', user.user_id)
-        .in('report_status', ['open', 'under_review'])
+    // Check for duplicate reports via backend API
+    let hasDuplicateSelf = false
+    let hasDuplicateOthers = false
 
-    if (duplicateSelfError) {
-      console.error('Error checking duplicate self report:', duplicateSelfError)
-    }
-
-    // Check if others have reported with same concern
-    const { count: duplicateOthersCount, error: duplicateOthersError } =
-      await supabase
-        .from('fraud_reports_table')
-        .select('*', { count: 'exact', head: true })
-        .eq('post_id', postId)
-        .ilike('reason_for_reporting', `%${concern}%`)
-        .in('report_status', ['open', 'under_review'])
-
-    if (duplicateOthersError) {
-      console.error(
-        'Error checking duplicate others report:',
-        duplicateOthersError
+    try {
+      const duplicateCheck = await fraudReportApiService.checkDuplicates(
+        postId,
+        user.user_id,
+        concern
       )
+      hasDuplicateSelf = duplicateCheck.hasDuplicateSelf
+      hasDuplicateOthers = duplicateCheck.hasDuplicateOthers
+    } catch (err) {
+      console.error('Error checking duplicate reports:', err)
     }
-
-    const hasDuplicateSelf = (duplicateSelfCount ?? 0) > 0
-    const hasDuplicateOthers = (duplicateOthersCount ?? 0) > 0
 
     // Return duplicate information for UI to handle
     return {
@@ -185,7 +169,7 @@ export function usePostActions () {
   }
 
   /**
-   * Delete a post and its orphaned item using the delete_post_by_id RPC
+   * Delete a post and its orphaned item using the backend API
    */
   const deletePost = async (postId: string, itemName: string) => {
     const user = await getUser()
@@ -194,25 +178,24 @@ export function usePostActions () {
     }
 
     try {
-      await postApiService.deletePost(parseInt(postId))
+      const result = await postApiService.deletePost(parseInt(postId))
 
-      // Send notification
-      sendNotification({
-        title: 'Post Deleted',
-        message: `Your post about "${itemName}" has been successfully deleted.`,
-        type: 'delete',
-        userId: user.user_id,
-        data: {
-          postId: String(postId),
-          itemName
-        }
-      })
+      // Only send notification on successful deletion
+      if (result.success) {
+        sendNotification({
+          title: 'Post Deleted',
+          message: `Your post about "${itemName}" has been successfully deleted.`,
+          type: 'delete',
+          userId: user.user_id,
+          data: {
+            postId: String(postId),
+            itemName
+          }
+        })
+      }
 
       return {
-        success: true,
-        postDeleted: result.out_deleted,
-        itemDeleted: result.out_item_deleted,
-        itemId: result.out_item_id
+        success: result.success
       }
     } catch (error) {
       console.error('Exception deleting post:', error)

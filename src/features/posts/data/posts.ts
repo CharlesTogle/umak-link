@@ -1,4 +1,3 @@
-import { supabase } from '@/shared/lib/supabase'
 import { api } from '@/shared/lib/api'
 import type { PublicPost } from '@/features/posts/types/post'
 import { createPostCache } from '@/features/posts/data/postsCache'

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/shared/lib/supabase'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import createCache from '@/shared/lib/cache'
+import { notificationApiService } from '@/shared/services'
 
 type NotificationRow = {
   notification_id: string
@@ -96,26 +97,15 @@ export function useUnreadNotificationCount (userId: string | null | undefined) {
       return false
     }
 
-    // Helper: Fetch current count from database
+    // Helper: Fetch current count from backend API
     const fetchCount = async () => {
       if (!isMountedRef.current) return
 
       try {
-        const { count, error: fetchError } = await supabase
-          .from('notification_view')
-          .select('notification_id', { count: 'exact', head: true })
-          .eq('sent_to', userId)
-          .eq('is_read', false)
+        const newCount = await notificationApiService.getUnreadCount()
 
         if (!isMountedRef.current) return
 
-        if (fetchError) {
-          throw new Error(
-            `Failed to fetch notification count: ${fetchError.message}`
-          )
-        }
-
-        const newCount = count ?? 0
         setUnreadCount(newCount)
         setError(null)
         hasFetchedRef.current = true

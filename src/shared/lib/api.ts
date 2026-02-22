@@ -224,6 +224,23 @@ class ApiClient {
     edit: (id: number, data: EditPostRequest): Promise<{ success: boolean; post_id: number }> =>
       this.request<{ success: boolean; post_id: number }>('PUT', `/posts/${id}`, data),
 
+    editWithImage: (id: number, data: {
+      p_item_name?: string;
+      p_item_description?: string;
+      p_item_type?: string;
+      p_image_hash?: string;
+      p_image_link?: string;
+      p_last_seen_date?: string;
+      p_last_seen_hours?: number;
+      p_last_seen_minutes?: number;
+      p_location_path?: Array<{ name: string; type: string }>;
+      p_item_status?: string;
+      p_category?: string;
+      p_post_status?: string;
+      p_is_anonymous?: boolean;
+    }): Promise<{ success: boolean; post_id: number }> =>
+      this.request<{ success: boolean; post_id: number }>('PUT', `/posts/${id}/edit-with-image`, data),
+
     delete: (id: number): Promise<{ success: boolean }> =>
       this.request<{ success: boolean }>('DELETE', `/posts/${id}`),
 
@@ -247,6 +264,15 @@ class ApiClient {
 
     checkExisting: (itemId: string): Promise<ExistingClaimResponse> =>
       this.request<ExistingClaimResponse>('GET', `/claims/by-item/${itemId}`),
+
+    getByItemFull: (itemId: string): Promise<{ claim: { claim_id: string; linked_lost_item_id: string | null } | null }> =>
+      this.request<{ claim: { claim_id: string; linked_lost_item_id: string | null } | null }>('GET', `/claims/by-item/${itemId}/full`),
+
+    delete: (claimId: string): Promise<{ success: boolean }> =>
+      this.request<{ success: boolean }>('DELETE', `/claims/${claimId}`),
+
+    deleteByItem: (itemId: string): Promise<{ success: boolean }> =>
+      this.request<{ success: boolean }>('DELETE', `/claims/by-item/${itemId}`),
   };
 
   // ============================================================================
@@ -296,6 +322,23 @@ class ApiClient {
 
     resolve: (id: string, data: FraudReportResolveRequest): Promise<{ success: boolean; data: unknown }> =>
       this.request<{ success: boolean; data: unknown }>('POST', `/fraud-reports/${id}/resolve`, data),
+
+    delete: (id: string): Promise<{ success: boolean }> =>
+      this.request<{ success: boolean }>('DELETE', `/fraud-reports/${id}`),
+
+    checkDuplicates: (postId: string | number, userId: string, concern?: string): Promise<{
+      has_duplicate_self: boolean;
+      has_duplicate_others: boolean;
+    }> => {
+      const params = new URLSearchParams();
+      params.set('post_id', String(postId));
+      params.set('user_id', userId);
+      if (concern) params.set('concern', concern);
+      return this.request<{
+        has_duplicate_self: boolean;
+        has_duplicate_others: boolean;
+      }>('GET', `/fraud-reports/check-duplicates?${params.toString()}`);
+    },
   };
 
   // ============================================================================
@@ -308,6 +351,19 @@ class ApiClient {
 
     itemsStaff: (data: SearchItemsStaffRequest): Promise<{ results: PostRecord[] }> =>
       this.request<{ results: PostRecord[] }>('POST', '/search/items/staff', data),
+
+    matchMissingItem: (postId: string): Promise<{
+      success: boolean;
+      matches: any[];
+      missing_post?: any;
+      total_matches?: number;
+    }> =>
+      this.request<{
+        success: boolean;
+        matches: any[];
+        missing_post?: any;
+        total_matches?: number;
+      }>('POST', '/search/match-missing-item', { post_id: postId }),
   };
 
   // ============================================================================
@@ -435,6 +491,22 @@ class ApiClient {
   admin = {
     getDashboardStats: (): Promise<DashboardStats> =>
       this.request<DashboardStats>('GET', '/admin/dashboard-stats'),
+
+    getUsers: (params?: {
+      user_type?: string[];
+    }): Promise<{ users: any[] }> => {
+      const queryParams = new URLSearchParams();
+      if (params?.user_type?.length) queryParams.set('user_type', params.user_type.join(','));
+
+      const queryString = queryParams.toString();
+      return this.request<{ users: any[] }>(
+        'GET',
+        `/admin/users${queryString ? `?${queryString}` : ''}`
+      );
+    },
+
+    updateUserRole: (userId: string, role: 'User' | 'Staff' | 'Admin', previousRole?: 'User' | 'Staff' | 'Admin'): Promise<{ success: boolean }> =>
+      this.request<{ success: boolean }>('PUT', `/admin/users/${userId}/role`, { role, previous_role: previousRole }),
 
     insertAuditLog: (data: {
       user_id: string;

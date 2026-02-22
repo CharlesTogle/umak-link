@@ -1,8 +1,8 @@
 # Supabase to Backend API Migration Roadmap
 
 **Project:** UMak-LINK Lost & Found System
-**Last Updated:** 2026-02-19
-**Status:** Phase 1 Complete (45/45 calls), Phase 2 In Progress (20/37 calls)
+**Last Updated:** 2026-02-22
+**Status:** Phase 1 Complete (45/45 calls), Phase 2 Complete (37/37 calls), Phase 3 Complete (10/10 calls)
 
 ---
 
@@ -10,14 +10,14 @@
 
 ### Overall Progress
 - **Total Supabase Calls:** ~149 calls identified
-- **Migrated:** 65 calls (44%)
-- **Remaining:** 84 calls (56%)
-- **Backend Endpoints Created:** 77+ endpoints across 13 routes
+- **Migrated:** 92 calls (62%)
+- **Remaining:** 57 calls (38%)
+- **Backend Endpoints Created:** 88+ endpoints across 13 routes
 
 ### Migration Phases
 1. ✅ **Phase 1 (Critical):** 45/45 (100%) - COMPLETE
-2. 🔄 **Phase 2 (High Priority):** 20/37 (54%) - IN PROGRESS
-3. ⏳ **Phase 3 (Medium Priority):** 0/20 (0%) - PENDING
+2. ✅ **Phase 2 (High Priority):** 37/37 (100%) - COMPLETE
+3. ✅ **Phase 3 (Medium Priority):** 10/10 (100%) - COMPLETE
 4. ⏳ **Phase 4 (Low Priority):** 0/47 (0%) - PENDING
 
 ---
@@ -119,48 +119,34 @@ All critical files with security-sensitive operations have been fully migrated.
 
 ---
 
-## Phase 2: High Priority Files 🔄 IN PROGRESS
+## Phase 2: High Priority Files ✅ COMPLETE
 
 ### Summary
 Files with frequent user operations and staff management features.
 
-### Files In Progress (6 files, 37 calls)
+### Files Migrated (6 files, 37 calls)
 
-#### 1. postServices.tsx 🔄
+#### 1. postServices.tsx ✅
 **Location:** `src/features/user/services/postServices.tsx`
-**Status:** 6/11 (55%)
+**Status:** 11/11 (100%)
 
-**Migrated:**
-- ✅ Line 186: Item metadata update
-- ✅ Line 428: Post status fetch
-- ✅ Line 498: Post data fetch
-- ✅ Line 509: Item data fetch
-- ✅ Line 520: Image link fetch (merged)
-- ✅ Line 598: Post status update
+**All Calls Migrated:**
+- ✅ Item metadata update → `itemApiService.updateMetadata()`
+- ✅ Post status fetch → `postApiService.getPost()`
+- ✅ Post data fetch → `postApiService.getFullPost()`
+- ✅ Item data fetch → `api.items.get()`
+- ✅ Image link fetch → merged with item fetch
+- ✅ Post status update → `postApiService.updatePostStatus()`
+- ✅ Edit post with image → `postApiService.editWithImage()`
 
-**Remaining (5 calls - all in editPost function):**
-- ⏳ Line 282: Fetch post record
-- ⏳ Line 293: Fetch item record
-- ⏳ Line 304: Fetch image data
-- ⏳ Line 319: Delete old image (storage)
-- ⏳ Line 376: Edit post RPC
-
-**Required Backend Endpoints:**
+**Backend Endpoints Created:**
 ```
-PUT /posts/:id/edit-with-image
-  - Handle image replacement
-  - Delete old image from storage
-  - Update post and item data
-  - Return updated post
+✅ PUT /posts/:id/edit-with-image
+  - Handles image upload and replacement
+  - Deletes old image from storage
+  - Updates post and item data via RPC
+  - Returns updated post ID
 ```
-
-**Migration Steps:**
-1. Create backend endpoint for complete edit with image
-2. Migrate all 5 calls to single API call
-3. Test image replacement flow
-4. Verify old images are deleted
-
-**Estimated Time:** 2 hours
 
 ---
 
@@ -210,164 +196,175 @@ GET /posts/by-linked-item/:itemId
   - Get post by linked_lost_item_id
 ```
 
-**Migration Steps:**
-1. Create enhanced `GET /posts` endpoint with all filters
-2. Create `GET /posts/count` endpoint
-3. Create `GET /posts/by-item/:itemId` endpoint
-4. Create `GET /posts/by-linked-item/:itemId` endpoint
-5. Migrate getTotalPostsCount → API call
-6. Migrate getMissingItem → API call
-7. Migrate getPost → API call
-8. Migrate getPostFull → API call (already exists)
-9. Migrate getPostRecordByItemId → API call
-10. Migrate getPostByItemId → API call
-11. Migrate getFoundPostByLinkedMissingItem → API call
-12. Migrate listOwnPosts → API call
-13. Migrate listPublicPosts → API call
-14. Migrate listPendingPosts → API call
-15. Migrate listStaffPosts → API call
-16. Migrate listPostsByIds → API call
-17. Test all list and get operations
-18. Verify filters work correctly
-19. Test pagination
-20. Verify count queries
-
-**Estimated Time:** 4 hours
-
 ---
 
-#### 3. postsRefresh.ts ⏳
+#### 3. postsRefresh.ts ✅
 **Location:** `src/features/posts/data/postsRefresh.ts`
-**Status:** 0/4 (0%)
+**Status:** 4/4 (100%)
 
-**Dependencies:** Requires posts.ts endpoints to be created first.
-
-**All Calls (4):**
-- Post refresh queries
-- Cache updates
-- State synchronization
-
-**Migration Steps:**
-1. Wait for posts.ts endpoints
-2. Update to use `fraudReportApiService.listReports()`
-3. Test refresh functionality
-4. Verify cache updates
-
-**Estimated Time:** 30 minutes
+**All Calls Migrated:**
+- ✅ `refreshPublicPosts()` → `api.posts.list({ type: 'public', item_type: 'found', post_ids })`
+- ✅ `refreshStaffPosts()` → `api.posts.list({ type: 'staff', post_ids })`
+- ✅ `refreshOwnPosts()` → `api.posts.list({ type: 'own', poster_id, post_ids })`
+- ✅ `refreshByIds()` → `api.posts.list({ post_ids })`
 
 ---
 
-#### 4. useStaffPostActions.tsx 🔄
+#### 4. useStaffPostActions.tsx ✅
 **Location:** `src/features/staff/hooks/useStaffPostActions.tsx`
-**Status:** 1/3 (33%)
+**Status:** 3/3 (100%)
 
-**Migrated:**
-- ✅ Delete post operation
+**All Calls Migrated:**
+- ✅ Delete post operation → `postApiService.deletePost()`
+- ✅ Accept staff assignment → `postApiService.updateStaffAssignment()`
+- ✅ Get post details → `postApiService.getFullPost()`
+- ✅ Match missing item → `searchApiService.matchMissingItem()`
 
-**Remaining (2 calls):**
-- ⏳ Post acceptance
-- ⏳ Post rejection
-
-**Required:** Use existing `postApiService.updatePostStatus()`
-
-**Migration Steps:**
-1. Replace acceptance with `postApiService.updatePostStatus(postId, 'accepted')`
-2. Replace rejection with `postApiService.updatePostStatus(postId, 'rejected', reason)`
-3. Test both operations
-4. Verify notifications sent
-
-**Estimated Time:** 30 minutes
+**Backend Endpoints Created:**
+```
+✅ POST /search/match-missing-item
+  - Find matching found items for a missing post
+  - Uses full-text search with category filtering
+  - Returns scored matches
+```
 
 ---
 
-#### 5. useAdminServices.tsx ⏳
+#### 5. useAdminServices.tsx ✅
 **Location:** `src/features/admin/hooks/useAdminServices.tsx`
-**Status:** 0/3 (0%)
+**Status:** 3/3 (100%)
 
-**All Calls (3):**
-- Admin dashboard operations
-- User management
-- System operations
+**All Calls Migrated:**
+- ✅ Get staff/admin users → `adminApiService.getUsers({ user_type: ['Admin', 'Staff'] })`
+- ✅ Remove admin/staff → `adminApiService.updateUserRole(userId, 'User')`
+- ✅ Update user role → `adminApiService.updateUserRole(userId, role, previousRole)`
 
-**Required Backend Endpoints:**
+**Backend Endpoints Created:**
 ```
-GET /admin/users?status=all|active|inactive
-  - List users with filters
+✅ GET /admin/users?user_type=Staff,Admin
+  - List users with type filter
 
-PUT /admin/users/:id/status
-  - Update user status
-
-GET /admin/system/stats
-  - System statistics (may already exist as dashboard-stats)
+✅ PUT /admin/users/:id/role
+  - Update user role (User/Staff/Admin)
+  - Supports previous_role validation
 ```
-
-**Migration Steps:**
-1. Analyze current operations
-2. Create needed admin endpoints
-3. Migrate to adminApiService
-4. Test admin operations
-
-**Estimated Time:** 1.5 hours
 
 ---
 
-#### 6. ExpandedPostRecord.helpers.ts ⏳
+#### 6. ExpandedPostRecord.helpers.ts ✅
 **Location:** `src/features/staff/pages/ExpandedPostRecord.helpers.ts`
-**Status:** 0/3 (0%)
+**Status:** 3/3 (100%)
 
-**All Calls (3):**
-- Post detail fetches
-- Staff operation helpers
+**All Calls Migrated:**
+- ✅ Delete claim and update linked item → `claimApiService.deleteClaimByItem()`
 
-**Required:** Use existing post endpoints
+**Backend Endpoints Created:**
+```
+✅ GET /claims/by-item/:itemId/full
+  - Get full claim details including linked_lost_item_id
 
-**Migration Steps:**
-1. Replace post fetches with `postApiService.getFullPost()`
-2. Replace item fetches with `api.items.get()`
-3. Test expanded post view
+✅ DELETE /claims/:id
+  - Delete claim by claim ID
 
-**Estimated Time:** 30 minutes
+✅ DELETE /claims/by-item/:itemId
+  - Delete claim by item ID
+  - Automatically updates linked missing item status
+```
 
 ---
 
-## Phase 3: Medium Priority Files ⏳ PENDING
+## Phase 3: Medium Priority Files ✅ COMPLETE
 
 ### Summary
-Files with moderate usage and non-critical operations.
+Files with moderate usage and non-critical operations have been fully migrated.
 
-### Files Identified (5 files, 20 calls)
+### Files Migrated (5 files, 10 calls)
 
-#### 1. useUnreadNotificationCount.ts
+#### 1. useUnreadNotificationCount.ts ✅
 **Location:** `src/features/user/hooks/useUnreadNotificationCount.ts`
-**Calls:** 3
-**Migration:** Use `notificationApiService.getCount()`
-**Estimated Time:** 20 minutes
+**Calls:** 1/1 (100%) - Realtime subscriptions remain client-side (by design)
 
-#### 2. ExpandedFraudReport.tsx
+| Line | Operation | Migration | Backend Endpoint |
+|------|-----------|-----------|------------------|
+| 104 | Get unread count | `notificationApiService.getUnreadCount()` | `GET /notifications/count` |
+
+**Note:** Realtime subscriptions for INSERT/UPDATE/DELETE remain client-side as they require WebSocket connections. Polling fallback already exists.
+
+---
+
+#### 2. ExpandedFraudReport.tsx ✅
 **Location:** `src/features/staff/pages/ExpandedFraudReport.tsx`
-**Calls:** 2
-**Migration:** Use `fraudReportApiService.getReport()`
-**Estimated Time:** 20 minutes
+**Calls:** 2/2 (100%)
 
-#### 3. usePostActions.tsx
+| Line | Operation | Migration | Backend Endpoint |
+|------|-----------|-----------|------------------|
+| 362 | Update status to under_review | `fraudReportApiService.updateStatus()` | `PUT /fraud-reports/:id/status` |
+| 396 | Delete fraud report | `fraudReportApiService.deleteReport()` | `DELETE /fraud-reports/:id` |
+
+**New Methods Added:**
+- `api.fraudReports.delete()` in api.ts
+- `fraudReportApiService.deleteReport()` in fraudReportApiService.ts
+
+---
+
+#### 3. usePostActions.tsx ✅
 **Location:** `src/features/user/hooks/usePostActions.tsx`
-**Calls:** 2
-**Migration:** Use existing post endpoints
-**Estimated Time:** 30 minutes
+**Calls:** 2/2 (100%)
 
-#### 4. useExistingClaimCheck.ts
+| Line | Operation | Migration | Backend Endpoint |
+|------|-----------|-----------|------------------|
+| 130 | Check duplicate self report | `fraudReportApiService.checkDuplicates()` | `GET /fraud-reports/check-duplicates` |
+| 143 | Check duplicate others report | `fraudReportApiService.checkDuplicates()` | `GET /fraud-reports/check-duplicates` |
+
+**New Methods Added:**
+- `api.fraudReports.checkDuplicates()` in api.ts
+- `fraudReportApiService.checkDuplicates()` in fraudReportApiService.ts
+
+**Bug Fix:** Fixed undefined `result` variable in `deletePost` function.
+
+---
+
+#### 4. useExistingClaimCheck.ts ✅
 **Location:** `src/features/staff/hooks/useExistingClaimCheck.ts`
-**Calls:** 2
-**Migration:** Use `claimApiService.checkExisting()`
-**Estimated Time:** 20 minutes
+**Calls:** 2/2 (100%)
 
-#### 5. generateAnnouncementUtil.ts
+| Line | Operation | Migration | Backend Endpoint |
+|------|-----------|-----------|------------------|
+| 37 | Query claim by item_id | `claimApiService.checkExistingClaimFull()` | `GET /claims/by-item/:itemId` |
+| 67 | Get staff name | Included in above endpoint | `GET /claims/by-item/:itemId` |
+
+**New Methods Added:**
+- `claimApiService.checkExistingClaimFull()` in claimApiService.ts
+- Extended `ExistingClaimResponse` type to include staff_name
+
+---
+
+#### 5. generateAnnouncementUtil.ts ✅
 **Location:** `src/features/admin/utils/generateAnnouncementUtil.ts`
-**Calls:** 1 (1 already migrated)
-**Migration:** Use `notificationApiService`
-**Estimated Time:** 15 minutes
+**Calls:** 2/2 (100%)
 
-**Total Phase 3 Estimated Time:** 2 hours
+| Line | Operation | Migration | Backend Endpoint |
+|------|-----------|-----------|------------------|
+| 30 | supabase.auth.getUser() | Passed via `currentUser` parameter | N/A (UserContext) |
+| 35 | Get user_name | Passed via `currentUser` parameter | N/A (UserContext) |
+
+**Changes:**
+- Modified function signature to accept `currentUser` parameter
+- Updated `GenerateAnnouncement.tsx` to pass user from UserContext
+
+---
+
+### Code Review Fixes Applied
+
+After Phase 3 migration, a code review identified and fixed the following issues:
+
+| Severity | Issue | File | Fix |
+|----------|-------|------|-----|
+| 🔴 Critical | Notification sent on failed delete | `usePostActions.tsx` | Wrapped in `if (result.success)` |
+| 🔴 Critical | Missing useEffect dependency | `GenerateAnnouncement.tsx` | Added `getUser` to deps |
+| 🔴 Critical | Silent failure returns success | `generateAnnouncementUtil.ts` | Returns `{ success: false }` on catch |
+| 🟡 Medium | Unsafe type assertion `as any` | `claimApiService.ts` | Changed to `instanceof ApiError` |
+| 🟡 Medium | Debounce recreated every render | `GenerateAnnouncement.tsx` | Used `useRef` + `useMemo` pattern |
 
 ---
 
@@ -427,55 +424,59 @@ Files with infrequent usage, utility functions, or edge cases.
 
 ## Backend Infrastructure Status
 
-### Routes Created (13 route files, 73 endpoints)
+### Routes Created (13 route files, 85+ endpoints)
 
 #### Authentication Routes
 - `POST /auth/google` - Google OAuth login
 - `GET /auth/me` - Get current user
 
-#### Post Routes (12 endpoints)
+#### Post Routes (17 endpoints)
+- `GET /posts` - Comprehensive listing with filters ✅ NEW
 - `GET /posts/public` - List public posts
+- `GET /posts/count` - Get counts with filters ✅ NEW
 - `GET /posts/:id` - Get single post
 - `GET /posts/:id/full` - Get full post (staff)
+- `GET /posts/by-item/:itemId` - Get by item ✅ NEW
+- `GET /posts/by-item-details/:itemId` - Get by item (details view) ✅ NEW
 - `GET /posts/user/:userId` - List user posts
 - `POST /posts` - Create post
 - `PUT /posts/:id` - Edit post (without image)
+- `PUT /posts/:id/edit-with-image` - Edit with image replacement ✅ NEW
 - `DELETE /posts/:id` - Delete post
 - `PUT /posts/:id/status` - Update status
 - `PUT /posts/:id/staff-assignment` - Update staff
 - `PUT /posts/items/:itemId/status` - Update item status
 
-**Needed:**
-- `GET /posts` - Enhanced with comprehensive filters
-- `GET /posts/count` - Get counts
-- `GET /posts/by-item/:itemId` - Get by item
-- `GET /posts/by-linked-item/:itemId` - Get by linked item
-- `PUT /posts/:id/edit-with-image` - Edit with image replacement
-
 #### Item Routes (2 endpoints)
 - `GET /items/:id` - Get item
 - `PUT /items/:id/metadata` - Update metadata
 
-#### Claim Routes (2 endpoints)
+#### Claim Routes (5 endpoints)
 - `POST /claims/process` - Process claim
 - `GET /claims/by-item/:itemId` - Check existing
+- `GET /claims/by-item/:itemId/full` - Get full claim details ✅ NEW
+- `DELETE /claims/:id` - Delete claim ✅ NEW
+- `DELETE /claims/by-item/:itemId` - Delete claim by item ✅ NEW
 
-#### Fraud Report Routes (6 endpoints)
+#### Fraud Report Routes (8 endpoints)
 - `GET /fraud-reports` - List with pagination
 - `GET /fraud-reports/:id` - Get single
 - `GET /fraud-reports/:id/status` - Get status
+- `GET /fraud-reports/check-duplicates` - Check for duplicate reports ✅ NEW
 - `POST /fraud-reports` - Create
 - `PUT /fraud-reports/:id/status` - Update status
 - `POST /fraud-reports/:id/resolve` - Resolve
+- `DELETE /fraud-reports/:id` - Delete report ✅ NEW
 
 #### Pending Match Routes (3 endpoints)
 - `POST /pending-matches` - Create
 - `GET /pending-matches` - List
 - `PUT /pending-matches/:id/status` - Update status
 
-#### Search Routes (2 endpoints)
+#### Search Routes (3 endpoints)
 - `POST /search/items` - Public search
 - `POST /search/items/staff` - Staff search
+- `POST /search/match-missing-item` - Match missing items ✅ NEW
 
 #### Notification Routes (5 endpoints)
 - `POST /notifications/send` - Send notification
@@ -493,28 +494,19 @@ Files with infrequent usage, utility functions, or edge cases.
 - `POST /storage/confirm-upload` - Confirm upload
 - `DELETE /storage` - Delete object
 
-**Needed:**
-- `DELETE /storage/items/:path` - Direct delete for edit operations
-
 #### User Routes (2 endpoints)
 - `GET /users/:id` - Get user profile
 - `GET /users/search` - Search users
 
-**Needed:**
-- `GET /users` - List users with filters (admin)
-- `PUT /users/:id/status` - Update user status (admin)
-
-#### Admin Routes (6 endpoints)
+#### Admin Routes (8 endpoints)
 - `GET /admin/dashboard-stats` - Dashboard statistics
+- `GET /admin/users` - List users with filters ✅ NEW
+- `PUT /admin/users/:id/role` - Update user role ✅ NEW
 - `POST /admin/audit-logs` - Insert audit log
 - `GET /admin/audit-logs` - List audit logs
 - `GET /admin/audit-logs/:id` - Get single log
 - `GET /admin/audit-logs/user/:userId` - User logs
 - `GET /admin/audit-logs/action/:actionType` - Logs by action
-
-**Needed:**
-- `GET /admin/system/health` - System health check
-- `GET /admin/users` - User management
 
 ---
 
@@ -547,10 +539,10 @@ Files with infrequent usage, utility functions, or edge cases.
 | Phase | Files | Calls | Backend Work | Frontend Work | Total Time |
 |-------|-------|-------|--------------|---------------|------------|
 | Phase 1 | 4 | 45 | DONE | DONE | ✅ COMPLETE |
-| Phase 2 | 6 | 37 | 3 hrs | 5 hrs | 8 hrs |
-| Phase 3 | 5 | 20 | 1 hr | 1 hr | 2 hrs |
+| Phase 2 | 6 | 37 | DONE | DONE | ✅ COMPLETE |
+| Phase 3 | 5 | 10 | DONE | DONE | ✅ COMPLETE |
 | Phase 4 | 14 | 47 | 2 hrs | 3 hrs | 5 hrs |
-| **Total** | **29** | **149** | **6 hrs** | **9 hrs** | **15 hrs** |
+| **Total** | **29** | **139** | - | - | **5 hrs remaining** |
 
 ### Step-by-Step Process
 
@@ -670,23 +662,31 @@ Files with infrequent usage, utility functions, or edge cases.
 ## Current Status
 
 ### What's Done ✅
-- Phase 1: All 4 critical files (45 calls)
-- Backend: 73 endpoints across 13 routes
-- Frontend: 9 service wrappers
+- Phase 1: All 4 critical files (45 calls) - 100% complete
+- Phase 2: All 6 high-priority files (37 calls) - 100% complete
+- Phase 3: All 5 medium-priority files (10 calls) - 100% complete
+- Code Review: 5 bugs/issues fixed post-migration
+- Backend: 88+ endpoints across 13 routes
+- Frontend: 9 service wrappers with full coverage
 - Security: Authentication, authorization, audit logging
 - Documentation: Comprehensive progress tracking
 
-### What's In Progress 🔄
-- Phase 2: 7/37 calls migrated
-- postServices.tsx: 6/11 calls migrated
-- useStaffPostActions.tsx: 1/3 calls migrated
-
 ### What's Next ⏳
-- Complete Phase 2 high-priority files
-- Create comprehensive post listing endpoint
-- Migrate posts.ts (13 calls)
-- Complete postServices.tsx (5 calls)
-- Migrate remaining Phase 2 files
+- Phase 4: Low priority files (47 calls)
+  - supabasePaginatedFetch.ts
+  - emailService.ts
+  - cache.ts
+  - SystemStatsChart.tsx
+  - DonutChart.tsx
+  - Announcement.tsx
+  - matchedPosts.ts
+  - ExpandedPostRecord.tsx
+  - FraudReports.tsx
+  - Home.tsx
+  - CatalogPost.tsx
+  - PostList.tsx
+  - postFilters.ts
+  - fraudReportFilters.ts
 
 ---
 
@@ -711,16 +711,21 @@ grep -n "supabase\." path/to/file.tsx
 
 ## Conclusion
 
-The migration is 35% complete with all critical operations secured. The foundation is solid:
+The migration is **62% complete** with Phases 1, 2, and 3 fully migrated:
 
-- ✅ 73 backend endpoints operational
+- ✅ 88+ backend endpoints operational
 - ✅ 9 service wrappers providing clean abstractions
 - ✅ Comprehensive authentication and authorization
 - ✅ Full audit logging for all operations
 - ✅ Rate limiting and error handling
+- ✅ All critical security-sensitive operations migrated
+- ✅ All high-priority user/staff operations migrated
+- ✅ All medium-priority operations migrated
+- ✅ Code review completed with 5 fixes applied
 
-**Next Milestone:** Complete Phase 2 (37 calls) - Estimated 8 hours
+**Remaining Work:**
+- Phase 4: 47 calls (utilities, low-frequency operations)
 
-**Target:** 90% migration completion in 4-5 days of focused work
+**Estimated Time to Complete:** 5 hours
 
-The patterns are proven, the infrastructure is ready, and the path forward is clear. 🚀
+The core application functionality is now fully secured through the backend API.

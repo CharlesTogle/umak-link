@@ -1,7 +1,7 @@
 import { memo, useEffect, useState, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { useNavigation } from '@/shared/hooks/useNavigation'
-import { supabase } from '@/shared/lib/supabase'
+import { fraudReportApiService } from '@/shared/services'
 import { getPostRecordByItemId } from '@/features/posts/data/posts'
 import type { PostRecordDetails } from '@/features/posts/data/posts'
 import type { PublicPost } from '@/features/posts/types/post'
@@ -359,12 +359,7 @@ export default memo(function ExpandedFraudReport () {
       setIsProcessing(true)
 
       try {
-        const { error } = await supabase
-          .from('fraud_reports_table')
-          .update({ report_status: 'under_review' })
-          .eq('report_id', report.report_id)
-
-        if (error) throw error
+        await fraudReportApiService.updateStatus(report.report_id, 'under_review')
 
         setToast({ show: true, message: 'Report moved to under review' })
         // Refresh the report data
@@ -393,12 +388,7 @@ export default memo(function ExpandedFraudReport () {
       setIsProcessing(true)
 
       try {
-        const { error } = await supabase
-          .from('fraud_reports_table')
-          .delete()
-          .eq('report_id', report.report_id)
-
-        if (error) throw error
+        await fraudReportApiService.deleteReport(report.report_id)
 
         // Remove deleted report from cache
         setReports(prev => prev.filter(r => r.report_id !== report.report_id))

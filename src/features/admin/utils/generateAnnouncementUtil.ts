@@ -1,4 +1,3 @@
-import { supabase } from '@/shared/lib/supabase'
 import { uploadAndGetPublicUrl } from '@/shared/utils/supabaseStorageUtils'
 import { getPhilippineTimeISO } from '@/shared/utils/dateTimeHelpers'
 import { notificationApiService } from '@/shared/services'
@@ -10,8 +9,9 @@ export async function generateAnnouncementAction (options: {
   description: string
   image?: File | null
   insertAuditLog: InsertAuditLogFn
+  currentUser: { user_id: string; user_name: string } | null
 }): Promise<{ success: boolean; message: string }> {
-  const { title, description, image, insertAuditLog } = options
+  const { title, description, image, insertAuditLog, currentUser } = options
   try {
     let imageUrl = ''
     if (image) {
@@ -23,40 +23,26 @@ export async function generateAnnouncementAction (options: {
       )
     }
 
-    // get current user id and name
-    let currentUserId: string | null = null
-    let currentUserName = ''
-    try {
-      const {
-        data: { user }
-      } = await supabase.auth.getUser()
-      currentUserId = user?.id ?? null
-      if (currentUserId) {
-        const { data: udata, error: uerr } = await supabase
-          .from('user_table')
-          .select('user_name')
-          .eq('user_id', currentUserId)
-          .single()
-        if (!uerr && udata) {
-          currentUserName = (udata as any).user_name ?? ''
-        }
-      }
-    } catch (e) {
-      console.error('Failed to get current user', e)
-    }
-
-    const payload = {
-      user_id: currentUserId ?? '',
-      message: title || 'New Feature Available',
-      description:
-        description || 'Check out our latest update with amazing new features!',
-      image_url: imageUrl || ''
-    }
+    // Use provided user info
+    const currentUserId = currentUser?.user_id ?? ''
+    const currentUserName = currentUser?.user_name ?? ''
 
     try {
-      await notificationApiService.sendAnnouncement(payload)
+      await notificationApiService.sendAnnouncement({
+        userId: currentUserId,
+        message: title || 'New Feature Available',
+        description: description || 'Check out our latest update with amazing new features!',
+        imageUrl: imageUrl || null
+      })
     } catch (e) {
       console.error('Failed to send announcement', e)
+      return { success: false, message: 'Failed to send announcement notification' }
+    }
+
+    const auditPayload = {
+      user_id: currentUserId,
+      message: title || 'New Feature Available',
+      description: description || 'Check out our latest update with amazing new features!'
     }
 
     try {
@@ -64,9 +50,9 @@ export async function generateAnnouncementAction (options: {
         user_id: currentUserId ?? '',
         action_type: 'create_announcement',
         details: {
-          title: payload.message,
+          title: auditPayload.message,
           message: `${currentUserName} has sent a global announcement`,
-          description: payload.description,
+          description: auditPayload.description,
           timestamp: getPhilippineTimeISO()
         }
       })

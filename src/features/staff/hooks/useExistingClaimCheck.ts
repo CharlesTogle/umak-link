@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { supabase } from '@/shared/lib/supabase'
+import { claimApiService } from '@/shared/services'
 import { isConnected } from '@/shared/utils/networkCheck'
 
 export interface ExistingClaimDetails {
@@ -26,64 +26,30 @@ export function useExistingClaimCheck () {
       setError(null)
       setLoading(true)
 
-      // Check network connectivity with 8-second timeout
-      const connected = await isConnected(8000)
+      // Check network connectivity
+      const connected = await isConnected()
       if (!connected) {
         setError('No internet connection. Please check your network.')
         return null
       }
 
-      // Query claim_table for existing claim with staff name from user_table
-      const { data, error: claimError } = await supabase
-        .from('claim_table')
-        .select(
-          `
-          claim_id,
-          item_id,
-          claimer_name,
-          claimer_school_email,
-          claimer_contact_num,
-          processed_by_staff_id,
-          claimed_at
-        `
-        )
-        .eq('item_id', itemId)
-        .single()
+      // Query backend API for existing claim with staff name
+      const claim = await claimApiService.checkExistingClaimFull(itemId)
 
-      if (claimError) {
-        // If no claim found, that's not an error - just return null
-        if (claimError.code === 'PGRST116') {
-          setExistingClaim(null)
-          return null
-        }
-        console.error('Error checking for existing claim:', claimError)
-        setError('Failed to check for existing claim')
+      if (!claim) {
+        setExistingClaim(null)
         return null
       }
 
-      // Fetch staff name from user_table using processed_by_staff_id
-      let staffName = 'Unknown Staff'
-      if (data.processed_by_staff_id) {
-        const { data: userData, error: userError } = await supabase
-          .from('user_table')
-          .select('user_name')
-          .eq('user_id', data.processed_by_staff_id)
-          .single()
-
-        if (!userError && userData) {
-          staffName = userData.user_name
-        }
-      }
-
       const claimDetails: ExistingClaimDetails = {
-        claim_id: data.claim_id,
-        item_id: data.item_id,
-        claimer_name: data.claimer_name,
-        claimer_school_email: data.claimer_school_email,
-        claimer_contact_num: data.claimer_contact_num,
-        processed_by_staff_id: data.processed_by_staff_id,
-        claimed_at: data.claimed_at,
-        staff_name: staffName
+        claim_id: claim.claim_id,
+        item_id: claim.item_id,
+        claimer_name: claim.claimer_name,
+        claimer_school_email: claim.claimer_school_email,
+        claimer_contact_num: claim.claimer_contact_num,
+        processed_by_staff_id: claim.processed_by_staff_id,
+        claimed_at: claim.claimed_at,
+        staff_name: claim.staff_name || 'Unknown Staff'
       }
 
       setExistingClaim(claimDetails)

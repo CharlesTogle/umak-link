@@ -1,4 +1,4 @@
-import { supabase } from '@/shared/lib/supabase'
+import { claimApiService } from '@/shared/services'
 import { getPostFull } from '@/features/posts/data/posts'
 
 /**
@@ -111,56 +111,14 @@ export const isPostStatusAllowed = (
 /**
  * Deletes claim record and updates linked missing item status
  */
-export const deleteClaimAndUpdateLinkedItem = async (itemId: string) => {
+export const deleteClaimAndUpdateLinkedItem = async (itemId: string): Promise<{ success: boolean; error?: string }> => {
   try {
-    // Get the claim record to find linked_lost_item_id
-    const { data: claimData, error: claimFetchError } = await supabase
-      .from('claim_table')
-      .select('linked_lost_item_id')
-      .eq('item_id', itemId)
-      .single()
-
-    if (claimFetchError) {
-      console.error('Error fetching claim record:', claimFetchError)
-    }
-
-    const linkedLostItemId = claimData?.linked_lost_item_id
-
-    // If there's a linked missing item, reset it to 'lost' status
-    if (linkedLostItemId) {
-      const { error: updateLinkedError } = await supabase
-        .from('item_table')
-        .update({
-          status: 'lost',
-          returned_at: null,
-          returned_at_local: null
-        })
-        .eq('item_id', linkedLostItemId)
-
-      if (updateLinkedError) {
-        console.error('Error updating linked missing item:', updateLinkedError)
-        return {
-          success: false,
-          error: 'Failed to update linked missing item'
-        }
-      }
-    }
-
-    // Delete the claim record
-    const { error: deleteClaimError } = await supabase
-      .from('claim_table')
-      .delete()
-      .eq('item_id', itemId)
-
-    if (deleteClaimError) {
-      console.error('Error deleting claim record:', deleteClaimError)
-      return { success: false, error: 'Failed to delete claim record' }
-    }
-
-    return { success: true }
-  } catch (err) {
+    // Use the backend API to delete the claim and update linked item
+    const result = await claimApiService.deleteClaimByItem(itemId)
+    return { success: result.success }
+  } catch (err: any) {
     console.error('Exception deleting claim record:', err)
-    return { success: false, error: 'Failed to delete claim record' }
+    return { success: false, error: err.message || 'Failed to delete claim record' }
   }
 }
 

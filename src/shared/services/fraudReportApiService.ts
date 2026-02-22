@@ -90,6 +90,38 @@ export const fraudReportApiService = {
       throw error;
     }
   },
+
+  /**
+   * Delete a fraud report (staff only)
+   */
+  async deleteReport(reportId: string): Promise<{ success: boolean }> {
+    try {
+      return await api.fraudReports.delete(reportId);
+    } catch (error) {
+      console.error('[fraudReportApiService] Delete report error:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Check for duplicate fraud reports
+   */
+  async checkDuplicates(
+    postId: string | number,
+    userId: string,
+    concern?: string
+  ): Promise<{ hasDuplicateSelf: boolean; hasDuplicateOthers: boolean }> {
+    try {
+      const result = await api.fraudReports.checkDuplicates(postId, userId, concern);
+      return {
+        hasDuplicateSelf: result.has_duplicate_self,
+        hasDuplicateOthers: result.has_duplicate_others,
+      };
+    } catch (error) {
+      console.error('[fraudReportApiService] Check duplicates error:', error);
+      throw error;
+    }
+  },
 };
 
 export default fraudReportApiService;

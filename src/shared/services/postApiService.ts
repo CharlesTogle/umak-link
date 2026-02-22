@@ -44,6 +44,11 @@ export interface EditPostInput {
   anonymous: boolean;
 }
 
+export interface EditPostWithImageInput extends EditPostInput {
+  image: File;
+  userId: string;
+}
+
 export const postApiService = {
   /**
    * Create a new post
@@ -107,7 +112,7 @@ export const postApiService = {
   },
 
   /**
-   * Edit an existing post
+   * Edit an existing post (without image change)
    */
   async editPost(input: EditPostInput): Promise<{ success: boolean; post_id: number }> {
     try {
@@ -136,6 +141,81 @@ export const postApiService = {
       return await api.posts.edit(input.postId, editData);
     } catch (error) {
       console.error('[postApiService] Edit post error:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Edit an existing post with image replacement
+   * Handles image upload, old image deletion, and post update in one operation
+   */
+  async editWithImage(input: EditPostWithImageInput): Promise<{ success: boolean; post_id: number }> {
+    try {
+      // 1) Process and upload new image
+      const displayBlob = await makeDisplay(input.image);
+      const imageHash = await computeBlockHash64(input.image);
+
+      // Get signed upload URL
+      const fileName = `${input.userId}_${Date.now()}_edit.webp`;
+      const uploadData = await api.storage.getUploadUrl('items', fileName, displayBlob.type);
+
+      // Upload image
+      const uploadRes = await fetch(uploadData.uploadUrl, {
+        method: 'PUT',
+        body: displayBlob,
+        headers: {
+          'Content-Type': displayBlob.type,
+        },
+      });
+
+      if (!uploadRes.ok) {
+        throw new Error('Failed to upload image');
+      }
+
+      // Confirm upload and get public URL
+      await api.storage.confirmUpload('items', uploadData.objectPath);
+
+      // 2) Parse date/time from ISO string
+      const lastSeenDate = new Date(input.lastSeenISO);
+      const lastSeenHours = lastSeenDate.getHours();
+      const lastSeenMinutes = lastSeenDate.getMinutes();
+
+      // 3) Build location path array
+      const locationPath: Array<{ name: string; type: string }> = [];
+
+      const level1 = input.locationDetails.level1?.trim();
+      if (level1) {
+        locationPath.push({ name: level1, type: 'level1' });
+      }
+
+      const level2 = input.locationDetails.level2?.trim();
+      if (level2 && level2 !== 'Not Applicable') {
+        locationPath.push({ name: level2, type: 'level2' });
+      }
+
+      const level3 = input.locationDetails.level3?.trim();
+      if (level3 && level3 !== 'Not Applicable') {
+        locationPath.push({ name: level3, type: 'level3' });
+      }
+
+      // 4) Call the edit-with-image endpoint
+      return await api.posts.editWithImage(input.postId, {
+        p_item_name: input.item.title,
+        p_item_description: input.item.desc || undefined,
+        p_item_type: input.item.type,
+        p_image_hash: imageHash,
+        p_image_link: uploadData.publicUrl,
+        p_last_seen_date: lastSeenDate.toISOString(),
+        p_last_seen_hours: lastSeenHours,
+        p_last_seen_minutes: lastSeenMinutes,
+        p_location_path: locationPath,
+        p_item_status: input.item.type === 'found' ? 'unclaimed' : 'lost',
+        p_category: input.category,
+        p_post_status: 'pending',
+        p_is_anonymous: input.anonymous,
+      });
+    } catch (error) {
+      console.error('[postApiService] Edit post with image error:', error);
       throw error;
     }
   },

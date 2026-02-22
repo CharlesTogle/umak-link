@@ -4,7 +4,7 @@
  */
 
 import api from '@/shared/lib/api';
-import type { DashboardStats } from '@/shared/lib/api-types';
+import type { DashboardStats, UserProfile } from '@/shared/lib/api-types';
 
 export const adminApiService = {
   /**
@@ -15,6 +15,35 @@ export const adminApiService = {
       return await api.admin.getDashboardStats();
     } catch (error) {
       console.error('[adminApiService] Get dashboard stats error:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get users with optional type filter (admin only)
+   */
+  async getUsers(params?: { user_type?: string[] }): Promise<Partial<UserProfile>[]> {
+    try {
+      const response = await api.admin.getUsers(params);
+      return response.users;
+    } catch (error) {
+      console.error('[adminApiService] Get users error:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Update user role (admin only)
+   */
+  async updateUserRole(
+    userId: string,
+    role: 'User' | 'Staff' | 'Admin',
+    previousRole?: 'User' | 'Staff' | 'Admin'
+  ): Promise<{ success: boolean }> {
+    try {
+      return await api.admin.updateUserRole(userId, role, previousRole);
+    } catch (error) {
+      console.error('[adminApiService] Update user role error:', error);
       throw error;
     }
   },

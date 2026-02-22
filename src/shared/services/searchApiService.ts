@@ -93,6 +93,23 @@ export const searchApiService = {
       throw error;
     }
   },
+
+  /**
+   * Find matches for a missing item post (staff only)
+   */
+  async matchMissingItem(postId: string): Promise<{
+    success: boolean;
+    matches: any[];
+    missing_post?: any;
+    total_matches?: number;
+  }> {
+    try {
+      return await api.search.matchMissingItem(postId);
+    } catch (error) {
+      console.error('[searchApiService] Match missing item error:', error);
+      return { success: false, matches: [] };
+    }
+  },
 };
 
 export default searchApiService;

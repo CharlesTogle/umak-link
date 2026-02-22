@@ -1,9 +1,8 @@
 import { useState } from 'react'
-import { supabase } from '@/shared/lib/supabase'
 import { useAuditLogs } from '@/shared/hooks/useAuditLogs'
 import { useUser } from '@/features/auth/contexts/UserContext'
 import { usePostActionsStaffServices } from './usePostStaffServices'
-import { postApiService } from '@/shared/services'
+import { postApiService, searchApiService } from '@/shared/services'
 
 interface MatchResult {
   success: boolean
@@ -26,13 +25,13 @@ export function useStaffPostActions () {
     try {
       const success = await changePostStatus(postId, 'accepted')
 
-      const { error: postError } = await supabase
-        .from('post_table')
-        .update({ accepted_by_staff_id: user?.user_id || null })
-        .eq('post_id', postId)
-
-      if (postError) {
-        console.error('Error updating accepted_by_staff_id:', postError)
+      // Update the staff assignment using the API
+      if (user?.user_id) {
+        try {
+          await postApiService.updateStaffAssignment(parseInt(postId), user.user_id)
+        } catch (error) {
+          console.error('Error updating accepted_by_staff_id:', error)
+        }
       }
 
       if (success) {
@@ -93,11 +92,12 @@ export function useStaffPostActions () {
       }
 
       // Get post details before deletion for audit log
-      const { data: postData } = await supabase
-        .from('post_table')
-        .select('item_id')
-        .eq('post_id', postId)
-        .single()
+      let postData: any = null
+      try {
+        postData = await postApiService.getFullPost(parseInt(postId))
+      } catch (error) {
+        console.error('Error fetching post details:', error)
+      }
 
       // Log the action before deletion
       await insertAuditLog({
@@ -130,30 +130,13 @@ export function useStaffPostActions () {
   }
 
   /**
-   * Find potential matches for a missing item using Edge Function
+   * Find potential matches for a missing item using API
    */
   const matchPost = async (postId: string): Promise<MatchResult> => {
     setIsProcessing(true)
     try {
-      const { data, error } = await supabase.functions.invoke(
-        'match-missing-item',
-        {
-          body: { post_id: postId }
-        }
-      )
-
-      if (error) {
-        console.error('Error finding matches:', error)
-        return { success: false, matches: [] }
-      }
-
-      // Return matches to display in modal
-      return {
-        success: true,
-        matches: data.matches || [],
-        missing_post: data.missing_post,
-        total_matches: data.total_matches || 0
-      }
+      const result = await searchApiService.matchMissingItem(postId)
+      return result
     } catch (error) {
       console.error('Exception finding matches:', error)
       return { success: false, matches: [] }

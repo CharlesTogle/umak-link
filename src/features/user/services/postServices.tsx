@@ -1,10 +1,10 @@
 import { postApiService, fraudReportApiService, itemApiService } from '@/shared/services'
 import api from '@/shared/lib/api'
-import { computeBlockHash64 } from '@/shared/utils/hashUtils'
 import { makeDisplay } from '@/shared/utils/imageUtils'
 import { uploadAndGetPublicUrl } from '@/shared/utils/supabaseStorageUtils'
 import { generateItemMetadata } from '@/shared/lib/geminiApi'
-import { supabase } from '@/shared/lib/supabase'
+
+// Note: makeDisplay and uploadAndGetPublicUrl are still used by reportPost
 
 // Post type enum
 export type PostType = 'missing' | 'found'
@@ -259,14 +259,10 @@ export const postServices = {
   },
 
   /**
-   * Edit an existing post
+   * Edit an existing post with image replacement
    * @param userId - The ID of the user editing the post
-   * @param postData - The post data to update
+   * @param postData - The post data to update including the new image
    * @returns The updated post or error
-   *
-   * TODO: This function still uses direct Supabase calls and needs to be migrated to use
-   * postApiService.editPost(). However, the current backend API doesn't support image
-   * updates during edit, so this requires backend changes first.
    */
   editPost: async (
     userId: string,
@@ -275,132 +271,23 @@ export const postServices = {
     try {
       console.log('[postServices] Editing post:', postData)
 
-      // 1) Fetch the old image path to delete it
-      const { data: postRecord, error: fetchError } = await supabase
-        .from('post_table')
-        .select('item_id')
-        .eq('post_id', postData.postId)
-        .single()
+      const result = await postApiService.editWithImage({
+        postId: Number(postData.postId),
+        userId,
+        item: postData.item,
+        category: postData.category,
+        lastSeenISO: postData.lastSeenISO,
+        locationDetails: postData.locationDetails,
+        anonymous: postData.anonymous,
+        image: postData.image
+      })
 
-      if (fetchError) {
-        console.error('[postServices] Error fetching post record:', fetchError)
-        return { post: null, error: fetchError.message }
-      }
+      console.log('[postServices] Post edited successfully:', result.post_id)
 
-      const { data: itemRecord, error: itemError } = await supabase
-        .from('item_table')
-        .select('image_id')
-        .eq('item_id', postRecord.item_id)
-        .single()
-
-      if (itemError) {
-        console.error('[postServices] Error fetching item record:', itemError)
-        return { post: null, error: itemError.message }
-      }
-
-      const { data: oldImageData, error: imageError } = await supabase
-        .from('item_image_table')
-        .select('image_link')
-        .eq('item_image_id', itemRecord.image_id)
-        .single()
-
-      if (!imageError && oldImageData?.image_link) {
-        // Extract the old image path from the public URL
-        const oldImageUrl = oldImageData.image_link
-        const urlParts = oldImageUrl.split('/storage/v1/object/public/items/')
-        if (urlParts.length > 1) {
-          const oldImagePath = urlParts[1]
-          console.log('[postServices] Deleting old image:', oldImagePath)
-
-          // Delete the old image from storage
-          const { error: deleteError } = await supabase.storage
-            .from('items')
-            .remove([oldImagePath])
-
-          if (deleteError) {
-            console.error(
-              '[postServices] Error deleting old image:',
-              deleteError
-            )
-            // Don't fail the edit if deletion fails, just log it
-          } else {
-            console.log('[postServices] Old image deleted successfully')
-          }
-        }
-      }
-
-      // 2) Compress new image
-      const displayBlob = await makeDisplay(postData.image)
-
-      // 3) Paths
-      const basePath = `posts/${userId}/${Date.now()}`
-      const displayPath = `${basePath}.webp`
-
-      const displayUrl = await uploadAndGetPublicUrl(
-        displayPath,
-        displayBlob,
-        'image/webp'
-      )
-
-      // Parse lastSeenISO to extract date and time
-      const lastSeenDate = new Date(postData.lastSeenISO) // local device time
-      const lastSeenHours = lastSeenDate.getHours() // 0–23 (local)
-      const lastSeenMinutes = lastSeenDate.getMinutes() // 0–59
-
-      // Build location path array
-      const locationPath: Array<{
-        name: string
-        type: 'level1' | 'level2' | 'level3'
-      }> = []
-
-      const level1 = postData.locationDetails.level1?.trim()
-      if (level1) {
-        locationPath.push({ name: level1, type: 'level1' })
-      }
-
-      const level2 = postData.locationDetails.level2?.trim()
-      if (level2 && level2 !== 'Not Applicable') {
-        locationPath.push({ name: level2, type: 'level2' })
-      }
-
-      const level3 = postData.locationDetails.level3?.trim()
-      if (level3 && level3 !== 'Not Applicable') {
-        locationPath.push({ name: level3, type: 'level3' })
-      }
-
-      const imageHash = await computeBlockHash64(postData.image)
-
-      const { data, error } = await supabase.rpc(
-        'edit_post_with_item_date_time_location',
-        {
-          p_post_id: Number(postData.postId),
-          p_item_name: postData.item.title,
-          p_item_description: postData.item.desc,
-          p_item_type: postData.item.type,
-          p_image_hash: imageHash,
-          p_image_link: displayUrl,
-          p_last_seen_date: lastSeenDate,
-          p_last_seen_hours: lastSeenHours,
-          p_last_seen_minutes: lastSeenMinutes,
-          p_location_path: locationPath,
-          p_item_status: postData.item.type === 'found' ? 'unclaimed' : 'lost',
-          p_category: postData.category,
-          p_post_status: 'pending',
-          p_is_anonymous: postData.anonymous
-        }
-      )
-
-      if (error) {
-        console.error('[postServices] Error editing post:', error)
-        return { post: null, error: error.message }
-      }
-
-      console.log('[postServices] Post edited successfully:', data)
-
-      return { post: data as Post, error: null }
-    } catch (error) {
+      return { post: { post_id: String(result.post_id) } as Post, error: null }
+    } catch (error: any) {
       console.error('[postServices] Exception editing post:', error)
-      return { post: null, error: 'Failed to edit post' }
+      return { post: null, error: error.message || 'Failed to edit post' }
     }
   },
 
