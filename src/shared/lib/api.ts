@@ -6,7 +6,6 @@
  */
 
 import type {
-  AuthLoginRequest,
   AuthLoginResponse,
   AuthMeResponse,
   CreatePostRequest,
@@ -20,7 +19,6 @@ import type {
   ExistingClaimResponse,
   FraudReportCreateRequest,
   FraudReportListResponse,
-  FraudReportStatusRequest,
   FraudReportResolveRequest,
   SearchItemsRequest,
   SearchItemsStaffRequest,
@@ -31,6 +29,11 @@ import type {
   DashboardStats,
   UserSearchResponse,
 } from './api-types';
+
+const configuredApiUrl = import.meta.env.VITE_API_URL;
+if (!configuredApiUrl) {
+  console.warn('[config] Missing VITE_API_URL. Using default http://localhost:8080.');
+}
 
 class ApiError extends Error {
   constructor(
@@ -47,7 +50,7 @@ class ApiClient {
   private baseUrl: string;
   private token: string | null = null;
 
-  constructor(baseUrl: string = import.meta.env.VITE_API_URL || 'http://localhost:8080') {
+  constructor(baseUrl: string = configuredApiUrl || 'http://localhost:8080') {
     this.baseUrl = baseUrl;
     this.loadToken();
   }

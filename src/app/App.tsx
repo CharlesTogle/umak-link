@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { IonApp, IonRouterOutlet } from '@ionic/react'
 import { IonReactRouter } from '@ionic/react-router'
 import { Route, Redirect } from 'react-router-dom'
@@ -34,6 +34,16 @@ setupIonicReact({ mode: 'md' })
 const App: React.FC = () => {
   usePushRedirect()
   const googleWebClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
+  const apiUrl = import.meta.env.VITE_API_URL
+
+  useEffect(() => {
+    if (!googleWebClientId) {
+      console.warn('[config] Missing VITE_GOOGLE_CLIENT_ID. Google sign-in will fail.')
+    }
+    if (!apiUrl) {
+      console.warn('[config] Missing VITE_API_URL. Falling back to http://localhost:8080.')
+    }
+  }, [apiUrl, googleWebClientId])
 
   return (
     <GoogleOAuthProvider
