@@ -77,7 +77,7 @@ class ApiClient {
     method: string,
     path: string,
     body?: unknown,
-    options?: RequestInit
+    options?: RequestInit & { timeout?: number }
   ): Promise<T> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -91,6 +91,7 @@ class ApiClient {
     const config: RequestInit = {
       method,
       headers,
+      credentials: 'include', // Required for CORS with credentials
       ...options,
     };
 
@@ -101,7 +102,20 @@ class ApiClient {
     const url = `${this.baseUrl}${path}`;
 
     try {
+      // Create AbortController for timeout
+      const controller = new AbortController();
+      const timeoutMs = options?.timeout ?? 30000; // Default 30s
+      let timeoutId: NodeJS.Timeout | undefined;
+
+      // Only set timeout if timeoutMs > 0 (0 means no timeout)
+      if (timeoutMs > 0) {
+        timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      }
+
+      config.signal = controller.signal;
+
       const response = await fetch(url, config);
+      if (timeoutId) clearTimeout(timeoutId);
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -121,6 +135,10 @@ class ApiClient {
     } catch (error) {
       if (error instanceof ApiError) {
         throw error;
+      }
+      // Handle timeout/abort errors
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new ApiError(0, 'Request timeout', error);
       }
       throw new ApiError(0, 'Network error', error);
     }
@@ -147,10 +165,17 @@ class ApiClient {
 
   auth = {
     loginWithGoogle: (googleIdToken: string): Promise<AuthLoginResponse> =>
-      this.request<AuthLoginResponse>('POST', '/auth/google', { googleIdToken }),
+      this.request<AuthLoginResponse>('POST', '/auth/google', { googleIdToken }, { timeout: 0 }),
 
     getMe: (): Promise<AuthMeResponse> =>
       this.request<AuthMeResponse>('GET', '/auth/me'),
+
+    updateProfile: (updates: {
+      notification_token?: string | null;
+      user_name?: string | null;
+      profile_picture_url?: string | null;
+    }): Promise<{ user: UserProfile }> =>
+      this.request<{ user: UserProfile }>('PATCH', '/auth/profile', updates),
   };
 
   // ============================================================================
