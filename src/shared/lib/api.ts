@@ -26,6 +26,7 @@ import type {
   SendNotificationRequest,
   NotificationRecord,
   SendGlobalAnnouncementRequest,
+  SendGlobalAnnouncementResponse,
   AnnouncementRecord,
   DashboardStats,
   UserProfile,
@@ -437,8 +438,8 @@ class ApiClient {
   // ============================================================================
 
   announcements = {
-    send: (data: SendGlobalAnnouncementRequest): Promise<{ success: boolean }> =>
-      this.request<{ success: boolean }>('POST', '/announcements/send', data),
+    send: (data: SendGlobalAnnouncementRequest): Promise<SendGlobalAnnouncementResponse> =>
+      this.request<SendGlobalAnnouncementResponse>('POST', '/announcements/send', data),
 
     list: (params?: { limit?: number; offset?: number }): Promise<{
       announcements: AnnouncementRecord[];

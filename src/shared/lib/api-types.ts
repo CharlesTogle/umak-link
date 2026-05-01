@@ -330,6 +330,30 @@ export interface SendGlobalAnnouncementRequest {
   image_url?: string | null;
 }
 
+export interface GlobalAnnouncementSendStats {
+  total_users: number;
+  users_with_tokens: number;
+  users_without_tokens: number;
+  push_successful: number;
+  push_failed: number;
+  retriable_failed: number;
+  execution_time_ms: number;
+}
+
+export interface GlobalAnnouncementFailedUser {
+  user_id: string;
+  retriable: boolean;
+  reason: string;
+}
+
+export interface SendGlobalAnnouncementResponse {
+  success: boolean;
+  global_notification_id: number;
+  push_status: 'complete' | 'partial' | 'failed' | 'not_attempted';
+  stats: GlobalAnnouncementSendStats;
+  failed_users?: GlobalAnnouncementFailedUser[];
+}
+
 export interface AnnouncementRecord {
   global_notification_id: number;
   message: string;

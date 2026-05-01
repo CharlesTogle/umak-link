@@ -26,14 +26,32 @@ export async function generateAnnouncementAction (options: {
     // Use provided user info
     const currentUserId = currentUser?.user_id ?? ''
     const currentUserName = currentUser?.user_name ?? ''
+    let resultMessage = 'Announcement posted and notifications sent.'
 
     try {
-      await notificationApiService.sendAnnouncement({
+      const result = await notificationApiService.sendAnnouncement({
         userId: currentUserId,
         message: title || 'New Feature Available',
         description: description || 'Check out our latest update with amazing new features!',
         imageUrl: imageUrl || null
       })
+
+      if (result.push_status !== 'complete') {
+        const delivered = result.stats.push_successful
+        const failed = result.stats.push_failed
+        const missingToken = result.stats.users_without_tokens
+        const summary = [
+          delivered > 0 ? `${delivered} push sent` : null,
+          failed > 0 ? `${failed} push failed` : null,
+          missingToken > 0 ? `${missingToken} users had no device token` : null
+        ]
+          .filter(Boolean)
+          .join(', ')
+
+        resultMessage = summary
+          ? `Announcement posted. Push delivery was partial: ${summary}.`
+          : 'Announcement posted, but push delivery did not complete.'
+      }
     } catch (e) {
       console.error('Failed to send announcement', e)
       return { success: false, message: 'Failed to send announcement notification' }
@@ -62,7 +80,7 @@ export async function generateAnnouncementAction (options: {
 
     return {
       success: true,
-      message: 'Announcement posted and notifications sent.'
+      message: resultMessage
     }
   } catch (e) {
     console.error('Failed to post announcement', e)

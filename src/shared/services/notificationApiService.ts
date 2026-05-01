@@ -4,7 +4,12 @@
  */
 
 import api from '@/shared/lib/api';
-import type { SendNotificationRequest, NotificationRecord, AnnouncementRecord } from '@/shared/lib/api-types';
+import type {
+  SendNotificationRequest,
+  NotificationRecord,
+  AnnouncementRecord,
+  SendGlobalAnnouncementResponse,
+} from '@/shared/lib/api-types';
 
 export const notificationApiService = {
   /**
@@ -77,7 +82,7 @@ export const notificationApiService = {
     message: string;
     description?: string | null;
     imageUrl?: string | null;
-  }): Promise<{ success: boolean }> {
+  }): Promise<SendGlobalAnnouncementResponse> {
     try {
       return await api.announcements.send({
         user_id: params.userId,
