@@ -11,6 +11,7 @@
     "build": "tsc -b && vite build",
     "build:android": "npm run build && npx cap sync",
     "lint": "eslint .",
+    "postinstall": "sh ./scripts/apply-capgo-social-login-patch.sh",
     "preview": "vite preview",
     "full:open": "concurrently \"npm run android:open\" \"npm run backend\" ",
     "full:run": "concurrently \"npm run android:run\" \"npm run backend\" "

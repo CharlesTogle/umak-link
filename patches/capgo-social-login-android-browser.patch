@@ -1,0 +1,13 @@
+diff --git a/android/build.gradle b/android/build.gradle
+index 0000000..1111111 100644
+--- a/android/build.gradle
++++ b/android/build.gradle
+@@ -92,7 +92,7 @@ dependencies {
+ 
+     // Apple dependencies
+     if (appleDependencyType == 'compileOnly') {
+-        compileOnly "androidx.browser:browser:1.9.0"
++        compileOnly "androidx.browser:browser:1.4.0"
+     } else if (includeApple == 'true') {
+         implementation "androidx.browser:browser:1.9.0"
+     }
