@@ -26,11 +26,27 @@ interface GeminiResponse {
   error?: string;
 }
 
+export interface GenerateItemContentParams {
+  itemName?: string;
+  itemDescription?: string;
+  image?: string;
+}
+
+export interface GenerateItemContentResponse {
+  content: {
+    itemName: string;
+    itemDescription: string;
+    itemCategory: string;
+  } | null;
+  success: boolean;
+  error?: string;
+}
+
 /**
  * @deprecated This function is deprecated. AI operations now run server-side.
  * Metadata is generated automatically by the backend.
  */
-export async function callGeminiApi(options: GeminiRequestOptions): Promise<GeminiResponse> {
+export async function callGeminiApi(_options: GeminiRequestOptions): Promise<GeminiResponse> {
   console.warn(
     '[geminiApi] DEPRECATED: Client-side Gemini calls are no longer supported. ' +
       'AI operations now run server-side for security. Metadata is generated automatically.'
@@ -46,12 +62,12 @@ export async function callGeminiApi(options: GeminiRequestOptions): Promise<Gemi
 /**
  * @deprecated This function is deprecated. Metadata generation is now automatic server-side.
  */
-export async function generateItemMetadata(itemData: {
+export async function generateItemMetadata(_itemData: {
   name: string;
   description?: string;
   category?: string;
   type: string;
-}): Promise<any> {
+}): Promise<null> {
   console.warn(
     '[geminiApi] DEPRECATED: generateItemMetadata is no longer used. ' +
       'Metadata is generated automatically by the backend after post creation.'
@@ -60,8 +76,39 @@ export async function generateItemMetadata(itemData: {
   return null;
 }
 
+/**
+ * @deprecated Client-side content generation has been removed.
+ */
+export async function generateItemContent(
+  _params: GenerateItemContentParams
+): Promise<GenerateItemContentResponse> {
+  console.warn(
+    '[geminiApi] DEPRECATED: generateItemContent is no longer supported client-side. ' +
+      'AI autofill now requires a server-side implementation.'
+  );
+
+  return {
+    content: null,
+    success: false,
+    error: 'Client-side Gemini content generation is no longer supported.',
+  };
+}
+
+/**
+ * @deprecated Client-side vision calls have been removed.
+ */
+export async function callGeminiVision(
+  prompt: string,
+  image: string,
+  model?: string
+): Promise<GeminiResponse> {
+  return callGeminiApi({ prompt, image, model });
+}
+
 // Export empty stub for backward compatibility
 export default {
   callGeminiApi,
+  callGeminiVision,
+  generateItemContent,
   generateItemMetadata,
 };

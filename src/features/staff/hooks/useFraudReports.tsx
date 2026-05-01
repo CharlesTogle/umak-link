@@ -6,6 +6,11 @@ import useNotifications from '@/features/user/hooks/useNotifications'
 import { fraudReportApiService, postApiService } from '@/shared/services'
 import api from '@/shared/lib/api'
 import { useUser } from '@/features/auth/contexts/UserContext'
+import type {
+  FraudReportPublic as ApiFraudReportPublic,
+  FraudReportPublicFlat as ApiFraudReportPublicFlat,
+  FraudReportPublicNested as ApiFraudReportPublicNested
+} from '@/shared/lib/api-types'
 
 export interface FraudReportPublic {
   // fraud report
@@ -80,6 +85,81 @@ interface UseFraudReportsParams {
   onOffline?: () => void
 }
 
+function isLegacyFraudReport (
+  report: ApiFraudReportPublic
+): report is ApiFraudReportPublicFlat {
+  return 'reason_for_reporting' in report
+}
+
+function mapFraudReportToLegacyShape (
+  report: ApiFraudReportPublic
+): FraudReportPublic {
+  if (isLegacyFraudReport(report)) {
+    return report
+  }
+
+  const nested: ApiFraudReportPublicNested = report
+  const reporter = nested.reporter
+  const poster = nested.poster
+  const claimInfo = nested.claim_info
+  const itemInfo = nested.item_info
+
+  return {
+    report_id: nested.report_id,
+    post_id: String(nested.post_id),
+    report_status: nested.status,
+    reason_for_reporting: nested.reason,
+    date_reported: nested.created_at,
+    proof_image_url: nested.proof_image_url,
+    poster_id: nested.poster_id ?? poster.user_id,
+    post_status: nested.post_status ?? null,
+    item_id: nested.item_id ?? itemInfo.item_id,
+    is_anonymous: nested.is_anonymous ?? false,
+    submitted_on_date_local: nested.submitted_on_date_local ?? null,
+    accepted_on_date_local: nested.accepted_on_date_local ?? null,
+    last_seen_date: null,
+    last_seen_time: null,
+    last_seen_at: itemInfo.last_seen_at,
+    last_seen_location: itemInfo.last_seen_location,
+    item_name: itemInfo.item_name,
+    item_description: itemInfo.item_description,
+    image_id: itemInfo.image_id,
+    item_image_url: itemInfo.item_image_url,
+    item_status: itemInfo.item_status,
+    item_type: itemInfo.item_type,
+    category: itemInfo.category,
+    claimer_name: claimInfo?.claimer_name ?? null,
+    claimer_school_email:
+      claimInfo?.claimer_school_email ?? claimInfo?.claimer_email ?? null,
+    claimer_contact_num: claimInfo?.claimer_contact_num ?? null,
+    claimed_at: claimInfo?.claimed_at ?? null,
+    claim_id: claimInfo?.claim_id ?? null,
+    linked_lost_item_id: claimInfo?.linked_lost_item_id ?? null,
+    claim_processed_by_name: nested.claim_processed_by_name ?? null,
+    claim_processed_by_email: nested.claim_processed_by_email ?? null,
+    claim_processed_by_profile_picture_url:
+      nested.claim_processed_by_profile_picture_url ?? null,
+    reporter_id: reporter?.user_id ?? null,
+    reporter_name: reporter?.user_name ?? null,
+    reporter_email: reporter?.email ?? null,
+    reporter_profile_picture_url: reporter?.profile_picture_url ?? null,
+    poster_name: poster.user_name,
+    poster_email: poster.email,
+    poster_profile_picture_url: poster.profile_picture_url,
+    fraud_reviewer_id: nested.fraud_reviewer_id ?? null,
+    fraud_reviewer_name: nested.fraud_reviewer_name ?? null,
+    fraud_reviewer_email: nested.fraud_reviewer_email ?? null,
+    fraud_reviewer_profile_picture_url:
+      nested.fraud_reviewer_profile_picture_url ?? null
+  }
+}
+
+function mapFraudReportsToLegacyShape (
+  reports: ApiFraudReportPublic[]
+): FraudReportPublic[] {
+  return reports.map(report => mapFraudReportToLegacyShape(report))
+}
+
 export function useFraudReports ({
   cacheKeys,
   pageSize = 10,
@@ -140,11 +220,11 @@ export function useFraudReports ({
       const exclude = Array.from(loadedIdsRef.current)
 
       // Fetch all reports not in the exclude list
-      const newReports = await fraudReportApiService.listReports({
+      const newReports = mapFraudReportsToLegacyShape(await fraudReportApiService.listReports({
         limit: pageSize,
         exclude: exclude.length > 0 ? exclude : undefined,
         sort: sortDirection
-      }) as FraudReportPublic[]
+      }))
 
       if (newReports.length > 0) {
         // Prepend new reports so newest appear first
@@ -197,9 +277,9 @@ export function useFraudReports ({
         const cachedIds = Array.from(cachedLoadedIds)
 
         // Fetch fresh versions of cached reports
-        const refreshedReports = await fraudReportApiService.listReports({
+        const refreshedReports = mapFraudReportsToLegacyShape(await fraudReportApiService.listReports({
           ids: cachedIds
-        }) as FraudReportPublic[]
+        }))
 
         if (refreshedReports.length > 0) {
           // Update state with refreshed data
@@ -220,10 +300,10 @@ export function useFraudReports ({
 
       // 4. If no cached reports, fetch initial batch
       if (cachedReports.length === 0) {
-        const initialReports = await fraudReportApiService.listReports({
+        const initialReports = mapFraudReportsToLegacyShape(await fraudReportApiService.listReports({
           limit: pageSize,
           sort: sortDirection
-        }) as FraudReportPublic[]
+        }))
 
         if (initialReports.length > 0) {
           setReports(sortReports(initialReports))
@@ -278,11 +358,11 @@ export function useFraudReports ({
       // Fetch older reports excluding already loaded ones
       const exclude = Array.from(loadedIdsRef.current)
 
-      const newReports = await fraudReportApiService.listReports({
+      const newReports = mapFraudReportsToLegacyShape(await fraudReportApiService.listReports({
         limit: pageSize,
         exclude: exclude.length > 0 ? exclude : undefined,
         sort: sortDirection
-      }) as FraudReportPublic[]
+      }))
 
       if (newReports.length > 0) {
         // Check if more reports available
@@ -338,9 +418,9 @@ export function useFraudReports ({
       }
 
       // Fetch fresh versions of loaded reports
-      const refreshedReports = await fraudReportApiService.listReports({
+      const refreshedReports = mapFraudReportsToLegacyShape(await fraudReportApiService.listReports({
         ids: loadedIds
-      }) as FraudReportPublic[]
+      }))
 
       if (refreshedReports.length > 0) {
         // Replace state with refreshed data
@@ -375,7 +455,9 @@ export function useFraudReports ({
         if (found) return found
 
         // If not found in cache, query server
-        const report = await fraudReportApiService.getReport(reportId) as FraudReportPublic
+        const report = mapFraudReportToLegacyShape(
+          await fraudReportApiService.getReport(reportId)
+        )
 
         if (!report) return null
 

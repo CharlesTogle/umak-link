@@ -167,17 +167,102 @@ export interface FraudReportCreateRequest {
   claim_processed_by_staff_id?: string | null;
 }
 
-export interface FraudReportPublic {
+export interface FraudReportClaimInfo {
+  claimer_name: string | null;
+  claimer_email?: string | null;
+  claimer_school_email: string | null;
+  claimer_contact_num: string | null;
+  claimed_at: string | null;
+  claim_id: string | null;
+  linked_lost_item_id: string | null;
+}
+
+export interface FraudReportItemInfo {
+  item_id: string | null;
+  item_name: string | null;
+  item_description: string | null;
+  image_id: string | null;
+  item_image_url: string | null;
+  item_status: ItemStatus | null;
+  item_type: ItemType | null;
+  category: string | null;
+  last_seen_at: string | null;
+  last_seen_location: string | null;
+}
+
+export interface FraudReportPublicNested {
   report_id: string;
   post_id: number;
   reason: string;
   status: FraudReportStatus;
   created_at: string;
+  proof_image_url: string | null;
   reporter: UserProfile | null;
   poster: UserProfile;
-  claim_info: Record<string, unknown> | null;
-  item_info: Record<string, unknown>;
+  claim_info: FraudReportClaimInfo | null;
+  item_info: FraudReportItemInfo;
+  poster_id?: string;
+  post_status?: PostStatus | null;
+  item_id?: string | null;
+  is_anonymous?: boolean;
+  submitted_on_date_local?: string | null;
+  accepted_on_date_local?: string | null;
+  claim_processed_by_name?: string | null;
+  claim_processed_by_email?: string | null;
+  claim_processed_by_profile_picture_url?: string | null;
+  fraud_reviewer_id?: string | null;
+  fraud_reviewer_name?: string | null;
+  fraud_reviewer_email?: string | null;
+  fraud_reviewer_profile_picture_url?: string | null;
 }
+
+export interface FraudReportPublicFlat {
+  report_id: string;
+  post_id: string;
+  report_status: string | null;
+  reason_for_reporting: string | null;
+  date_reported: string | null;
+  proof_image_url: string | null;
+  poster_id: string;
+  post_status: string | null;
+  item_id: string | null;
+  is_anonymous: boolean;
+  submitted_on_date_local: string | null;
+  accepted_on_date_local: string | null;
+  last_seen_date: string | null;
+  last_seen_time: string | null;
+  last_seen_at: string | null;
+  last_seen_location: string | null;
+  item_name: string | null;
+  item_description: string | null;
+  image_id: string | null;
+  item_image_url: string | null;
+  item_status: string | null;
+  item_type: string | null;
+  category: string | null;
+  claimer_name: string | null;
+  claimer_school_email: string | null;
+  claimer_contact_num: string | null;
+  claimed_at: string | null;
+  claim_id: string | null;
+  linked_lost_item_id: string | null;
+  claim_processed_by_name: string | null;
+  claim_processed_by_email: string | null;
+  claim_processed_by_profile_picture_url: string | null;
+  reporter_id: string | null;
+  reporter_name: string | null;
+  reporter_email: string | null;
+  reporter_profile_picture_url: string | null;
+  poster_name: string | null;
+  poster_email: string | null;
+  poster_profile_picture_url: string | null;
+  fraud_reviewer_id: string | null;
+  fraud_reviewer_name: string | null;
+  fraud_reviewer_email: string | null;
+  fraud_reviewer_profile_picture_url: string | null;
+}
+
+export type FraudReportPublic = FraudReportPublicNested | FraudReportPublicFlat;
 
 export interface FraudReportListResponse {
   reports: FraudReportPublic[];

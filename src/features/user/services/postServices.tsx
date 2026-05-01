@@ -1,8 +1,7 @@
-import { postApiService, fraudReportApiService, itemApiService } from '@/shared/services'
+import { postApiService, fraudReportApiService } from '@/shared/services'
 import api from '@/shared/lib/api'
 import { makeDisplay } from '@/shared/utils/imageUtils'
 import { uploadAndGetPublicUrl } from '@/shared/utils/supabaseStorageUtils'
-import { generateItemMetadata } from '@/shared/lib/geminiApi'
 
 // Note: makeDisplay and uploadAndGetPublicUrl are still used by reportPost
 
@@ -93,127 +92,6 @@ interface PostResponse {
 //   posts: Post[] | null
 //   error: string | null
 // }
-
-// ============================================
-// Rate Limiting for Metadata Generation
-// ============================================
-const MAX_METADATA_REQUESTS_PER_MINUTE = Number(
-  import.meta.env.VITE_MAX_METADATA_REQUESTS_PER_MINUTE
-) // Gemini free tier limit
-const metadataRequestQueue: number[] = [] // Timestamps of recent requests
-
-/**
- * Check if we can make a metadata generation request without hitting rate limit
- * Removes timestamps older than 1 minute from the queue
- */
-function canMakeMetadataRequest (): boolean {
-  const now = Date.now()
-  const oneMinuteAgo = now - 60000
-
-  // Remove old timestamps
-  while (
-    metadataRequestQueue.length > 0 &&
-    metadataRequestQueue[0] < oneMinuteAgo
-  ) {
-    metadataRequestQueue.shift()
-  }
-
-  return metadataRequestQueue.length < MAX_METADATA_REQUESTS_PER_MINUTE
-}
-
-/**
- * Record a metadata generation request
- */
-function recordMetadataRequest (): void {
-  metadataRequestQueue.push(Date.now())
-}
-
-/**
- * Get time until next request slot is available (in seconds)
- */
-function getTimeUntilNextSlot (): number {
-  if (canMakeMetadataRequest()) return 0
-
-  const oldestRequest = metadataRequestQueue[0]
-  const oneMinuteFromOldest = oldestRequest + 60000
-  const timeUntilSlot = Math.ceil((oneMinuteFromOldest - Date.now()) / 1000)
-
-  return Math.max(0, timeUntilSlot)
-}
-
-/**
- * Generate item metadata with retry logic (exponential backoff)
- * Used when post is accepted by admin
- */
-async function generateItemMetadataWithRetry (
-  itemId: string,
-  itemName: string,
-  itemDescription: string,
-  imageUrl: string,
-  maxRetries = 5
-): Promise<{ success: boolean; error?: string }> {
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      console.log(
-        `[Metadata] Attempt ${attempt}/${maxRetries} for item:`,
-        itemId
-      )
-
-      // Fetch image from Supabase URL
-      const response = await fetch(imageUrl)
-      if (!response.ok) {
-        throw new Error(`Failed to fetch image: ${response.statusText}`)
-      }
-      const blob = await response.blob()
-
-      // Convert blob to base64
-      const reader = new FileReader()
-      const base64Promise = new Promise<string>((resolve, reject) => {
-        reader.onloadend = () => resolve(reader.result as string)
-        reader.onerror = reject
-        reader.readAsDataURL(blob)
-      })
-      const base64Image = await base64Promise
-
-      // Call Gemini AI to generate metadata
-      const metadataResult = await generateItemMetadata({
-        itemName,
-        itemDescription,
-        image: base64Image
-      })
-
-      if (metadataResult.success && metadataResult.metadata) {
-        // Update item with generated metadata
-        try {
-          await itemApiService.updateMetadata(itemId, metadataResult.metadata)
-          console.log(
-            '[Metadata] ✅ Successfully added metadata for item:',
-            itemId
-          )
-          return { success: true }
-        } catch (error) {
-          console.error('[Metadata] Failed to update item:', error)
-          throw error
-        }
-      } else {
-        throw new Error(metadataResult.error || 'Metadata generation failed')
-      }
-    } catch (error) {
-      console.error(`[Metadata] Attempt ${attempt} failed:`, error)
-
-      if (attempt < maxRetries) {
-        // Exponential backoff: 2s, 4s, 8s, 16s, 32s
-        const delay = Math.pow(2, attempt) * 1000
-        console.log(`[Metadata] Waiting ${delay}ms before retry...`)
-        await new Promise(resolve => setTimeout(resolve, delay))
-      }
-    }
-  }
-
-  const errorMsg = `Failed to generate metadata after ${maxRetries} attempts`
-  console.error('[Metadata] ❌', errorMsg)
-  return { success: false, error: errorMsg }
-}
 
 export const postServices = {
   /**
@@ -365,9 +243,8 @@ export const postServices = {
   },
 
   /**
-   * Generate metadata for an accepted post (called from acceptPost)
-   * This is a non-blocking operation that happens after post acceptance
-   * Rate limited to 10 requests per minute (Gemini free tier)
+   * Metadata generation now happens server-side via the scheduled batch job.
+   * This method is kept for compatibility with older callers.
    * @param postId - The ID of the post
    * @returns Success boolean and optional error
    */
@@ -392,10 +269,7 @@ export const postServices = {
         return { success: false, error: 'Item not found' }
       }
 
-      // Get image link from item data
-      const imageUrl = { image_link: itemData.image_link }
-
-      if (!imageUrl.image_link) {
+      if (!itemData.image_link) {
         console.error('[Metadata] Item image link not found')
         return { success: false, error: 'Item image not found' }
       }
@@ -409,44 +283,11 @@ export const postServices = {
         return { success: true, error: null }
       }
 
-      // Check rate limit before making request
-      if (!canMakeMetadataRequest()) {
-        const waitTime = getTimeUntilNextSlot()
-        console.warn(
-          `[Metadata] Rate limit reached. Item ${itemData.item_id} queued. Will be picked up by cron job or retry in ${waitTime}s`
-        )
-        return {
-          success: true,
-          error: null,
-          queued: true
-        }
-      }
-
-      // Record this request
-      recordMetadataRequest()
-
-      // Generate metadata in background (non-blocking)
-      generateItemMetadataWithRetry(
-        itemData.item_id,
-        itemData.item_name,
-        itemData.item_description,
-        imageUrl.image_link
-      ).then(result => {
-        if (result.success) {
-          console.log(
-            '[Metadata] ✅ Background generation completed for:',
-            itemData.item_id
-          )
-        } else {
-          console.error(
-            '[Metadata] ❌ Background generation failed:',
-            result.error,
-            '(will be retried by cron job)'
-          )
-        }
-      })
-
-      return { success: true, error: null }
+      console.log(
+        '[Metadata] Item queued for server-side metadata batch:',
+        itemData.item_id
+      )
+      return { success: true, error: null, queued: true }
     } catch (err) {
       console.error(
         '[Metadata] Exception in generateMetadataForAcceptedPost:',

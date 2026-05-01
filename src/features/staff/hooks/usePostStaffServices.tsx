@@ -1,9 +1,8 @@
-import { postApiService, itemApiService } from '@/shared/services'
+import { postApiService } from '@/shared/services'
 import api from '@/shared/lib/api'
 import { useAuditLogs } from '@/shared/hooks/useAuditLogs'
 import { useUser } from '@/features/auth/contexts/UserContext'
 import useNotifications from '@/features/user/hooks/useNotifications'
-import { generateItemMetadata } from '@/shared/lib/geminiApi'
 
 export interface CreateStaffPostInput {
   item: {
@@ -89,110 +88,6 @@ export function usePostActionsStaffServices () {
     } catch (error) {
       console.error('[staffPostServices] Exception creating post:', error)
       return { post: null, error: 'Failed to create post' }
-    }
-  }
-
-  /**
-   * Generate metadata for staff-created post in background (non-blocking)
-   * Updates item_table via post_table.item_id relationship
-   */
-  async function generateItemMetadataInBackground (
-    postId: number,
-    itemName: string,
-    itemDescription: string,
-    itemImageUrl: string
-  ): Promise<void> {
-    try {
-      console.log(
-        `[staffPostServices] Generating metadata for post ${postId}...`
-      )
-
-      // Step 1: Get the full post data including item_id
-      let itemId: string
-      try {
-        const postData = await postApiService.getFullPost(postId)
-        if (!postData.item_id) {
-          console.error(`[staffPostServices] Post ${postId} has no item_id`)
-          return
-        }
-        itemId = postData.item_id
-      } catch (error) {
-        console.error(
-          `[staffPostServices] Failed to get post data for post ${postId}:`,
-          error
-        )
-        return
-      }
-
-      // Step 2: Check if item already has metadata
-      let itemData: any
-      try {
-        itemData = await api.items.get(itemId)
-      } catch (error) {
-        console.error(
-          `[staffPostServices] Failed to check item metadata for item ${itemId}:`,
-          error
-        )
-        return
-      }
-
-      // Skip if metadata already exists
-      if (itemData?.item_metadata) {
-        console.log(
-          `[staffPostServices] Item ${itemId} already has metadata, skipping generation`
-        )
-        return
-      }
-
-      // Step 3: Generate metadata using AI and update via API
-      try {
-        // Fetch image and convert to base64
-        const response = await fetch(itemImageUrl)
-        if (!response.ok) {
-          console.error(`[staffPostServices] Failed to fetch image from ${itemImageUrl}`)
-          return
-        }
-        const blob = await response.blob()
-
-        // Convert blob to base64
-        const reader = new FileReader()
-        const base64Promise = new Promise<string>((resolve, reject) => {
-          reader.onloadend = () => resolve(reader.result as string)
-          reader.onerror = reject
-          reader.readAsDataURL(blob)
-        })
-        const base64Image = await base64Promise
-
-        // Generate metadata using AI
-        const result = await generateItemMetadata({
-          itemName,
-          itemDescription,
-          image: base64Image
-        })
-
-        if (result.success && result.metadata) {
-          // Update item metadata via API
-          await itemApiService.updateMetadata(itemId, result.metadata)
-          console.log(
-            `[staffPostServices] Metadata successfully generated for item ${itemId} (post ${postId})`
-          )
-        } else {
-          console.error(
-            `[staffPostServices] Metadata generation failed for post ${postId}:`,
-            result.error
-          )
-        }
-      } catch (metadataError: any) {
-        console.error(
-          `[staffPostServices] Metadata generation failed for post ${postId}:`,
-          metadataError
-        )
-      }
-    } catch (error: any) {
-      console.error(
-        `[staffPostServices] Background metadata generation error for post ${postId}:`,
-        error
-      )
     }
   }
 

@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback, useRef } from 'react';
 import type { ReactNode } from 'react';
 import api from '@/shared/lib/api';
+import type { UserProfile } from '@/shared/lib/api-types';
 
 // User type enum
 export type UserType = 'User' | 'Staff' | 'Admin';
@@ -27,6 +28,17 @@ interface UserContextType {
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
+function mapUserProfileToUser(profile: UserProfile): User {
+  return {
+    user_id: profile.user_id,
+    user_name: profile.user_name ?? profile.email ?? 'Unknown User',
+    email: profile.email ?? '',
+    profile_picture_url: profile.profile_picture_url,
+    user_type: profile.user_type,
+    notification_token: profile.notification_token,
+  };
+}
+
 export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUserState] = useState<User | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
@@ -44,7 +56,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
       // Fetch user from backend API
       const response = await api.auth.getMe();
-      return response.user as User;
+      return mapUserProfileToUser(response.user);
     } catch (error) {
       console.error('[UserContext] Error fetching user:', error);
       // Clear token if unauthorized
@@ -84,7 +96,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }, [user, fetchUser]);
 
   const refreshUser = useCallback(
-    async (userId: string) => {
+    async (_userId: string) => {
       try {
         setLoading(true);
         const userData = await fetchUser();
@@ -114,7 +126,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
         });
 
         // Update local state with response from backend
-        setUserState((prev) => (prev ? { ...prev, ...response.user } : null));
+        setUserState((prev) =>
+          prev ? { ...prev, ...mapUserProfileToUser(response.user) } : null
+        );
         console.log('[UserContext] User profile updated successfully');
       } catch (error) {
         console.error('[UserContext] Error updating user:', error);

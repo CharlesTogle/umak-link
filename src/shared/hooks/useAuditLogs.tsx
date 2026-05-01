@@ -19,7 +19,36 @@ export interface CreateAuditLogInput {
   details?: any
 }
 
-const INSERT_AUDIT_LOG_RPC = 'insert_audit_log'
+function isRecord (value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function getString (value: unknown): string | null {
+  return typeof value === 'string' ? value : null
+}
+
+function normalizeAuditLog (value: unknown): AuditLog | null {
+  if (!isRecord(value)) return null
+  const userTable = isRecord(value.user_table) ? value.user_table : null
+  const logId = getString(value.log_id) ?? getString(value.audit_id)
+  if (!logId) return null
+
+  return {
+    log_id: logId,
+    user_id: getString(value.user_id),
+    user_name: getString(value.user_name) ?? getString(userTable?.user_name),
+    email: getString(value.email) ?? getString(userTable?.email),
+    profile_picture_url:
+      getString(value.profile_picture_url) ??
+      getString(userTable?.profile_picture_url),
+    action_type: getString(value.action_type) ?? getString(value.action),
+    details:
+      (isRecord(value.details) ? value.details : null) ??
+      (isRecord(value.changes) ? value.changes : null),
+    timestamp: getString(value.timestamp),
+    timestamp_local: getString(value.timestamp_local) ?? getString(value.timestamp)
+  }
+}
 
 export function useAuditLogs () {
   /**
@@ -39,7 +68,17 @@ export function useAuditLogs () {
         changes: logData.details || {}
       })
 
-      return data
+      return {
+        log_id: data.audit_id,
+        user_id: logData.user_id,
+        user_name: null,
+        email: null,
+        profile_picture_url: null,
+        action_type: logData.action_type,
+        details: isRecord(logData.details) ? logData.details : null,
+        timestamp: null,
+        timestamp_local: null
+      }
     } catch (error) {
       console.error('Exception inserting audit log:', error)
       return null
@@ -54,7 +93,7 @@ export function useAuditLogs () {
   const readAuditLog = async (logId: string): Promise<AuditLog | null> => {
     try {
       const data = await adminApiService.getAuditLog(logId)
-      return data
+      return normalizeAuditLog(data)
     } catch (error) {
       console.error('Exception reading audit log:', error)
       return null
@@ -73,7 +112,10 @@ export function useAuditLogs () {
   ): Promise<AuditLog[]> => {
     try {
       const data = await adminApiService.getAuditLogs(limit, offset)
-      return data || []
+      return (data ?? []).flatMap(log => {
+        const normalized = normalizeAuditLog(log)
+        return normalized ? [normalized] : []
+      })
     } catch (error) {
       console.error('Exception reading all audit logs:', error)
       return []
@@ -94,7 +136,10 @@ export function useAuditLogs () {
   ): Promise<AuditLog[]> => {
     try {
       const data = await adminApiService.getAuditLogsByUser(userId, limit, offset)
-      return data || []
+      return (data ?? []).flatMap(log => {
+        const normalized = normalizeAuditLog(log)
+        return normalized ? [normalized] : []
+      })
     } catch (error) {
       console.error('Exception reading user audit logs:', error)
       return []
@@ -115,7 +160,10 @@ export function useAuditLogs () {
   ): Promise<AuditLog[]> => {
     try {
       const data = await adminApiService.getAuditLogsByAction(actionType, limit, offset)
-      return data || []
+      return (data ?? []).flatMap(log => {
+        const normalized = normalizeAuditLog(log)
+        return normalized ? [normalized] : []
+      })
     } catch (error) {
       console.error('Exception reading audit logs by action:', error)
       return []

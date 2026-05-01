@@ -82,7 +82,7 @@ export default function useNotifications (): UseNotificationsReturn {
     })
 
   const getNotificationCount = useCallback(
-    async (userId: string): Promise<number> => {
+    async (_userId: string): Promise<number> => {
       try {
         const count = await notificationApiService.getUnreadCount()
         return count

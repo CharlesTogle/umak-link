@@ -1,8 +1,8 @@
-import { searchApiService, notificationApiService, postApiService, pendingMatchApiService, itemApiService } from '@/shared/services'
+import { searchApiService, notificationApiService, postApiService, pendingMatchApiService } from '@/shared/services'
 import api from '@/shared/lib/api'
 import { generateImageSearchQuery } from '@/features/user/utils/imageSearchUtil'
-import { generateItemMetadata } from '@/shared/lib/geminiApi'
 import type { PublicPost } from '@/features/posts/types/post'
+import type { PostRecord } from '@/shared/lib/api-types'
 import { useAuditLogs } from '@/shared/hooks/useAuditLogs'
 
 // Rate limiting for Gemini API
@@ -58,6 +58,36 @@ interface MatchResult {
 interface HandlerResult {
   success: boolean
   error?: string
+}
+
+function mapPostRecordToPublicPost (record: PostRecord): PublicPost {
+  return {
+    post_id: String(record.post_id),
+    item_id: record.item_id,
+    username: record.poster_name,
+    user_id: record.poster_id,
+    item_name: record.item_name,
+    profilepicture_url: null,
+    item_image_url: record.item_image_url,
+    item_description: record.item_description,
+    item_status: record.item_status,
+    category: record.category,
+    last_seen_at: record.last_seen_at,
+    last_seen_location: record.last_seen_location,
+    accepted_by_staff_name: record.accepted_by_staff_name,
+    accepted_by_staff_email: record.accepted_by_staff_email,
+    submission_date: record.submission_date,
+    post_status: record.post_status,
+    is_anonymous: record.is_anonymous,
+    claimed_by_name: record.claimed_by_name,
+    claimed_by_email: record.claimed_by_email,
+    claimed_by_contact: null,
+    claimed_at: null,
+    claim_processed_by_staff_id: record.claim_processed_by_staff_id,
+    claim_id: record.claim_id,
+    accepted_on_date: record.accepted_on_date,
+    item_type: record.item_type
+  }
 }
 
 /**
@@ -199,7 +229,7 @@ async function generateMatchesInBackground (
           poster_id: posterId,
           status: 'pending',
           is_retriable: true,
-          failed_reason: failureReason
+          failed_reason: failureReason ?? undefined
         })
         console.log('Added to pending_match queue for retry')
       } catch (queueError) {
@@ -217,7 +247,7 @@ async function generateMatchesInBackground (
         category: null,
         locationLastSeen: null
       })
-      matches = searchResults as PublicPost[]
+      matches = searchResults.map(mapPostRecordToPublicPost)
     } catch (searchError) {
       console.error('Background search error:', searchError)
       return
@@ -413,8 +443,8 @@ export async function handleAccept (
   postId: string,
   posterId: string,
   itemName: string,
-  itemDescription: string,
-  itemImageUrl: string | null,
+  _itemDescription: string,
+  _itemImageUrl: string | null,
   staffId: string
 ): Promise<HandlerResult> {
   try {
@@ -482,15 +512,10 @@ export async function handleAccept (
       console.error('Failed to send notification:', notifError)
     }
 
-    // Step 4: Generate metadata in background (non-blocking)
-    if (itemImageUrl) {
-      generateItemMetadataInBackground(
-        postId,
-        itemName,
-        itemDescription,
-        itemImageUrl
-      )
-    }
+    console.log(
+      '[Metadata] Accepted post will be picked up by the server-side metadata batch:',
+      postId
+    )
 
     return { success: true }
   } catch (error: any) {
@@ -499,98 +524,5 @@ export async function handleAccept (
       success: false,
       error: error.message || 'Unknown error occurred'
     }
-  }
-}
-
-/**
- * Generate metadata for accepted post in background (non-blocking)
- * Updates item_table via post_table.item_id relationship
- */
-async function generateItemMetadataInBackground (
-  postId: string,
-  itemName: string,
-  itemDescription: string,
-  itemImageUrl: string
-): Promise<void> {
-  try {
-    console.log(`Generating metadata for post ${postId}...`)
-
-    // Step 1: Get the full post data including item_id
-    let itemId: string
-    try {
-      const postData = await postApiService.getFullPost(parseInt(postId))
-      if (!postData.item_id) {
-        console.error(`Post ${postId} has no item_id`)
-        return
-      }
-      itemId = postData.item_id
-    } catch (error) {
-      console.error(`Failed to get post data for post ${postId}:`, error)
-      return
-    }
-
-    // Step 2: Check if item already has metadata
-    let itemData: any
-    try {
-      itemData = await api.items.get(itemId)
-    } catch (error) {
-      console.error(`Failed to check item metadata for item ${itemId}:`, error)
-      return
-    }
-
-    // Skip if metadata already exists
-    if (itemData?.item_metadata) {
-      console.log(`Item ${itemId} already has metadata, skipping generation`)
-      return
-    }
-
-    // Step 3: Fetch image and convert to base64
-    const response = await fetch(itemImageUrl)
-    if (!response.ok) {
-      console.error(`Failed to fetch image from ${itemImageUrl}`)
-      return
-    }
-    const blob = await response.blob()
-
-    // Convert blob to base64
-    const reader = new FileReader()
-    const base64Promise = new Promise<string>((resolve, reject) => {
-      reader.onloadend = () => resolve(reader.result as string)
-      reader.onerror = reject
-      reader.readAsDataURL(blob)
-    })
-    const base64Image = await base64Promise
-
-    // Step 4: Generate metadata
-    const result = await generateItemMetadata({
-      itemName,
-      itemDescription,
-      image: base64Image
-    })
-
-    if (result.success && result.metadata) {
-      // Step 5: Update item_table with generated metadata
-      try {
-        await itemApiService.updateMetadata(itemId, result.metadata)
-        console.log(
-          `Metadata successfully generated for item ${itemId} (post ${postId})`
-        )
-      } catch (updateError) {
-        console.error(
-          `Failed to update metadata for item ${itemId}:`,
-          updateError
-        )
-      }
-    } else {
-      console.error(
-        `Failed to generate metadata for post ${postId}:`,
-        result.error
-      )
-    }
-  } catch (error: any) {
-    console.error(
-      `Background metadata generation error for post ${postId}:`,
-      error
-    )
   }
 }

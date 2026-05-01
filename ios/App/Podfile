@@ -1,4 +1,4 @@
-require_relative '../../node_modules/@capacitor/ios/scripts/pods_helpers'
+require_relative '../../node_modules/.pnpm/@capacitor+ios@7.4.5_@capacitor+core@7.4.5/node_modules/@capacitor/ios/scripts/pods_helpers'
 
 platform :ios, '14.0'
 use_frameworks!
@@ -9,18 +9,18 @@ use_frameworks!
 install! 'cocoapods', :disable_input_output_paths => true
 
 def capacitor_pods
-  pod 'Capacitor', :path => '../../node_modules/@capacitor/ios'
-  pod 'CapacitorCordova', :path => '../../node_modules/@capacitor/ios'
-  pod 'CapacitorCommunityFcm', :path => '../../node_modules/@capacitor-community/fcm'
-  pod 'CapacitorCamera', :path => '../../node_modules/@capacitor/camera'
-  pod 'CapacitorDevice', :path => '../../node_modules/@capacitor/device'
-  pod 'CapacitorFilesystem', :path => '../../node_modules/@capacitor/filesystem'
-  pod 'CapacitorKeyboard', :path => '../../node_modules/@capacitor/keyboard'
-  pod 'CapacitorNetwork', :path => '../../node_modules/@capacitor/network'
-  pod 'CapacitorPreferences', :path => '../../node_modules/@capacitor/preferences'
-  pod 'CapacitorPushNotifications', :path => '../../node_modules/@capacitor/push-notifications'
-  pod 'CapacitorShare', :path => '../../node_modules/@capacitor/share'
-  pod 'CapgoCapacitorSocialLogin', :path => '../../node_modules/@capgo/capacitor-social-login'
+  pod 'Capacitor', :path => '../../node_modules/.pnpm/@capacitor+ios@7.4.5_@capacitor+core@7.4.5/node_modules/@capacitor/ios'
+  pod 'CapacitorCordova', :path => '../../node_modules/.pnpm/@capacitor+ios@7.4.5_@capacitor+core@7.4.5/node_modules/@capacitor/ios'
+  pod 'CapacitorCommunityFcm', :path => '../../node_modules/.pnpm/@capacitor-community+fcm@7.3.0_@capacitor+core@7.4.5/node_modules/@capacitor-community/fcm'
+  pod 'CapacitorCamera', :path => '../../node_modules/.pnpm/@capacitor+camera@7.0.3_@capacitor+core@7.4.5/node_modules/@capacitor/camera'
+  pod 'CapacitorDevice', :path => '../../node_modules/.pnpm/@capacitor+device@7.0.3_@capacitor+core@7.4.5/node_modules/@capacitor/device'
+  pod 'CapacitorFilesystem', :path => '../../node_modules/.pnpm/@capacitor+filesystem@7.1.6_@capacitor+core@7.4.5/node_modules/@capacitor/filesystem'
+  pod 'CapacitorKeyboard', :path => '../../node_modules/.pnpm/@capacitor+keyboard@7.0.4_@capacitor+core@7.4.5/node_modules/@capacitor/keyboard'
+  pod 'CapacitorNetwork', :path => '../../node_modules/.pnpm/@capacitor+network@7.0.3_@capacitor+core@7.4.5/node_modules/@capacitor/network'
+  pod 'CapacitorPreferences', :path => '../../node_modules/.pnpm/@capacitor+preferences@7.0.3_@capacitor+core@7.4.5/node_modules/@capacitor/preferences'
+  pod 'CapacitorPushNotifications', :path => '../../node_modules/.pnpm/@capacitor+push-notifications@7.0.4_@capacitor+core@7.4.5/node_modules/@capacitor/push-notifications'
+  pod 'CapacitorShare', :path => '../../node_modules/.pnpm/@capacitor+share@7.0.3_@capacitor+core@7.4.5/node_modules/@capacitor/share'
+  pod 'CapgoCapacitorSocialLogin', :path => '../../node_modules/.pnpm/@capgo+capacitor-social-login@7.20.0_@capacitor+core@7.4.5/node_modules/@capgo/capacitor-social-login'
 end
 
 target 'App' do

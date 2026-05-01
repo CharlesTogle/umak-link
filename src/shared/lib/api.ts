@@ -18,6 +18,7 @@ import type {
   ProcessClaimRequest,
   ExistingClaimResponse,
   FraudReportCreateRequest,
+  FraudReportPublic,
   FraudReportListResponse,
   FraudReportResolveRequest,
   SearchItemsRequest,
@@ -27,6 +28,7 @@ import type {
   SendGlobalAnnouncementRequest,
   AnnouncementRecord,
   DashboardStats,
+  UserProfile,
   UserSearchResponse,
 } from './api-types';
 
@@ -105,7 +107,7 @@ class ApiClient {
       // Create AbortController for timeout
       const controller = new AbortController();
       const timeoutMs = options?.timeout ?? 30000; // Default 30s
-      let timeoutId: NodeJS.Timeout | undefined;
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
       // Only set timeout if timeoutMs > 0 (0 means no timeout)
       if (timeoutMs > 0) {
@@ -323,8 +325,8 @@ class ApiClient {
   // ============================================================================
 
   fraudReports = {
-    get: (id: string): Promise<any> =>
-      this.request<any>('GET', `/fraud-reports/${id}`),
+    get: (id: string): Promise<FraudReportPublic> =>
+      this.request<FraudReportPublic>('GET', `/fraud-reports/${id}`),
 
     getStatus: (id: string): Promise<{ report_status: string }> =>
       this.request<{ report_status: string }>('GET', `/fraud-reports/${id}/status`),

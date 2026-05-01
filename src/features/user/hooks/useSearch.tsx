@@ -211,12 +211,12 @@ export default function useSearch () {
     const data = await searchApiService.searchItems({
       query: query,
       limit: limit,
-      last_seen_date: lastSeenDate ? lastSeenDate.toISOString().split('T')[0] : null,
+      lastSeenDate: lastSeenDate ? lastSeenDate.toISOString().split('T')[0] : null,
       category: category ? [category] : null,
-      location_last_seen: locationLastSeen,
-      claim_from: claimFromDate,
-      claim_to: claimToDate,
-      item_status:
+      locationLastSeen: locationLastSeen,
+      claimFrom: claimFromDate,
+      claimTo: claimToDate,
+      itemStatus:
         Array.isArray(selectedStatuses) && selectedStatuses.length > 0
           ? (selectedStatuses as any)
           : null,

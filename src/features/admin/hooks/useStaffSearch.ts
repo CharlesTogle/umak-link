@@ -94,7 +94,6 @@ export function useStaffSearch (): UseStaffSearchReturn {
       console.log('Current User in useStaffSearch:', currentUser)
       const isAllowed =
         currentUser?.user_type === 'Admin' || currentUser?.user_type === 'Staff'
-      const isAdmin = currentUser?.user_type === 'Admin'
 
       if (!isAllowed) {
         setError('Unauthorized: Only admins can search users')

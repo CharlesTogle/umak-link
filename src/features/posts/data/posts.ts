@@ -1,4 +1,8 @@
 import { api } from '@/shared/lib/api'
+import type {
+  PostRecord as ApiPostRecord,
+  PostRecordDetails as ApiPostRecordDetails
+} from '@/shared/lib/api-types'
 import type { PublicPost } from '@/features/posts/types/post'
 import { createPostCache } from '@/features/posts/data/postsCache'
 import { formatTimestamp } from '@/shared/utils/formatTimeStamp'
@@ -43,6 +47,123 @@ export interface PostRecordDetails {
   claim_processed_by_profile_picture_url: string | null
   linked_lost_item_id: string | null
   returned_at: string | null
+}
+
+function mapPostRecordToPublicPost (record: ApiPostRecord): PublicPost {
+  return {
+    user_id: record.poster_id,
+    username: record.poster_name,
+    item_name: record.item_name,
+    item_id: record.item_id,
+    profilepicture_url: null,
+    item_image_url: record.item_image_url,
+    item_description: record.item_description,
+    item_status: record.item_status,
+    category: record.category,
+    last_seen_at: formatTimestamp(record.last_seen_at),
+    last_seen_location: record.last_seen_location,
+    is_anonymous: record.is_anonymous,
+    post_id: String(record.post_id),
+    submission_date: record.submission_date,
+    item_type: record.item_type,
+    post_status: record.post_status,
+    accepted_by_staff_name: record.accepted_by_staff_name,
+    accepted_by_staff_email: record.accepted_by_staff_email,
+    claimed_by_name: record.claimed_by_name,
+    claimed_by_email: record.claimed_by_email,
+    claimed_by_contact: null,
+    claimed_at: null,
+    claim_processed_by_staff_id: record.claim_processed_by_staff_id,
+    claim_id: record.claim_id,
+    accepted_on_date: record.accepted_on_date
+  }
+}
+
+function mapPostRecordDetailsToPublicPost (
+  record: ApiPostRecordDetails
+): PublicPost {
+  return {
+    ...mapPostRecordToPublicPost(record),
+    returned_at: record.returned_at_local
+  }
+}
+
+function mapApiPostRecordDetailsToFeaturePostRecordDetails (
+  record: ApiPostRecordDetails
+): PostRecordDetails {
+  return {
+    post_id: String(record.post_id),
+    poster_id: record.poster_id,
+    post_status: record.post_status,
+    item_id: record.item_id,
+    is_anonymous: record.is_anonymous,
+    submitted_on_date_local: record.submission_date,
+    rejection_reason: null,
+    accepted_on_date_local: record.accepted_on_date,
+    last_seen_date: null,
+    last_seen_time: null,
+    last_seen_at: formatTimestamp(record.last_seen_at),
+    last_seen_location: record.last_seen_location,
+    item_name: record.item_name,
+    item_description: record.item_description,
+    image_id: null,
+    item_image_url: record.item_image_url,
+    item_status: record.item_status,
+    item_type: record.item_type,
+    category: record.category,
+    poster_name: record.poster_name,
+    poster_email: '',
+    poster_profile_picture_url: null,
+    claim_id: record.claim_id,
+    claimer_name: record.claimed_by_name,
+    claimer_school_email: record.claimed_by_email,
+    claimer_contact_num: null,
+    claimed_at: null,
+    claim_processed_by_name: null,
+    claim_processed_by_email: null,
+    claim_processed_by_profile_picture_url: null,
+    linked_lost_item_id: record.linked_lost_item_id,
+    returned_at: record.returned_at_local
+  }
+}
+
+function mapPostRecordToFeaturePostRecordDetails (
+  record: ApiPostRecord
+): PostRecordDetails {
+  return {
+    post_id: String(record.post_id),
+    poster_id: record.poster_id,
+    post_status: record.post_status,
+    item_id: record.item_id,
+    is_anonymous: record.is_anonymous,
+    submitted_on_date_local: record.submission_date,
+    rejection_reason: null,
+    accepted_on_date_local: record.accepted_on_date,
+    last_seen_date: null,
+    last_seen_time: null,
+    last_seen_at: formatTimestamp(record.last_seen_at),
+    last_seen_location: record.last_seen_location,
+    item_name: record.item_name,
+    item_description: record.item_description,
+    image_id: null,
+    item_image_url: record.item_image_url,
+    item_status: record.item_status,
+    item_type: record.item_type,
+    category: record.category,
+    poster_name: record.poster_name,
+    poster_email: '',
+    poster_profile_picture_url: null,
+    claim_id: record.claim_id,
+    claimer_name: record.claimed_by_name,
+    claimer_school_email: record.claimed_by_email,
+    claimer_contact_num: null,
+    claimed_at: null,
+    claim_processed_by_name: null,
+    claim_processed_by_email: null,
+    claim_processed_by_profile_picture_url: null,
+    linked_lost_item_id: null,
+    returned_at: null
+  }
 }
 
 export async function getTotalPostsCount (): Promise<number | null> {
@@ -170,7 +291,7 @@ export async function getPostFull (
 
   try {
     const data = await api.posts.getFull(Number(postId))
-    return data as PostRecordDetails
+    return mapApiPostRecordDetailsToFeaturePostRecordDetails(data)
   } catch (error) {
     console.error('Exception in getPostFull:', error)
     return null
@@ -184,7 +305,7 @@ export async function getPostRecordByItemId (
 
   try {
     const data = await api.posts.getByItemIdDetails(itemId)
-    return data as PublicPost
+    return mapPostRecordDetailsToPublicPost(data)
   } catch (error) {
     console.error('Exception in getPostByItemId:', error)
     return null
@@ -198,7 +319,7 @@ export async function getPostByItemId (
 
   try {
     const data = await api.posts.getByItemId(itemId)
-    return data as PublicPost
+    return mapPostRecordToPublicPost(data)
   } catch (error) {
     console.error('Exception in getPostByItemId:', error)
     return null
@@ -219,7 +340,7 @@ export async function getFoundPostByLinkedMissingItem (
 
     if (!result.posts || result.posts.length === 0) return null
 
-    return result.posts[0] as PostRecordDetails
+    return mapPostRecordToFeaturePostRecordDetails(result.posts[0])
   } catch (error) {
     console.error('Exception in getFoundPostByLinkedMissingItem:', error)
     return null

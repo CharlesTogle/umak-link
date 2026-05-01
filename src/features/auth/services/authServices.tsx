@@ -1,6 +1,7 @@
 import { googleLogout } from '@react-oauth/google';
 import { SocialLogin } from '@capgo/capacitor-social-login';
 import api from '@/shared/lib/api';
+import type { UserProfile } from '@/shared/lib/api-types';
 import type { User } from '@/features/auth/contexts/UserContext';
 import { saveCachedImage } from '@/shared/utils/fileUtils';
 import { makeThumb } from '@/shared/utils/imageUtils';
@@ -18,6 +19,17 @@ interface LoginResponse {
   token?: string | null;
   user: User | null;
   error: string | null;
+}
+
+function mapUserProfileToUser(profile: UserProfile): User {
+  return {
+    user_id: profile.user_id,
+    user_name: profile.user_name ?? profile.email ?? 'Unknown User',
+    email: profile.email ?? '',
+    profile_picture_url: profile.profile_picture_url,
+    user_type: profile.user_type,
+    notification_token: profile.notification_token,
+  };
 }
 
 async function withRetries<T>(fn: () => Promise<T>, retries = 3, delay = 500): Promise<T> {
@@ -123,7 +135,14 @@ export const authServices = {
         }
       }
 
-      return { user: response.user, token: response.token, error: null };
+      return {
+        user: mapUserProfileToUser({
+          ...response.user,
+          profile_picture_url: uploadedProfileUrl ?? response.user.profile_picture_url,
+        }),
+        token: response.token,
+        error: null,
+      };
     } catch (error) {
       console.error('[authServices] Register exception:', error);
       return { user: null, token: null, error: 'Registration failed' };

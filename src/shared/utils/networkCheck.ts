@@ -2,11 +2,20 @@ import { Network } from '@capacitor/network'
 
 /**
  * Check if the device is connected to the internet
+ * @param timeoutMs - Optional timeout in milliseconds for the network check
  * @returns Promise<boolean> - true if connected, false otherwise
  */
-export async function isConnected (): Promise<boolean> {
+export async function isConnected (timeoutMs?: number): Promise<boolean> {
   try {
-    const status = await Network.getStatus()
+    const statusPromise = Network.getStatus()
+    const status = timeoutMs && timeoutMs > 0
+      ? await Promise.race([
+          statusPromise,
+          new Promise<never>((_, reject) => {
+            setTimeout(() => reject(new Error('Network check timeout')), timeoutMs)
+          })
+        ])
+      : await statusPromise
     return status.connected
   } catch (error) {
     console.error('Error checking network status:', error)

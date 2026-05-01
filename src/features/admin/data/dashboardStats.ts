@@ -13,7 +13,7 @@ export interface DashboardStats {
   foundCount?: number;
 }
 
-export async function getDashboardStats(date_range: string = 'all'): Promise<DashboardStats> {
+export async function getDashboardStats(_dateRange: string = 'all'): Promise<DashboardStats> {
   // Note: Backend API currently doesn't support date_range parameter
   // The RPC call would need to be updated in the backend to support this
   const data = await adminApiService.getDashboardStats();

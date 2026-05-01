@@ -10,7 +10,7 @@ export const fraudReportApiService = {
   /**
    * Get single fraud report (staff only)
    */
-  async getReport(reportId: string): Promise<any> {
+  async getReport(reportId: string): Promise<FraudReportPublic> {
     try {
       return await api.fraudReports.get(reportId);
     } catch (error) {
