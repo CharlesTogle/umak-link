@@ -61,8 +61,13 @@ export const authServices = {
 
       // Update notification token if available
       if (deviceToken && deviceToken !== user.notification_token) {
-        // TODO: Add API endpoint to update notification token
-        console.log('[authServices] Device token obtained:', deviceToken);
+        try {
+          await api.auth.updateProfile({ notification_token: deviceToken });
+          console.log('[authServices] Device token registered successfully');
+        } catch (error) {
+          console.error('[authServices] Failed to register device token:', error);
+          // Non-blocking: continue with login even if token registration fails
+        }
       }
 
       // Handle profile picture upload if provided and not already set

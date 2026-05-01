@@ -80,7 +80,7 @@ export default function UserCard ({ className }: { className?: string }) {
           </IonAvatar>
           <div>
             <p className='uppercase tracking-wide text-xs  font-default-font'>
-              User
+              {loading ? 'Loading…' : user?.user_type || 'User'}
             </p>
             <p className='text-lg font-semibold!'>
               {loading ? 'Loading…' : user?.user_name}

@@ -106,10 +106,16 @@ export function UserProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        // TODO: Add API endpoint to update user profile
-        // For now, just update local state
-        console.warn('[UserContext] User update API not yet implemented');
-        setUserState((prev) => (prev ? { ...prev, ...updates } : null));
+        // Call backend API to update profile
+        const response = await api.auth.updateProfile({
+          notification_token: updates.notification_token,
+          user_name: updates.user_name,
+          profile_picture_url: updates.profile_picture_url,
+        });
+
+        // Update local state with response from backend
+        setUserState((prev) => (prev ? { ...prev, ...response.user } : null));
+        console.log('[UserContext] User profile updated successfully');
       } catch (error) {
         console.error('[UserContext] Error updating user:', error);
         throw error;

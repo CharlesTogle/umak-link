@@ -10,10 +10,11 @@ import ProtectedRoute from '@/shared/components/ProtectedRoute'
 import UserRoutes from './routes/UserRoutes'
 import Auth from '@/features/auth/pages/Auth'
 import { usePushRedirect } from './hooks/usePushRedirect'
+import { useForegroundPush } from './hooks/useForegroundPush'
 import AdminRoutes from './routes/AdminRoutes'
 import StaffRoutes from '@/app/routes/StaffRoutes'
 import AccountPage from '@/features/user/pages/AccountPage'
-import { IonPage } from '@ionic/react'
+import { IonPage, IonToast } from '@ionic/react'
 import Logout from '@/shared/components/LogOut'
 import Unauthorized from '@/shared/components/Unauthorized'
 
@@ -33,6 +34,7 @@ setupIonicReact({ mode: 'md' })
 
 const App: React.FC = () => {
   usePushRedirect()
+  const { toast: pushToast, dismissToast } = useForegroundPush()
   const googleWebClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
   const apiUrl = import.meta.env.VITE_API_URL
 
@@ -96,6 +98,15 @@ const App: React.FC = () => {
           </IonApp>
         </NotificationProvider>
       </SearchProvider>
+      <IonToast
+        isOpen={!!pushToast}
+        onDidDismiss={dismissToast}
+        header={pushToast?.title}
+        message={pushToast?.body}
+        duration={4000}
+        position='top'
+        color='primary'
+      />
     </GoogleOAuthProvider>
   )
 }
