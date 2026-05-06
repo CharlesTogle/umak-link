@@ -1,6 +1,7 @@
-import { createContext, useContext, useState, useCallback, useRef } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import api from '@/shared/lib/api';
+import { supabase } from '@/shared/lib/supabase';
 import type { UserProfile } from '@/shared/lib/api-types';
 
 // User type enum
@@ -28,6 +29,14 @@ interface UserContextType {
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
+function hasStatusCode(error: unknown, statusCode: number): boolean {
+  if (typeof error !== 'object' || error === null || !('statusCode' in error)) {
+    return false;
+  }
+
+  return error.statusCode === statusCode;
+}
+
 function mapUserProfileToUser(profile: UserProfile): User {
   return {
     user_id: profile.user_id,
@@ -46,11 +55,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
   // Store setUserState in a ref
   const setUserStateRef = useRef(setUserState);
   setUserStateRef.current = setUserState;
+  const hasHydratedPersistedSessionRef = useRef(false);
 
   const fetchUser = useCallback(async () => {
     try {
-      // Check if we have a token
-      if (!api.getToken()) {
+      // Check if we have a Supabase session
+      const { data } = await supabase.auth.getSession();
+      if (!data.session) {
         return null;
       }
 
@@ -59,9 +70,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
       return mapUserProfileToUser(response.user);
     } catch (error) {
       console.error('[UserContext] Error fetching user:', error);
-      // Clear token if unauthorized
-      if ((error as any).statusCode === 401) {
-        api.setToken(null);
+      if (hasStatusCode(error, 401)) {
+        await supabase.auth.signOut();
       }
       return null;
     }
@@ -83,11 +93,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
       console.log('[UserContext] Fetched user data:', userData);
 
       if (!userData) {
+        setUserState(null);
         return null;
       }
 
-      // Update context with fetched user
-      // setUserState(userData)
+      setUserState(userData);
       return userData;
     } catch (error) {
       console.error('[UserContext] Error in getUser:', error);
@@ -95,12 +105,37 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
   }, [user, fetchUser]);
 
+  const hydratePersistedSession = useCallback(async () => {
+    setLoading(true);
+
+    try {
+      const userData = await fetchUser();
+      setUserState(userData);
+    } catch (error) {
+      console.error('[UserContext] Error hydrating persisted session:', error);
+      setUserState(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [fetchUser]);
+
+  useEffect(() => {
+    if (hasHydratedPersistedSessionRef.current) {
+      return;
+    }
+
+    hasHydratedPersistedSessionRef.current = true;
+    void hydratePersistedSession();
+  }, [hydratePersistedSession]);
+
   const refreshUser = useCallback(
-    async (_userId: string) => {
+    async (userId: string) => {
+      void userId;
+
       try {
         setLoading(true);
         const userData = await fetchUser();
-        if (userData) setUserState(userData);
+        setUserState(userData);
       } catch (error) {
         console.error('[UserContext] Error refreshing user:', error);
       } finally {
@@ -140,7 +175,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   const clearUser = useCallback(async () => {
     setUserStateRef.current(null);
-    api.setToken(null);
+    await supabase.auth.signOut();
     return true;
   }, []);
 

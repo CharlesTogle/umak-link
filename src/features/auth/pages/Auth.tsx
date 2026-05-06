@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useCallback, useEffect, useState, useRef } from 'react'
 import { useNavigation } from '@/shared/hooks/useNavigation'
 import { useUser } from '@/features/auth/contexts/UserContext'
 import { SocialLogin } from '@capgo/capacitor-social-login'
@@ -125,6 +125,21 @@ const Auth: React.FC = () => {
     return routeMap[type] || '/user/home'
   }
 
+  const navigateAfterAuth = useCallback(
+    (userType: string) => {
+      const redirect = sessionStorage.getItem('redirect_after_login')
+
+      if (redirect) {
+        sessionStorage.removeItem('redirect_after_login')
+        navigate(redirect, 'auth')
+        return
+      }
+
+      navigate(getRouteByUserType(userType), 'auth')
+    },
+    [navigate]
+  )
+
   const handleSocialLogin = async () => {
     // Check rate limit
     // if (!checkRateLimit()) {
@@ -134,12 +149,13 @@ const Auth: React.FC = () => {
     // Prevent re-entry if already loading
     if (socialLoginLoading) return
 
+    setSocialLoginLoading(true)
+
     try {
       const googleWebClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? ''
       await SocialLogin.initialize({
         google: { webClientId: googleWebClientId, mode: 'online' }
       })
-      setSocialLoginLoading(true)
       const res: GoogleResponseOnline = await SocialLogin.login({
         provider: 'google',
         options: { scopes: ['profile', 'email'] }
@@ -171,29 +187,25 @@ const Auth: React.FC = () => {
 
           if (error || !user) {
             setToastMessage(
-              'Login Failed. Authentication with Google was unsuccessful. Please try again.'
+              `Login Failed. ${error || 'Authentication with Google was unsuccessful. Please try again.'}`
             )
             setShowToast(true)
             return
           }
 
-          await refreshUser(user?.user_id || '')
-          const redirect = sessionStorage.getItem('redirect_after_login')
-          if (redirect) {
-            navigate(redirect)
-            sessionStorage.removeItem('redirect_after_login')
-          } else {
-            navigate(getRouteByUserType(user.user_type), 'auth')
-          }
-          setSocialLoginLoading(false)
+          await refreshUser(user.user_id)
+          navigateAfterAuth(user.user_type)
         }
       }
     } catch (error) {
       console.error('Social login failed:', error)
-      setToastMessage(
-        `Sign-in failed. Please use your organization email to sign in or try again at a different time`
-      )
+      const errorMessage =
+        error instanceof Error && error.message
+          ? error.message
+          : 'Authentication with Google was unsuccessful. Please try again.'
+      setToastMessage(`Sign-in failed. ${errorMessage}`)
       setShowToast(true)
+    } finally {
       setSocialLoginLoading(false)
     }
   }
@@ -207,10 +219,11 @@ const Auth: React.FC = () => {
       return
     }
 
+    setGoogleLoading(true)
+
     try {
       if (!credentialResponse.credential)
         throw new Error('No credential received')
-      setGoogleLoading(true)
       const token = credentialResponse.credential
       const googleResponse = jwtDecode<GoogleJwtPayload>(token)
       // Only allow org emails (e.g., must contain '@umak.edu.ph')
@@ -233,22 +246,22 @@ const Auth: React.FC = () => {
       })
       if (error || !user) {
         setToastMessage(
-          'Login Failed. Authentication with Google was unsuccessful.'
+          `Login Failed. ${error || 'Authentication with Google was unsuccessful.'}`
         )
         setShowToast(true)
         setGoogleLoading(false)
         return
       }
-      await refreshUser(user?.user_id || '')
+      await refreshUser(user.user_id)
 
-      navigate(getRouteByUserType(user.user_type), 'auth')
-      setGoogleLoading(false)
+      navigateAfterAuth(user.user_type)
     } catch (error) {
       console.error('Google sign-in error:', error)
       setToastMessage(
         `Sign-in failed. Please try again. ${JSON.stringify(error)}`
       )
       setShowToast(true)
+    } finally {
       setGoogleLoading(false)
     }
   }
@@ -267,8 +280,7 @@ const Auth: React.FC = () => {
         const currentUser = await getUser()
         if (currentUser) {
           console.log('[Auth] User is authenticated:', currentUser)
-          await refreshUser(currentUser.user_id)
-          navigate(getRouteByUserType(currentUser.user_type), 'auth')
+          navigateAfterAuth(currentUser.user_type)
         } else {
           setShowAuth(true)
         }
@@ -279,7 +291,7 @@ const Auth: React.FC = () => {
     }
 
     checkAuth()
-  }, [])
+  }, [getUser, navigateAfterAuth])
 
   return (
     <IonPage className='relative h-full'>
