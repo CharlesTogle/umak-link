@@ -6,7 +6,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { GoogleGenerativeAI } from 'https://esm.sh/@google/generative-ai@0.21.0';
-
 // Configuration
 const BATCH_SIZE = 10; // Process 10 items per run
 const RATE_LIMIT_MS = 500; // Wait 500ms between items to avoid rate limits
@@ -18,7 +17,6 @@ const RETRY_DELAYS = [
   4000,
   7000
 ]; // Exponential backoff in ms (base 500ms, max 7s)
-
 // =====================================================
 // Helper: Convert ArrayBuffer to Base64 (chunk-based)
 // =====================================================
@@ -26,15 +24,12 @@ function arrayBufferToBase64(buffer) {
   const bytes = new Uint8Array(buffer);
   const chunkSize = 8192; // Process 8KB at a time
   let binary = '';
-  
-  for (let i = 0; i < bytes.length; i += chunkSize) {
+  for(let i = 0; i < bytes.length; i += chunkSize){
     const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
     binary += String.fromCharCode(...chunk);
   }
-  
   return btoa(binary);
 }
-
 // =====================================================
 // Gemini API Helper
 // =====================================================
@@ -43,7 +38,6 @@ async function generateMetadataWithGemini(itemName, itemDescription, base64Image
   const model = genAI.getGenerativeModel({
     model: 'gemini-2.5-flash'
   });
-
   const prompt = `
 You are an AI vision model. Return only valid JSON describing the image.
 
@@ -67,7 +61,6 @@ Rules:
 
 Return only the JSON object.
 `;
-
   try {
     const result = await model.generateContent([
       prompt,
@@ -78,28 +71,18 @@ Return only the JSON object.
         }
       }
     ]);
-
     const response = await result.response;
     const text = response.text();
-
     // Clean up response
     let cleanedText = text.trim();
     cleanedText = cleanedText.replace(/```json\n?/g, '');
     cleanedText = cleanedText.replace(/```\n?/g, '');
     cleanedText = cleanedText.trim();
-
     const metadata = JSON.parse(cleanedText);
-
     // Validate structure
-    if (
-      typeof metadata.caption !== 'string' ||
-      !Array.isArray(metadata.main_objects) ||
-      !Array.isArray(metadata.descriptive_words) ||
-      !Array.isArray(metadata.potential_brands)
-    ) {
+    if (typeof metadata.caption !== 'string' || !Array.isArray(metadata.main_objects) || !Array.isArray(metadata.descriptive_words) || !Array.isArray(metadata.potential_brands)) {
       throw new Error('Invalid metadata structure');
     }
-
     return {
       success: true,
       metadata
@@ -112,7 +95,6 @@ Return only the JSON object.
     };
   }
 }
-
 // =====================================================
 // Process Single Item with Retry Logic
 // =====================================================
@@ -120,56 +102,37 @@ async function processItemWithRetry(item, supabase, geminiApiKey) {
   for(let attempt = 0; attempt < MAX_RETRIES; attempt++){
     try {
       console.log(`[${item.item_id}] Attempt ${attempt + 1}/${MAX_RETRIES}`);
-
       // 1. Fetch image from Supabase Storage
       const imageResponse = await fetch(item.image_url);
       if (!imageResponse.ok) {
         throw new Error(`Failed to fetch image: ${imageResponse.statusText}`);
       }
-
       const blob = await imageResponse.blob();
       const arrayBuffer = await blob.arrayBuffer();
-      
       // FIXED: Use chunk-based conversion to avoid stack overflow
       const base64Image = arrayBufferToBase64(arrayBuffer);
-
       // 2. Generate metadata with Gemini
-      const result = await generateMetadataWithGemini(
-        item.item_name, 
-        item.item_description, 
-        base64Image, 
-        geminiApiKey
-      );
-
+      const result = await generateMetadataWithGemini(item.item_name, item.item_description, base64Image, geminiApiKey);
       if (!result.success || !result.metadata) {
         throw new Error(result.error || 'Metadata generation failed');
       }
-
       // 3. Update item_table with generated metadata
-      const { error: updateError } = await supabase
-        .from('item_table')
-        .update({
-          item_metadata: result.metadata
-        })
-        .eq('item_id', item.item_id);
-
+      const { error: updateError } = await supabase.from('item_table').update({
+        item_metadata: result.metadata
+      }).eq('item_id', item.item_id);
       if (updateError) {
         throw updateError;
       }
-
       console.log(`[${item.item_id}] ✅ Success`);
       return {
         itemId: item.item_id,
         success: true
       };
-
     } catch (error) {
       console.error(`[${item.item_id}] Attempt ${attempt + 1} failed:`, error);
-
       // Check if error is retryable (503, UNAVAILABLE, rate limit)
       const errorMsg = error.message || String(error);
       const isRetryable = /503|UNAVAILABLE|RESOURCE_EXHAUSTED|rate.?limit/i.test(errorMsg);
-
       if (!isRetryable) {
         // Non-retryable error, fail immediately
         return {
@@ -178,7 +141,6 @@ async function processItemWithRetry(item, supabase, geminiApiKey) {
           error: errorMsg
         };
       }
-
       // Wait before retry (exponential backoff)
       if (attempt < MAX_RETRIES - 1) {
         const delay = RETRY_DELAYS[attempt];
@@ -187,14 +149,12 @@ async function processItemWithRetry(item, supabase, geminiApiKey) {
       }
     }
   }
-
   return {
     itemId: item.item_id,
     success: false,
     error: `Failed after ${MAX_RETRIES} attempts`
   };
 }
-
 // =====================================================
 // Main Handler
 // =====================================================
@@ -209,29 +169,20 @@ serve(async (req)=>{
       }
     });
   }
-
   try {
     // 1. Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
-
     if (!supabaseUrl || !supabaseServiceKey || !geminiApiKey) {
       throw new Error('Missing required environment variables');
     }
-
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
     // 2. Get pending items from view
-    const { data: pendingItems, error: queryError } = await supabase
-      .from('items_pending_metadata')
-      .select('*')
-      .limit(BATCH_SIZE);
-
+    const { data: pendingItems, error: queryError } = await supabase.from('items_pending_metadata').select('*').limit(BATCH_SIZE);
     if (queryError) {
       throw queryError;
     }
-
     if (!pendingItems || pendingItems.length === 0) {
       console.log('No items pending metadata generation');
       return new Response(JSON.stringify({
@@ -247,26 +198,21 @@ serve(async (req)=>{
         }
       });
     }
-
     console.log(`Processing ${pendingItems.length} items...`);
-
     // 3. Process each item
     const results = [];
     for(let i = 0; i < pendingItems.length; i++){
       const item = pendingItems[i];
       const result = await processItemWithRetry(item, supabase, geminiApiKey);
       results.push(result);
-
       // Rate limiting: wait between items (except for last one)
       if (i < pendingItems.length - 1) {
         await new Promise((resolve)=>setTimeout(resolve, RATE_LIMIT_MS));
       }
     }
-
     // 4. Calculate summary
     const successCount = results.filter((r)=>r.success).length;
     const failedCount = results.length - successCount;
-
     const summary = {
       message: 'Batch processing completed',
       processed: results.length,
@@ -278,9 +224,7 @@ serve(async (req)=>{
           error: r.error || null
         }))
     };
-
     console.log('Summary:', summary);
-
     return new Response(JSON.stringify(summary), {
       status: 200,
       headers: {
@@ -288,7 +232,6 @@ serve(async (req)=>{
         'Access-Control-Allow-Origin': '*'
       }
     });
-
   } catch (error) {
     console.error('Batch processing error:', error);
     return new Response(JSON.stringify({

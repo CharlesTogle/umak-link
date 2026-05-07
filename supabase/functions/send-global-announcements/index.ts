@@ -301,13 +301,7 @@ Deno.serve(async (req)=>{
       ...failed,
       ...usersWithoutTokensFailed
     ];
-    const pushStatus = usersWithTokens.length === 0
-      ? "not_attempted"
-      : failed.length === 0 && usersWithoutTokens.length === 0
-      ? "complete"
-      : successful.length > 0
-      ? "partial"
-      : "failed";
+    const pushStatus = usersWithTokens.length === 0 ? "not_attempted" : failed.length === 0 && usersWithoutTokens.length === 0 ? "complete" : successful.length > 0 ? "partial" : "failed";
     // Update global announcement with failed users
     const { error: updateErr } = await supabase.from("global_announcements_table").update({
       failed_user_ids: allFailed
