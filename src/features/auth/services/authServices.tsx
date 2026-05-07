@@ -1,12 +1,11 @@
 import { googleLogout } from '@react-oauth/google';
 import { SocialLogin } from '@capgo/capacitor-social-login';
 import api from '@/shared/lib/api';
+import { supabase } from '@/shared/lib/supabase';
 import type { UserProfile } from '@/shared/lib/api-types';
 import type { User } from '@/features/auth/contexts/UserContext';
-import { saveCachedImage } from '@/shared/utils/fileUtils';
-import { makeThumb } from '@/shared/utils/imageUtils';
-import { registerForPushNotifications } from '@/features/auth/services/registerForPushNotifications';
 import { Capacitor } from '@capacitor/core';
+import { registerForPushNotifications } from '@/features/auth/services/registerForPushNotifications';
 
 export interface GoogleProfile {
   googleIdToken: string;
@@ -16,9 +15,16 @@ export interface GoogleProfile {
 }
 
 interface LoginResponse {
-  token?: string | null;
   user: User | null;
   error: string | null;
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+
+  return 'Registration failed';
 }
 
 function mapUserProfileToUser(profile: UserProfile): User {
@@ -32,38 +38,33 @@ function mapUserProfileToUser(profile: UserProfile): User {
   };
 }
 
-async function withRetries<T>(fn: () => Promise<T>, retries = 3, delay = 500): Promise<T> {
-  let lastError: any;
-  for (let i = 0; i < retries; i++) {
-    try {
-      return await fn();
-    } catch (err) {
-      lastError = err;
-      if (i < retries - 1) await new Promise((res) => setTimeout(res, delay));
-    }
-  }
-  throw lastError;
-}
-
 export const authServices = {
   /**
-   * Sign in/register user with Google OAuth
+   * Sign in/register user with Google OAuth via Supabase
    */
   GetOrRegisterAccount: async (profile: GoogleProfile): Promise<LoginResponse> => {
     try {
-      console.log('[authServices] GetOrRegisterAccount called with:', profile);
+      console.log('[authServices] GetOrRegisterAccount called with:', profile.email);
 
-      // Call backend API to login with Google
-      const response = await api.auth.loginWithGoogle(profile.googleIdToken);
+      // Exchange Google ID token for a Supabase session
+      const { error: signInError } = await supabase.auth.signInWithIdToken({
+        provider: 'google',
+        token: profile.googleIdToken,
+      });
 
-      if (!response.token || !response.user) {
-        return { user: null, token: null, error: 'Login failed' };
+      if (signInError) {
+        console.error('[authServices] Supabase signInWithIdToken failed:', signInError);
+        return { user: null, error: signInError.message };
       }
 
-      // Store JWT token in API client
-      api.setToken(response.token);
+      // Fetch user profile from backend (backend resolves via supabase token)
+      const response = await api.auth.getMe();
 
-      const user = response.user;
+      if (!response.user) {
+        return { user: null, error: 'Failed to fetch user profile' };
+      }
+
+      const user = mapUserProfileToUser(response.user);
 
       // Register for push notifications
       const deviceToken = await registerForPushNotifications().catch((err) => {
@@ -71,81 +72,19 @@ export const authServices = {
         return null;
       });
 
-      // Update notification token if available
       if (deviceToken && deviceToken !== user.notification_token) {
         try {
           await api.auth.updateProfile({ notification_token: deviceToken });
           console.log('[authServices] Device token registered successfully');
         } catch (error) {
           console.error('[authServices] Failed to register device token:', error);
-          // Non-blocking: continue with login even if token registration fails
         }
       }
 
-      // Handle profile picture upload if provided and not already set
-      let uploadedProfileUrl: string | null = user.profile_picture_url;
-      if (profile?.profile_picture_url && !uploadedProfileUrl) {
-        try {
-          const userId = user.user_id;
-          // Retry fetch up to 3 times
-          const url = String(profile.profile_picture_url);
-          const res = await withRetries(() => fetch(url), 3, 500);
-          const srcBlob = await res.blob();
-
-          const fileName = `${userId}_${Date.now()}_thumb.webp`;
-          const file = new File([srcBlob], 'profile', {
-            type: srcBlob.type || 'image/jpeg',
-          });
-          const thumbBlob = await makeThumb(file);
-
-          // Get signed upload URL from backend
-          const uploadData = await api.storage.getUploadUrl(
-            'profilePictures',
-            fileName,
-            'image/webp'
-          );
-
-          // Upload to Supabase Storage using signed URL
-          const uploadRes = await fetch(uploadData.uploadUrl, {
-            method: 'PUT',
-            body: thumbBlob,
-            headers: {
-              'Content-Type': 'image/webp',
-            },
-          });
-
-          if (!uploadRes.ok) {
-            throw new Error('Failed to upload profile picture');
-          }
-
-          // Confirm upload with backend
-          await api.storage.confirmUpload('profilePictures', uploadData.objectPath);
-
-          uploadedProfileUrl = uploadData.publicUrl;
-
-          if (uploadedProfileUrl) {
-            await saveCachedImage(uploadedProfileUrl, 'profilePicture', 'cache/images');
-          }
-
-          // Update user profile with new picture URL
-          // TODO: Add API endpoint to update user profile
-          console.log('[authServices] Profile picture uploaded:', uploadedProfileUrl);
-        } catch (e) {
-          console.warn('[authServices] Failed to mirror Google profile image:', e);
-        }
-      }
-
-      return {
-        user: mapUserProfileToUser({
-          ...response.user,
-          profile_picture_url: uploadedProfileUrl ?? response.user.profile_picture_url,
-        }),
-        token: response.token,
-        error: null,
-      };
+      return { user, error: null };
     } catch (error) {
       console.error('[authServices] Register exception:', error);
-      return { user: null, token: null, error: 'Registration failed' };
+      return { user: null, error: getErrorMessage(error) };
     }
   },
 
@@ -157,8 +96,8 @@ export const authServices = {
       console.log('[authServices] Logout called');
       const isWeb = Capacitor.getPlatform() === 'web';
 
-      // Clear JWT token from API client
-      api.setToken(null);
+      // Sign out from Supabase (clears session)
+      await supabase.auth.signOut();
 
       // Google logout for web
       if (isWeb) {

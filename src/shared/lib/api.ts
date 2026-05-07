@@ -5,8 +5,8 @@
  * It handles authentication tokens, error handling, and request/response formatting.
  */
 
+import { supabase } from './supabase';
 import type {
-  AuthLoginResponse,
   AuthMeResponse,
   CreatePostRequest,
   EditPostRequest,
@@ -51,29 +51,14 @@ class ApiError extends Error {
 
 class ApiClient {
   private baseUrl: string;
-  private token: string | null = null;
 
   constructor(baseUrl: string = configuredApiUrl || 'http://localhost:8080') {
     this.baseUrl = baseUrl;
-    this.loadToken();
   }
 
-  private loadToken(): void {
-    // Load token from localStorage or sessionStorage
-    this.token = localStorage.getItem('api_token');
-  }
-
-  setToken(token: string | null): void {
-    this.token = token;
-    if (token) {
-      localStorage.setItem('api_token', token);
-    } else {
-      localStorage.removeItem('api_token');
-    }
-  }
-
-  getToken(): string | null {
-    return this.token;
+  private async getAccessToken(): Promise<string | null> {
+    const { data } = await supabase.auth.getSession();
+    return data.session?.access_token ?? null;
   }
 
   private async request<T>(
@@ -87,8 +72,9 @@ class ApiClient {
       ...((options?.headers as Record<string, string>) || {}),
     };
 
-    if (this.token) {
-      headers['Authorization'] = `Bearer ${this.token}`;
+    const token = await this.getAccessToken();
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
     }
 
     const config: RequestInit = {
@@ -167,9 +153,6 @@ class ApiClient {
   // ============================================================================
 
   auth = {
-    loginWithGoogle: (googleIdToken: string): Promise<AuthLoginResponse> =>
-      this.request<AuthLoginResponse>('POST', '/auth/google', { googleIdToken }, { timeout: 0 }),
-
     getMe: (): Promise<AuthMeResponse> =>
       this.request<AuthMeResponse>('GET', '/auth/me'),
 
