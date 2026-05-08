@@ -366,7 +366,7 @@ const Auth: React.FC = () => {
           {/* TEXT CONTAINER */}
           <div className='text-center'>
             <p className='font-default-default text-5xl font-bold tracking-tight text-umak-blue'>
-              UMak LINK
+              UMak-LINK
             </p>
             <IonText className='font-default-default text-lg leading-snug font-default-font text-slate-900'>
               <p className='mt-2'>

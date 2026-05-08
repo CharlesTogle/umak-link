@@ -577,7 +577,7 @@ export default function PostList ({
                   try {
                     await Share.share({
                       title: 'Check out this post',
-                      text: 'Found this interesting post on UMak LINK',
+                      text: 'Found this interesting post on UMak-LINK',
                       url: shareUrl
                     })
                     // Optionally show a success toast for native share

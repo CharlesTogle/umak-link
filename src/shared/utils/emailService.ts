@@ -171,7 +171,7 @@ export function generateFraudReportAcceptedEmail (params: {
     <div class="content">
       <h2>Dear ${claimerName},</h2>
       
-      <p>We are writing to inform you that an item you claimed through the UMak LINK Lost and Found System has been reported as a fraudulent claim.</p>
+      <p>We are writing to inform you that an item you claimed through the UMak-LINK Lost and Found System has been reported as a fraudulent claim.</p>
       
       <div class="info-box">
         <p><span class="info-label">Claimed Item:</span> ${postTitle}</p>
@@ -218,7 +218,7 @@ export function generateFraudReportAcceptedEmail (params: {
     <div class="footer">
       <p class="no-reply">⚠️ This is a no-reply email. Please do not respond to this message.</p>
       <p>For inquiries, please visit the UMak Security Office behind the Oval Stadium.</p>
-      <p>© ${new Date().getFullYear()} UMak LINK - Lost and Found Management System</p>
+      <p>© ${new Date().getFullYear()} UMak-LINK - Lost and Found Management System</p>
       <p>University of Makati</p>
     </div>
   </div>

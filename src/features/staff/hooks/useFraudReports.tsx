@@ -541,7 +541,7 @@ export function useFraudReports ({
         await sendNotification({
           userId: reporterId,
           title: 'Fraud Report Opened',
-          message: `Your report on "${postTitle}" has been opened and is being investigated. Thank you for helping keep UMak LINK safe.`,
+          message: `Your report on "${postTitle}" has been opened and is being investigated. Thank you for helping keep UMak-LINK safe.`,
           type: 'acceptance'
         })
       }
@@ -722,7 +722,7 @@ export function useFraudReports ({
           await sendNotification({
             userId: reporterId,
             title: 'Report Resolved - Item Available',
-            message: `Your report on "${postTitle}" has been resolved. The item is now available for claiming again. Thank you for keeping UMak LINK safe.`,
+            message: `Your report on "${postTitle}" has been resolved. The item is now available for claiming again. Thank you for keeping UMak-LINK safe.`,
             type: 'acceptance'
           })
         } else {

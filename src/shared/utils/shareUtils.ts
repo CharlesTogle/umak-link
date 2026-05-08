@@ -19,7 +19,7 @@ export async function sharePost (
     if (navigator.share) {
       await navigator.share({
         title: 'Check out this post',
-        text: 'Found this interesting post on UMak Link',
+        text: 'Found this interesting post on UMak-LINK',
         url: shareUrl
       })
       return { success: true, method: 'native' }
