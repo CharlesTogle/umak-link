@@ -15,7 +15,6 @@ import {
   informationCircleOutline
 } from 'ionicons/icons'
 import { useNavigation } from '@/shared/hooks/useNavigation'
-import { useNotificationContext } from '@/shared/contexts/NotificationContext'
 
 export type NotificationType =
   | 'match'
@@ -38,7 +37,7 @@ export type ActionItem = {
 }
 
 interface NotificationItemProps {
-  type: NotificationType
+  type: NotificationType | string
   title: string
   description: string
   read?: boolean
@@ -48,10 +47,9 @@ interface NotificationItemProps {
   handleMarkAsRead?: (notificationId: string) => void
   href?: string
   imageUrl?: string
-  notificationData?: any
 }
 
-const iconForType = (type: NotificationType) => {
+const iconForType = (type: NotificationType | string) => {
   switch (type) {
     case 'match':
       return { icon: checkmarkCircleOutline, colorClass: 'text-green-600' }
@@ -90,13 +88,11 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
   notificationId,
   handleMarkAsRead,
   href,
-  imageUrl,
-  notificationData
+  imageUrl
 }) => {
   const [open, setOpen] = useState(false)
   const { icon, colorClass } = iconForType(type)
   const [expanded, setExpanded] = useState(false)
-  const { setMatchedPostIds, setLostItemPostId } = useNotificationContext()
 
   // Long-press handling
   const longPressTimeout = useRef<number | null>(null)
@@ -147,7 +143,7 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
     () =>
       actions.map(a => ({
         text: a.type, // <-- uses "type" as the visible label
-        icon: (a.icon as any) || undefined,
+        icon: a.icon ?? undefined,
         handler: () => a.onClick(),
         cssClass:
           a.color === 'danger'
@@ -176,24 +172,9 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
           }
 
           // If href is provided, navigate to it
-          if (href) {
-            handleMarkAsRead && handleMarkAsRead(notificationId!)
-
-            // If notification has matched_post_ids data, store it in context
-            if (notificationData?.matched_post_ids) {
-              try {
-                const matchedIds = JSON.parse(notificationData.matched_post_ids)
-                if (Array.isArray(matchedIds)) {
-                  setMatchedPostIds(matchedIds.map(String))
-                }
-              } catch (e) {
-                console.error('Failed to parse matched_post_ids:', e)
-              }
-            }
-
-            // Set the lost item postId from notification data
-            if (notificationData?.postId) {
-              setLostItemPostId(notificationData.postId)
+          if (href && type !== 'match') {
+            if (handleMarkAsRead) {
+              handleMarkAsRead(notificationId!)
             }
 
             navigate(href)
@@ -202,7 +183,9 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
 
           // default toggle expand
           handleClick()
-          handleMarkAsRead && handleMarkAsRead(notificationId!)
+          if (handleMarkAsRead) {
+            handleMarkAsRead(notificationId!)
+          }
         }}
         // Use background opacity so children (like the image) aren't made translucent
         // When read && not expanded -> translucent background

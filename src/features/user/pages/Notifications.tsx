@@ -225,7 +225,7 @@ export default function Notifications () {
               const title = n.title ?? 'Notification'
               const data = n.data ?? {}
               let link
-              if (data['link'] && data['postId']) {
+              if (n.type !== 'match' && data['link'] && data['postId']) {
                 link = data['link']
               }
 
@@ -250,7 +250,7 @@ export default function Notifications () {
               return (
                 <NotificationItem
                   key={n.notification_id}
-                  type={(n.type as any) || 'info'}
+                  type={typeof n.type === 'string' ? n.type : 'info'}
                   title={title}
                   href={link}
                   description={description}
@@ -259,7 +259,6 @@ export default function Notifications () {
                   notificationId={n.notification_id}
                   handleMarkAsRead={handleMarkAsRead}
                   imageUrl={n.image_url ?? undefined}
-                  notificationData={data}
                 />
               )
             })

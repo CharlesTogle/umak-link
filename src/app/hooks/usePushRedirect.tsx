@@ -12,7 +12,8 @@ export function usePushRedirect () {
       'pushNotificationActionPerformed',
       async notification => {
         const data = notification.notification.data
-        const targetUrl = data?.url
+        const targetUrl =
+          data?.type === 'match' ? '/user/notifications' : data?.url
         if (!targetUrl) return
 
         const user = await getUser()

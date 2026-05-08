@@ -258,9 +258,9 @@ async function generateMatchesInBackground (
     if (matches.length > 0) {
       try {
         const matchedPostIds = matches.map(match => match.post_id)
-        const notificationBody = `We found ${matches.length} similar ${
+        const notificationBody = `We've found ${matches.length} likely ${
           matches.length === 1 ? 'item' : 'items'
-        } that might match your post.`
+        } similar to your missing ${itemName}. You can go to the Security Office behind the Oval to inspect.`
 
         await notificationApiService.sendNotification({
           user_id: posterId,
@@ -269,8 +269,7 @@ async function generateMatchesInBackground (
           type: 'match',
           data: {
             postId: String(postId),
-            matched_post_ids: JSON.stringify(matchedPostIds),
-            link: `/user/matches/`
+            match_count: matches.length
           }
         })
 
