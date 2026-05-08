@@ -65,6 +65,11 @@ const toSentenceCaseFull = (str: string) => {
 }
 
 const RATE_LIMIT_MS = 3000 // 3 seconds
+const UMAK_EMAIL_SUFFIX = '@umak.edu.ph'
+
+const hasUmakEmailSuffix = (email: string | null | undefined) =>
+  typeof email === 'string' &&
+  email.trim().toLowerCase().endsWith(UMAK_EMAIL_SUFFIX)
 
 const Auth: React.FC = () => {
   const [showAuth, setShowAuth] = useState(false)
@@ -169,10 +174,9 @@ const Auth: React.FC = () => {
         if ('profile' in result && 'idToken' in result) {
           const { name, email, imageUrl } = result.profile
 
-          // Only allow org emails (e.g., must contain '@umak.edu.ph')
-          if (!email || !/@umak\.edu\.ph$/i.test(email)) {
+          if (!hasUmakEmailSuffix(email)) {
             setToastMessage(
-              'Access Denied. Please use your organization email to sign in.'
+              'Access Denied. Please use your @umak.edu.ph email to sign in.'
             )
             setShowToast(true)
             return
@@ -226,13 +230,9 @@ const Auth: React.FC = () => {
         throw new Error('No credential received')
       const token = credentialResponse.credential
       const googleResponse = jwtDecode<GoogleJwtPayload>(token)
-      // Only allow org emails (e.g., must contain '@umak.edu.ph')
-      if (
-        !googleResponse.email ||
-        !/@umak\.edu\.ph$/i.test(googleResponse.email)
-      ) {
+      if (!hasUmakEmailSuffix(googleResponse.email)) {
         setToastMessage(
-          'Access Denied. Please use your organization email to sign in.'
+          'Access Denied. Please use your @umak.edu.ph email to sign in.'
         )
         setShowToast(true)
         setGoogleLoading(false)
@@ -268,7 +268,7 @@ const Auth: React.FC = () => {
 
   const handleGoogleError = () => {
     setToastMessage(
-      `Sign-in failed. Please use your organization email to sign in or try again at a different time`
+      'Sign-in failed. Please use your @umak.edu.ph email to sign in or try again later.'
     )
     setShowToast(true)
   }
