@@ -144,13 +144,12 @@ export default function ExpandedPost () {
             itemStatus={post?.item_status ?? ''}
             lastSeen={post?.last_seen_at ?? ''}
             locationLastSeenAt={post?.last_seen_location ?? ''}
+            showSecurityQuestionDetails={false}
             user_profile_picture_url={
               post?.is_anonymous ? null : post?.profilepicture_url ?? ''
             }
             username={post?.is_anonymous ? 'Anonymous' : post?.username ?? ''}
             onKebabButtonClick={handleOpenActions}
-            claimedByName={post?.claimed_by_name ?? null}
-            claimedAt={post?.claimed_at ?? null}
           />
         )}
       </div>

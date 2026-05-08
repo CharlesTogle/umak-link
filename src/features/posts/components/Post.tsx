@@ -34,6 +34,8 @@ export type CatalogPostProps = {
   claimedAt?: string | null
   // Returned details for missing items
   returnedAt?: string | null
+  showSecurityQuestionDetails?: boolean
+  showClaimDetails?: boolean
   // New props for external action sheet control
   actionSheetOpen?: boolean
   onActionSheetDismiss?: () => void
@@ -56,6 +58,8 @@ const Post: React.FC<CatalogPostProps> = ({
   claimedByName = null,
   claimedAt = null,
   returnedAt = null,
+  showSecurityQuestionDetails = true,
+  showClaimDetails = false,
   actionSheetOpen = false,
   onActionSheetDismiss,
   actionSheetButtons
@@ -157,12 +161,14 @@ const Post: React.FC<CatalogPostProps> = ({
             />
           )}
         </React.Suspense>
-        <div className='flex flex-col my-3 text-xl text-slate-900'>
-          <IonText class='font-extrabold'>
-            <strong>Last seen:</strong>
-          </IonText>
-          <IonText className='text-base '>{lastSeen}</IonText>
-        </div>
+        {showSecurityQuestionDetails && (
+          <div className='flex flex-col my-3 text-xl text-slate-900'>
+            <IonText class='font-extrabold'>
+              <strong>Last seen:</strong>
+            </IonText>
+            <IonText className='text-base '>{lastSeen}</IonText>
+          </div>
+        )}
         {category && (
           <div className='flex flex-col my-3 text-xl text-slate-900'>
             <IonText class='font-extrabold'>
@@ -173,13 +179,15 @@ const Post: React.FC<CatalogPostProps> = ({
             </IonChip>
           </div>
         )}
-        <div className='flex flex-col text-xl text-slate-900'>
-          <IonText class='font-extrabold'>
-            <strong>Location:</strong>
-          </IonText>
-          <IonText className='text-base'>{locationLastSeenAt}</IonText>
-        </div>
-        {normalizedStatus === 'claimed' && claimedByName && (
+        {showSecurityQuestionDetails && (
+          <div className='flex flex-col text-xl text-slate-900'>
+            <IonText class='font-extrabold'>
+              <strong>Location:</strong>
+            </IonText>
+            <IonText className='text-base'>{locationLastSeenAt}</IonText>
+          </div>
+        )}
+        {showClaimDetails && normalizedStatus === 'claimed' && claimedByName && (
           <div className='flex flex-col mt-4 text-xl text-slate-900'>
             <IonText class='font-extrabold'>
               <strong>Claimed By:</strong>

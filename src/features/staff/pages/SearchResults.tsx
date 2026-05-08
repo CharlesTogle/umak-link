@@ -119,6 +119,7 @@ export default function SearchResults () {
           pageSize={5}
           viewDetailsPath='/staff/post-record/view/:postId'
           marginBottom='0'
+          showSecurityQuestionDetails={true}
           children={
             <div className='px-4 py-2 text-sm text-gray-600'>
               {searchValue ? (

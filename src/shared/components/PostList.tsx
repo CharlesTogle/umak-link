@@ -50,6 +50,7 @@ interface PostListProps {
   enableReportForClaimed?: boolean // Only show Report action for claimed items (user homepage)
   withDelete?: boolean // Enable delete action for posts
   customLoading?: boolean | undefined // Use custom loading state instead of internal
+  showSecurityQuestionDetails?: boolean
 }
 
 export default function PostList ({
@@ -69,7 +70,8 @@ export default function PostList ({
   marginBottom,
   enableReportForClaimed = false,
   withDelete = false,
-  customLoading = undefined
+  customLoading = undefined,
+  showSecurityQuestionDetails
 }: PostListProps) {
   const [isRefreshingContent, setRefreshingContent] = useState<boolean>(false)
   const [showActions, setShowActions] = useState(false)
@@ -384,6 +386,10 @@ export default function PostList ({
     [customHandleRefresh, fetchPosts]
   )
 
+  const shouldShowSecurityQuestionDetails =
+    showSecurityQuestionDetails ??
+    ['staff', 'staff-pending', 'postRecords'].includes(variant)
+
   return (
     <IonContent ref={ref} className='bg-default-bg'>
       <div
@@ -459,6 +465,9 @@ export default function PostList ({
                     currentUserId={user?.user_id}
                     submittedOn={
                       post.submission_date ?? 'MM/DD/YYYY 00:00 AM/PM'
+                    }
+                    showSecurityQuestionDetails={
+                      shouldShowSecurityQuestionDetails
                     }
                     onShowToast={(message, color) => {
                       setToastMessage(message)

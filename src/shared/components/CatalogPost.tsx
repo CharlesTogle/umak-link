@@ -45,6 +45,7 @@ export type CatalogPostProps = {
   submittedOn?: string
   currentUserId?: string
   onShowToast?: (message: string, color: 'success' | 'danger') => void
+  showSecurityQuestionDetails?: boolean
 }
 
 const CatalogPost: React.FC<CatalogPostProps> = ({
@@ -69,7 +70,8 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
   category,
   submittedOn = 'MM/DD/YYYY 00:00 AM/PM',
   currentUserId,
-  onShowToast
+  onShowToast,
+  showSecurityQuestionDetails = true
 }) => {
   const getStatusColorClass = (status: string) => {
     switch (status.toLowerCase()) {
@@ -330,19 +332,23 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
             <IonText>{category}</IonText>
           </div>
 
-          <div className='flex items-center gap-2 mt-3 text-xs text-gray-500'>
-            <IonText>
-              <strong>Last seen:</strong>
-            </IonText>
-            <IonText>{formatTimestamp(lastSeen)}</IonText>
-          </div>
+          {showSecurityQuestionDetails && (
+            <>
+              <div className='flex items-center gap-2 mt-3 text-xs text-gray-500'>
+                <IonText>
+                  <strong>Last seen:</strong>
+                </IonText>
+                <IonText>{formatTimestamp(lastSeen)}</IonText>
+              </div>
 
-          <div className='flex items-start gap-2 mt-3 text-xs text-gray-500'>
-            <IonText>
-              <strong>Location:</strong>
-            </IonText>
-            <IonText>{locationLastSeenAt}</IonText>
-          </div>
+              <div className='flex items-start gap-2 mt-3 text-xs text-gray-500'>
+                <IonText>
+                  <strong>Location:</strong>
+                </IonText>
+                <IonText>{locationLastSeenAt}</IonText>
+              </div>
+            </>
+          )}
           {variant !== 'user' && (
             <div className='flex items-center gap-2 mt-3 text-xs text-gray-500'>
               <IonText>

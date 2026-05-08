@@ -210,6 +210,7 @@ export default function ExpandedHistoryPost () {
             itemStatus={post?.item_status ?? ''}
             lastSeen={post?.last_seen_at ?? ''}
             locationLastSeenAt={post?.last_seen_location ?? ''}
+            showSecurityQuestionDetails={true}
             user_profile_picture_url={post?.poster_profile_picture_url ?? ''}
             username={post?.poster_name ?? ''}
             className={'min-h-[400px]!'}

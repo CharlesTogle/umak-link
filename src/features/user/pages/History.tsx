@@ -189,6 +189,7 @@ export default function History () {
           ref={contentRef}
           withDelete={true}
           customLoading={ownLoading}
+          showSecurityQuestionDetails={true}
         />
       </div>
     </>
