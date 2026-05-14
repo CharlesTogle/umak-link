@@ -25,4 +25,5 @@ export interface PublicPost {
   accepted_on_date: string | null
   item_type: string | null
   returned_at?: string | null
+  custody_status?: string | null
 }

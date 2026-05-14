@@ -24,6 +24,8 @@ import { usePostActions } from '../hooks/usePostActions'
 import { IonLoading, IonToast } from '@ionic/react'
 import { isConnected } from '@/shared/utils/networkCheck'
 import { arrowBack } from 'ionicons/icons'
+import UserCustodyTimelineCard from '@/features/user/custody/components/UserCustodyTimelineCard'
+import { useUserCustodyHistoryQuery } from '@/features/user/custody/hooks/useUserCustodyQueries'
 
 export default function ExpandedHistoryPost () {
   const { postId } = useParams<{ postId: string }>()
@@ -40,6 +42,10 @@ export default function ExpandedHistoryPost () {
   const [toastColor, setToastColor] = useState<'success' | 'danger'>('danger')
   const { navigate } = useNavigation()
   const { deletePost } = usePostActions()
+  const custodyHistoryQuery = useUserCustodyHistoryQuery(
+    Number(postId),
+    Boolean(postId)
+  )
 
   useEffect(() => {
     const fetchPost = async () => {
@@ -208,8 +214,10 @@ export default function ExpandedHistoryPost () {
             imageUrl={post?.item_image_url ?? ''}
             itemName={post?.is_anonymous ? 'Anonymous' : post?.item_name ?? ''}
             itemStatus={post?.item_status ?? ''}
+            claimedAt={post?.claimed_at ?? null}
             lastSeen={post?.last_seen_at ?? ''}
             locationLastSeenAt={post?.last_seen_location ?? ''}
+            submittedOn={post?.submitted_on_date_local ?? null}
             showSecurityQuestionDetails={true}
             user_profile_picture_url={post?.poster_profile_picture_url ?? ''}
             username={post?.poster_name ?? ''}
@@ -228,6 +236,20 @@ export default function ExpandedHistoryPost () {
                     if (postId) navigate(`/user/post/edit/${postId}`)
                   },
                   cssClass: 'edit-btn'
+                })
+              }
+              if (
+                post &&
+                post.item_type === 'found' &&
+                custodyHistoryQuery.data?.custody_status === 'with_reporter'
+              ) {
+                buttons.push({
+                  text: 'Handover to Guard',
+                  handler: () => {
+                    if (postId) {
+                      navigate(`/user/post/history/view/${postId}/handover`)
+                    }
+                  }
                 })
               }
               // Delete: only for item_status 'unclaimed' or 'lost'
@@ -250,6 +272,21 @@ export default function ExpandedHistoryPost () {
               })
               return buttons
             })()}
+            />
+        )}
+
+        {post?.item_type === 'found' && (
+          <UserCustodyTimelineCard
+            history={
+              custodyHistoryQuery.data ?? {
+                post_id: Number(postId),
+                item_id: post.item_id,
+                post_status: 'accepted',
+                custody_status: 'untracked',
+                history: []
+              }
+            }
+            isLoading={custodyHistoryQuery.isLoading}
           />
         )}
 

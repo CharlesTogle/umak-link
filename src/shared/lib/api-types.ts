@@ -7,11 +7,43 @@
 // Common Types
 // ============================================================================
 
-export type UserType = 'User' | 'Staff' | 'Admin';
+export type UserType = 'User' | 'Staff' | 'Admin' | 'Guard';
 export type ItemType = 'found' | 'lost' | 'missing';
 export type ItemStatus = 'claimed' | 'unclaimed' | 'discarded' | 'returned' | 'lost';
 export type PostStatus = 'pending' | 'accepted' | 'rejected' | 'archived' | 'deleted' | 'reported' | 'fraud';
 export type FraudReportStatus = 'under_review' | 'verified' | 'rejected' | 'resolved' | 'open';
+export type CustodyStatus =
+  | 'untracked'
+  | 'with_reporter'
+  | 'handover_in_progress'
+  | 'with_guard'
+  | 'in_security_office'
+  | 'claimed_by_student'
+  | 'under_investigation';
+export type CustodyAttemptStatus =
+  | 'open'
+  | 'accepted'
+  | 'rejected'
+  | 'timed_out'
+  | 'cancelled';
+export type QrCodeSessionStatus =
+  | 'active'
+  | 'accepted'
+  | 'rejected'
+  | 'expired'
+  | 'cancelled';
+export type CustodyDecision = 'accepted' | 'rejected';
+export type StudentCustodyHistoryEventType =
+  | 'item_reported'
+  | 'handover_attempted'
+  | 'guard_rejected'
+  | 'guard_accepted'
+  | 'session_timed_out'
+  | 'security_office_received'
+  | 'attempt_cancelled'
+  | 'under_investigation'
+  | 'physical_take_reported'
+  | 'claimed_by_student';
 
 // ============================================================================
 // Auth Types
@@ -44,6 +76,197 @@ export interface UserSearchResponse {
 }
 
 // ============================================================================
+// Student Custody Types
+// ============================================================================
+
+export interface GuardPostRecord {
+  guard_post_id: string;
+  guard_post_name: string;
+  location_id: number;
+  full_location_name: string | null;
+  is_active: boolean;
+}
+
+export interface GuardPostListResponse {
+  guard_posts: GuardPostRecord[];
+}
+
+export interface CreateCustodyAttemptRequest {
+  post_id: number;
+  guard_post_id: string;
+  handover_image_url: string;
+  handover_image_hash: string;
+  session_token: string;
+}
+
+export interface CreateCustodyAttemptResponse {
+  custody_attempt_id: string;
+  qr_code_session_id: string;
+  attempt_status: CustodyAttemptStatus;
+  qr_status: QrCodeSessionStatus;
+  custody_status: CustodyStatus;
+  expires_at: string;
+  number_of_attempts: number;
+  max_number_of_attempts: number;
+  retries_remaining: number;
+}
+
+export interface CustodySessionStatusResponse {
+  qr_code_session_id: string;
+  custody_attempt_id: string;
+  post_id: number;
+  item_id: string;
+  qr_status: QrCodeSessionStatus;
+  attempt_status: CustodyAttemptStatus;
+  custody_status: CustodyStatus;
+  expires_at: string;
+  scanned_at: string | null;
+  decision_at: string | null;
+  current_window_expired: boolean;
+  can_retry: boolean;
+  number_of_attempts: number;
+  max_number_of_attempts: number;
+  retries_remaining: number;
+}
+
+export interface RetryCustodySessionRequest {
+  session_token: string;
+}
+
+export interface RetryCustodySessionResponse {
+  custody_attempt_id: string;
+  qr_code_session_id: string;
+  attempt_status: CustodyAttemptStatus;
+  qr_status: QrCodeSessionStatus;
+  custody_status: CustodyStatus;
+  expires_at: string;
+  number_of_attempts: number;
+  max_number_of_attempts: number;
+  retries_remaining: number;
+}
+
+export interface CancelCustodySessionResponse {
+  qr_code_session_id: string;
+  custody_attempt_id: string;
+  attempt_status: CustodyAttemptStatus;
+  qr_status: QrCodeSessionStatus;
+  custody_status: CustodyStatus;
+  cancelled_at: string;
+}
+
+export interface StudentCustodyHistoryEntry {
+  history_id: string;
+  event_type: StudentCustodyHistoryEventType;
+  source_record_type: string | null;
+  message: string;
+  occurred_at: string;
+  custody_attempt_id: string | null;
+  qr_code_session_id: string | null;
+  attempt_number: number | null;
+  guard_post_id: string | null;
+  guard_post_name: string | null;
+  full_location_name: string | null;
+  handover_image_url: string | null;
+  actor_user_id: string | null;
+  actor_name: string | null;
+}
+
+export interface StudentCustodyHistoryResponse {
+  post_id: number;
+  item_id: string;
+  post_status: string | null;
+  custody_status: CustodyStatus;
+  history: StudentCustodyHistoryEntry[];
+}
+
+// ============================================================================
+// Guard Custody Types
+// ============================================================================
+
+export interface GuardScanRequest {
+  qr_code_session_id: string;
+  session_token: string;
+}
+
+export interface GuardScanResponse {
+  qr_code_session_id: string;
+  custody_attempt_id: string;
+  post_id: number;
+  item_id: string;
+  item_name: string;
+  item_description: string | null;
+  item_image_url: string | null;
+  handover_image_url: string | null;
+  category: string | null;
+  last_seen_at: string | null;
+  last_seen_location: string | null;
+  submission_date: string;
+  guard_post_id: string;
+  guard_post_name: string | null;
+  attempt_number: number;
+  custody_status: CustodyStatus;
+  qr_status: QrCodeSessionStatus;
+  attempt_status: CustodyAttemptStatus;
+}
+
+export interface GuardDecisionRequest {
+  qr_code_session_id: string;
+  decision: CustodyDecision;
+  decision_reason?: string;
+}
+
+export interface GuardDecisionResponse {
+  custody_attempt_id: string;
+  qr_code_session_id: string;
+  attempt_status: CustodyAttemptStatus;
+  qr_status: QrCodeSessionStatus;
+  custody_status: CustodyStatus;
+  decision_at: string;
+}
+
+export type CustodyHistoryEventType = StudentCustodyHistoryEventType;
+export type CustodyHistoryEvent = StudentCustodyHistoryEntry;
+export type CustodyHistoryResponse = StudentCustodyHistoryResponse;
+
+// ============================================================================
+// Staff Custody Types
+// ============================================================================
+
+export interface StaffCustodyPostRequest {
+  post_id: number;
+}
+
+export interface SecurityOfficeReceiptResponse {
+  post_id: number;
+  custody_attempt_id: string;
+  custody_status: CustodyStatus;
+  office_received_at: string;
+}
+
+export interface OpenCustodyInvestigationResponse {
+  post_id: number;
+  custody_attempt_id: string;
+  custody_status: CustodyStatus;
+  investigation_opened_at: string;
+}
+
+export interface NotifyGuardResponse {
+  post_id: number;
+  custody_attempt_id: string;
+  guard_id: string;
+  notification_id: string | number;
+  notification_status: 'created';
+  requested_at: string;
+}
+
+export interface UpdateClaimedCustodyStatusResponse {
+  post_id: number;
+  item_id: string;
+  custody_status: 'in_security_office' | 'under_investigation' | 'claimed_by_student';
+  updated_at: string;
+}
+
+// ============================================================================
 // Post Types
 // ============================================================================
 
@@ -58,7 +281,14 @@ export interface CreatePostRequest {
   p_item_type: ItemType;
   p_poster_id: string;
   p_image_hash: string;
+  p_image_link?: string;
   p_category?: string;
+  p_last_seen_date?: string;
+  p_last_seen_hours?: number;
+  p_last_seen_minutes?: number;
+  p_item_status?: ItemStatus;
+  p_post_status?: PostStatus;
+  // Legacy fields kept temporarily for older edit paths.
   p_date_day?: number;
   p_date_month?: number;
   p_date_year?: number;
@@ -95,6 +325,7 @@ export interface PostRecord {
   claim_processed_by_staff_id: string | null;
   accepted_on_date: string | null;
   is_anonymous: boolean;
+  custody_status?: CustodyStatus;
 }
 
 export interface PostRecordDetails extends PostRecord {
@@ -124,6 +355,7 @@ export interface ClaimDetails {
   claimer_name: string;
   claimer_school_email: string;
   claimer_contact_num: string;
+  claimed_at?: string | null;
   poster_name: string;
   staff_id: string;
   staff_name: string;
@@ -145,7 +377,7 @@ export interface ExistingClaimResponse {
     claimer_school_email: string;
     claimer_contact_num: string;
     processed_by_staff_id: string;
-    claimed_at: string;
+    claimed_at: string | null;
     staff_name?: string;
   };
 }
@@ -308,16 +540,29 @@ export interface SendNotificationRequest {
   body: string;
   description?: string | null;
   type: string;
-  data?: Record<string, unknown>;
+  data?: NotificationPayloadData;
   image_url?: string | null;
 }
 
+export type NotificationPayloadValue =
+  | string
+  | number
+  | boolean
+  | null
+  | string[];
+
+export type NotificationPayloadData = Record<string, NotificationPayloadValue>;
+
 export interface NotificationRecord {
-  notification_id: number;
+  notification_id: string | number;
   user_id: string;
   title: string;
   body: string;
+  description?: string | null;
+  sent_to?: string | null;
+  sent_by?: string | null;
   type: string;
+  data?: NotificationPayloadData | null;
   is_read: boolean;
   created_at: string;
   image_url?: string | null;

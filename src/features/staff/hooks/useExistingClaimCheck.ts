@@ -9,7 +9,7 @@ export interface ExistingClaimDetails {
   claimer_school_email: string
   claimer_contact_num: string
   processed_by_staff_id: string
-  claimed_at: string
+  claimed_at: string | null
   staff_name?: string
 }
 

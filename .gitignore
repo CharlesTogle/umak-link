@@ -48,6 +48,8 @@ android-template/app/app.iml
 .project
 .env
 capacitor-build.log
+playwright-report
+test-results
 
 # Carthage and Carthage-built binaries
 Carthage

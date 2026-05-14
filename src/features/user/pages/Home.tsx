@@ -27,6 +27,11 @@ export default function Home () {
   const contentRef = useRef<HTMLIonContentElement | null>(null)
   const { navigate } = useNavigation()
 
+  const shouldShowOnUserFeed = (post: PublicPost): boolean =>
+    post.item_type === 'found' &&
+    ['accepted', 'reported'].includes(post.post_status ?? '') &&
+    post.item_status === 'claimed'
+
   const postComparator = (a: PublicPost, b: PublicPost): number => {
     const aAccepted = a.accepted_on_date
     const bAccepted = b.accepted_on_date
@@ -53,13 +58,7 @@ export default function Home () {
       loadedKey: 'LoadedPosts',
       cacheKey: 'CachedPublicPosts'
     },
-    filterPosts: posts =>
-      posts.filter(
-        p =>
-          p.post_status &&
-          ['accepted', 'reported'].includes(p.post_status) &&
-          p.item_type === 'found'
-      ),
+    filterPosts: posts => posts.filter(shouldShowOnUserFeed),
     postComparator,
     pageSize: 5,
     onOffline: () => {
@@ -71,7 +70,7 @@ export default function Home () {
   })
 
   useEffect(() => {
-    const handler = (_ev?: Event) => {
+    const handler = () => {
       // Scroll to top immediately (don't wait for fetch)
       contentRef.current?.scrollToTop?.(300)
 
@@ -161,6 +160,7 @@ export default function Home () {
         pageSize={5}
         marginBottom='0'
         enableReportForClaimed={true}
+        emptyStateMessage={"You're all caught up"}
         ionFabButton={
           <IonFab
             slot='fixed'

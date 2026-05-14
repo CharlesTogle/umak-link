@@ -37,11 +37,13 @@ import { isConnected } from '@/shared/utils/networkCheck'
 import { useUser } from '@/features/auth/contexts/UserContext'
 import { useAuditLogs } from '@/shared/hooks/useAuditLogs'
 import PostSkeleton from '@/features/posts/components/PostSkeleton'
+import { staffCustodyApiService } from '@/shared/services'
 import {
   formatDateTime,
   getStatusColor,
   getStatusOptions,
   getItemStatusOptions,
+  getClaimedCustodyStatusOptions,
   isItemStatusAllowed,
   isPostStatusAllowed,
   performStatusChangeOperation
@@ -72,9 +74,17 @@ export default memo(function ExpandedPostRecord () {
   const [selectedItemStatus, setSelectedItemStatus] = useState<string | null>(
     null
   )
+  const [selectedCustodyStatus, setSelectedCustodyStatus] = useState<string | null>(
+    null
+  )
   const [showRejectionModal, setShowRejectionModal] = useState(false)
   const [showUnclaimConfirmModal, setShowUnclaimConfirmModal] = useState(false)
   const [showNotifyOwnerModal, setShowNotifyOwnerModal] = useState(false)
+  const [showNotifyGuardModal, setShowNotifyGuardModal] = useState(false)
+  const [showReceiveInSecurityOfficeModal, setShowReceiveInSecurityOfficeModal] =
+    useState(false)
+  const [showOpenInvestigationModal, setShowOpenInvestigationModal] =
+    useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const statusChangeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
@@ -158,7 +168,7 @@ export default memo(function ExpandedPostRecord () {
     if (!record) return
 
     switch (action) {
-      case 'share':
+      case 'share': {
         const result = await sharePost(record.post_id, 'user')
         if (result.success) {
           if (result.method === 'clipboard') {
@@ -174,13 +184,26 @@ export default memo(function ExpandedPostRecord () {
           })
         }
         break
+      }
       case 'notify':
         setShowNotifyOwnerModal(true)
         break
       case 'claim':
         navigate(`/staff/post/claim/${record.post_id}`)
         break
+      case 'notifyGuard':
+        setShowNotifyGuardModal(true)
+        break
+      case 'receiveInSecurityOffice':
+        setShowReceiveInSecurityOfficeModal(true)
+        break
+      case 'openInvestigation':
+        setShowOpenInvestigationModal(true)
+        break
       case 'changeStatus':
+        setSelectedStatus(record.post_status)
+        setSelectedItemStatus(record.item_status)
+        setSelectedCustodyStatus(record.custody_status)
         setShowStatusModal(true)
         break
     }
@@ -194,8 +217,17 @@ export default memo(function ExpandedPostRecord () {
     return selectedItemStatus === status
   }
 
+  const isCustodyStatusActive = (status: string) => {
+    return selectedCustodyStatus === status
+  }
+
   const handleApplyStatusChange = async () => {
     if (!record) return
+    const canClaimFoundItem =
+      record.item_type === 'found' &&
+      record.item_status === 'unclaimed' &&
+      record.post_status === 'accepted' &&
+      record.custody_status === 'in_security_office'
 
     // If a status change is already queued, inform the user and bail out
     if (statusChangeTimeoutRef.current) {
@@ -208,7 +240,7 @@ export default memo(function ExpandedPostRecord () {
     }
 
     // Validate that at least one status is selected
-    if (!selectedStatus && !selectedItemStatus) {
+    if (!selectedStatus && !selectedItemStatus && !selectedCustodyStatus) {
       setToast({
         show: true,
         message: 'Please select at least one status to change'
@@ -220,12 +252,35 @@ export default memo(function ExpandedPostRecord () {
     if (selectedItemStatus === 'claimed') {
       // Check if item was previously claimed
       if (record.item_status !== 'claimed') {
+        if (!canClaimFoundItem) {
+          setToast({
+            show: true,
+            message:
+              'Found items can be claimed only after Security Office receipt.'
+          })
+          return
+        }
         setShowStatusModal(false)
         setSelectedStatus(null)
         setSelectedItemStatus(null)
+        setSelectedCustodyStatus(null)
         navigate(`/staff/post/claim/${record.post_id}`)
         return
       }
+    }
+
+    if (
+      record.item_type === 'found' &&
+      record.post_status === 'pending' &&
+      (selectedStatus === 'accepted' || selectedStatus === 'rejected') &&
+      record.custody_status !== 'in_security_office'
+    ) {
+      setToast({
+        show: true,
+        message:
+          'Pending found posts can be accepted or rejected only after Security Office receipt.'
+      })
+      return
     }
 
     // If rejected is selected, show rejection reason modal
@@ -259,8 +314,10 @@ export default memo(function ExpandedPostRecord () {
         record,
         selectedStatus,
         selectedItemStatus,
+        selectedCustodyStatus,
         updatePostStatusWithNotification,
-        updateItemStatus
+        updateItemStatus,
+        updateClaimedCustodyStatus: staffCustodyApiService.updateClaimedCustodyStatus
       })
 
       if (!result.success) {
@@ -285,6 +342,7 @@ export default memo(function ExpandedPostRecord () {
       setShowStatusModal(false)
       setSelectedStatus(null)
       setSelectedItemStatus(null)
+      setSelectedCustodyStatus(null)
 
       if (statusChangeTimeoutRef.current) {
         clearTimeout(statusChangeTimeoutRef.current)
@@ -311,6 +369,20 @@ export default memo(function ExpandedPostRecord () {
       return
     }
 
+    if (
+      record.item_type === 'found' &&
+      record.post_status === 'pending' &&
+      record.custody_status !== 'in_security_office'
+    ) {
+      setShowRejectionModal(false)
+      setToast({
+        show: true,
+        message:
+          'Pending found posts can be accepted or rejected only after Security Office receipt.'
+      })
+      return
+    }
+
     setShowRejectionModal(false)
     setIsSubmitting(true)
     const result = await updatePostStatusWithNotification(
@@ -320,6 +392,21 @@ export default memo(function ExpandedPostRecord () {
     )
 
     if (result.success) {
+      if (
+        selectedCustodyStatus &&
+        selectedCustodyStatus !== record.custody_status &&
+        record.item_type === 'found' &&
+        record.item_status === 'claimed'
+      ) {
+        await staffCustodyApiService.updateClaimedCustodyStatus(
+          Number(record.post_id),
+          selectedCustodyStatus as
+            | 'in_security_office'
+            | 'under_investigation'
+            | 'claimed_by_student'
+        )
+      }
+
       setToast({
         show: true,
         message: 'Post rejected successfully'
@@ -339,6 +426,8 @@ export default memo(function ExpandedPostRecord () {
 
     setIsSubmitting(false)
     setSelectedStatus(null)
+    setSelectedItemStatus(null)
+    setSelectedCustodyStatus(null)
   }
 
   const handleUnclaimConfirm = async () => {
@@ -398,6 +487,85 @@ export default memo(function ExpandedPostRecord () {
     }
   }
 
+  const handleNotifyGuardConfirm = async () => {
+    setShowNotifyGuardModal(false)
+    if (!record) return
+
+    try {
+      setIsSubmitting(true)
+      await staffCustodyApiService.notifyGuard(Number(record.post_id))
+      setToast({
+        show: true,
+        message: 'Guard notified successfully'
+      })
+    } catch (error) {
+      console.error('Error notifying guard:', error)
+      setToast({
+        show: true,
+        message:
+          error instanceof Error ? error.message : 'Failed to notify guard'
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleReceiveInSecurityOfficeConfirm = async () => {
+    setShowReceiveInSecurityOfficeModal(false)
+    if (!record) return
+
+    try {
+      setIsSubmitting(true)
+      await staffCustodyApiService.receiveInSecurityOffice(Number(record.post_id))
+      await loadPost()
+      setToast({
+        show: true,
+        message: 'Item marked as received in the Security Office'
+      })
+    } catch (error) {
+      console.error('Error marking item as received:', error)
+      setToast({
+        show: true,
+        message:
+          error instanceof Error
+            ? error.message
+            : 'Failed to mark item as received'
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleOpenInvestigationConfirm = async () => {
+    setShowOpenInvestigationModal(false)
+    if (!record) return
+
+    try {
+      setIsSubmitting(true)
+      await staffCustodyApiService.openInvestigation(Number(record.post_id))
+      await loadPost()
+      setToast({
+        show: true,
+        message: 'Custody investigation opened'
+      })
+    } catch (error) {
+      console.error('Error opening investigation:', error)
+      setToast({
+        show: true,
+        message:
+          error instanceof Error
+            ? error.message
+            : 'Failed to open investigation'
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const showCustodyStatusSection =
+    record?.item_type === 'found' && record?.item_status === 'claimed'
+  const showItemStatusSection = !showCustodyStatusSection
+
   return (
     <IonContent>
       <div className='fixed top-0 w-full z-10 max-h-screen'>
@@ -446,6 +614,9 @@ export default memo(function ExpandedPostRecord () {
                   </div>
                   <div className='text-base font-medium text-gray-600'>
                     This post has been {record.post_status.replaceAll('_', ' ')}
+                  </div>
+                  <div className='mt-2 text-sm font-medium text-gray-500 capitalize'>
+                    Custody: {(record.custody_status || 'untracked').replaceAll('_', ' ')}
                   </div>
                 </div>
               </IonCardContent>
@@ -525,6 +696,15 @@ export default memo(function ExpandedPostRecord () {
                     <p className='text-sm text-gray-600'>
                       <span className='font-medium'>Item Type: </span>
                       <span className='capitalize'>{record.item_type}</span>
+                    </p>
+                    <p className='text-sm text-gray-600'>
+                      <span className='font-medium'>Custody Status: </span>
+                      <span className='capitalize'>
+                        {(record.custody_status || 'untracked').replaceAll(
+                          '_',
+                          ' '
+                        )}
+                      </span>
                     </p>
                     <p className='text-sm text-gray-600'>
                       <span className='font-medium'>Submitted: </span>
@@ -676,12 +856,47 @@ export default memo(function ExpandedPostRecord () {
             record &&
             record.item_type === 'found' &&
             record.item_status === 'unclaimed' &&
-            record.post_status === 'accepted'
+            record.post_status === 'accepted' &&
+            record.custody_status === 'in_security_office'
           )
             buttons.push({
               text: 'Claim Item',
               handler: () => handleActionSheetClick('claim')
             })
+
+          if (
+            record &&
+            record.item_type === 'found' &&
+            (record.custody_status === 'with_guard' ||
+              record.custody_status === 'under_investigation')
+          ) {
+            buttons.push({
+              text: 'Mark Received in Security Office',
+              handler: () => handleActionSheetClick('receiveInSecurityOffice')
+            })
+          }
+
+          if (
+            record &&
+            record.item_type === 'found' &&
+            record.custody_status === 'with_guard'
+          ) {
+            buttons.push({
+              text: 'Open Investigation',
+              handler: () => handleActionSheetClick('openInvestigation')
+            })
+          }
+
+          if (
+            record &&
+            record.item_type === 'found' &&
+            record.custody_status === 'under_investigation'
+          ) {
+            buttons.push({
+              text: 'Notify Guard',
+              handler: () => handleActionSheetClick('notifyGuard')
+            })
+          }
 
           // Change Status: always available
           buttons.push({
@@ -706,6 +921,7 @@ export default memo(function ExpandedPostRecord () {
           setShowStatusModal(false)
           setSelectedStatus(null)
           setSelectedItemStatus(null)
+          setSelectedCustodyStatus(null)
         }}
         backdropDismiss={true}
         initialBreakpoint={0.4}
@@ -717,8 +933,16 @@ export default memo(function ExpandedPostRecord () {
           <div className='text-center'>
             <p className='text-base! font-medium! mt-5'>Update Post Status</p>
             <p className='mt-1 mb-2 text-sm text-gray-500'>
-              Select a status to change the post status.
+              Select the available post, item, and custody statuses to apply.
             </p>
+            {record?.item_type === 'found' &&
+            record?.post_status === 'pending' &&
+            record?.custody_status !== 'in_security_office' ? (
+              <p className='mt-2 text-sm text-amber-700'>
+                Pending found posts can be accepted or rejected only after the
+                item is marked as received in the Security Office.
+              </p>
+            ) : null}
           </div>
 
           <div className='w-full pt-4 px-4'>
@@ -728,10 +952,12 @@ export default memo(function ExpandedPostRecord () {
             </h3>
             <div className='flex flex-wrap gap-2 mb-4'>
               {getStatusOptions().map(status => {
-                const isAllowed = isPostStatusAllowed(
-                  status,
-                  selectedItemStatus
-                )
+                const isAllowed =
+                  isPostStatusAllowed(status, selectedItemStatus) &&
+                  ((status !== 'accepted' && status !== 'rejected') ||
+                    record?.item_type !== 'found' ||
+                    record?.post_status !== 'pending' ||
+                    record?.custody_status === 'in_security_office')
                 const isActive = isStatusActive(status)
                 return (
                   <IonChip
@@ -760,40 +986,79 @@ export default memo(function ExpandedPostRecord () {
               })}
             </div>
 
-            <div className='w-full bg-black h-px mt-4' />
-            <h3 className='text-xs! font-semibold! text-black! uppercase! tracking-wide! mb-3!'>
-              Item Status
-            </h3>
-            <div className='flex flex-wrap gap-2'>
-              {getItemStatusOptions(record?.item_type).map(status => {
-                const isAllowed = isItemStatusAllowed(status, selectedStatus)
-                const isActive = isItemStatusActive(status)
-                return (
-                  <IonChip
-                    key={status}
-                    onClick={() => {
-                      if (isAllowed) {
-                        setSelectedItemStatus(status)
-                      }
-                    }}
-                    outline={!isActive}
-                    className='px-4'
-                    disabled={!isAllowed}
-                    style={{
-                      '--background': isActive
-                        ? getStatusColor(status)
-                        : 'transparent',
-                      '--color': isActive ? 'white' : getStatusColor(status),
-                      border: `2px solid ${getStatusColor(status)}`,
-                      opacity: isAllowed ? 1 : 0.4,
-                      cursor: isAllowed ? 'pointer' : 'not-allowed'
-                    }}
-                  >
-                    <IonLabel className='capitalize'>{status}</IonLabel>
-                  </IonChip>
-                )
-              })}
-            </div>
+            {showItemStatusSection && (
+              <>
+                <div className='w-full bg-black h-px mt-4' />
+                <h3 className='text-xs! font-semibold! text-black! uppercase! tracking-wide! mb-3!'>
+                  Item Status
+                </h3>
+                <div className='flex flex-wrap gap-2'>
+                  {getItemStatusOptions(record?.item_type).map(status => {
+                    const isAllowed = isItemStatusAllowed(status, selectedStatus)
+                    const isActive = isItemStatusActive(status)
+                    return (
+                      <IonChip
+                        key={status}
+                        onClick={() => {
+                          if (isAllowed) {
+                            setSelectedItemStatus(status)
+                          }
+                        }}
+                        outline={!isActive}
+                        className='px-4'
+                        disabled={!isAllowed}
+                        style={{
+                          '--background': isActive
+                            ? getStatusColor(status)
+                            : 'transparent',
+                          '--color': isActive ? 'white' : getStatusColor(status),
+                          border: `2px solid ${getStatusColor(status)}`,
+                          opacity: isAllowed ? 1 : 0.4,
+                          cursor: isAllowed ? 'pointer' : 'not-allowed'
+                        }}
+                      >
+                        <IonLabel className='capitalize'>{status}</IonLabel>
+                      </IonChip>
+                    )
+                  })}
+                </div>
+              </>
+            )}
+
+            {showCustodyStatusSection && (
+              <>
+                <div className='w-full bg-black h-px mt-4' />
+                <h3 className='text-xs! font-semibold! text-black! uppercase! tracking-wide! mb-3!'>
+                  Custody Status
+                </h3>
+                <div className='flex flex-wrap gap-2'>
+                  {getClaimedCustodyStatusOptions().map(status => {
+                    const isActive = isCustodyStatusActive(status)
+                    return (
+                      <IonChip
+                        key={status}
+                        onClick={() => {
+                          setSelectedCustodyStatus(status)
+                        }}
+                        outline={!isActive}
+                        className='px-4'
+                        style={{
+                          '--background': isActive
+                            ? getStatusColor(status)
+                            : 'transparent',
+                          '--color': isActive ? 'white' : getStatusColor(status),
+                          border: `2px solid ${getStatusColor(status)}`
+                        }}
+                      >
+                        <IonLabel className='capitalize'>
+                          {status.replaceAll('_', ' ')}
+                        </IonLabel>
+                      </IonChip>
+                    )
+                  })}
+                </div>
+              </>
+            )}
           </div>
 
           <div className='flex justify-end gap-3 mt-6 px-4 w-full'>
@@ -803,6 +1068,7 @@ export default memo(function ExpandedPostRecord () {
                 setShowStatusModal(false)
                 setSelectedStatus(null)
                 setSelectedItemStatus(null)
+                setSelectedCustodyStatus(null)
               }}
               className='flex text-umak-blue'
             >
@@ -812,7 +1078,7 @@ export default memo(function ExpandedPostRecord () {
               expand='block'
               onClick={handleApplyStatusChange}
               disabled={
-                (!selectedStatus && !selectedItemStatus) || isSubmitting
+                (!selectedStatus && !selectedItemStatus && !selectedCustodyStatus) || isSubmitting
               }
               style={{
                 '--background': 'var(--color-umak-blue)'
@@ -836,6 +1102,7 @@ export default memo(function ExpandedPostRecord () {
           setShowRejectionModal(false)
           setSelectedStatus(null)
           setSelectedItemStatus(null)
+          setSelectedCustodyStatus(null)
         }}
       />
 
@@ -849,6 +1116,7 @@ export default memo(function ExpandedPostRecord () {
           setShowUnclaimConfirmModal(false)
           setSelectedStatus(null)
           setSelectedItemStatus(null)
+          setSelectedCustodyStatus(null)
         }}
         submitLabel={isSubmitting ? 'Processing...' : 'Confirm'}
         cancelLabel='Cancel'
@@ -861,6 +1129,33 @@ export default memo(function ExpandedPostRecord () {
         subheading='Are you sure you want to notify the owner that similar items are in the security office and that they can check whenever the security office is open?'
         onSubmit={handleNotifyOwnerConfirm}
         onCancel={() => setShowNotifyOwnerModal(false)}
+        submitLabel='Confirm'
+        cancelLabel='Cancel'
+      />
+      <ConfirmationModal
+        isOpen={showNotifyGuardModal}
+        heading='Notify Guard'
+        subheading='Are you sure you want to notify the guard assigned to follow up on this under-investigation item?'
+        onSubmit={handleNotifyGuardConfirm}
+        onCancel={() => setShowNotifyGuardModal(false)}
+        submitLabel='Confirm'
+        cancelLabel='Cancel'
+      />
+      <ConfirmationModal
+        isOpen={showReceiveInSecurityOfficeModal}
+        heading='Mark Received in Security Office'
+        subheading='Confirm that this item has physically arrived in the Security Office.'
+        onSubmit={handleReceiveInSecurityOfficeConfirm}
+        onCancel={() => setShowReceiveInSecurityOfficeModal(false)}
+        submitLabel='Confirm'
+        cancelLabel='Cancel'
+      />
+      <ConfirmationModal
+        isOpen={showOpenInvestigationModal}
+        heading='Open Investigation'
+        subheading='Move this found item into the under-investigation state for staff follow-up.'
+        onSubmit={handleOpenInvestigationConfirm}
+        onCancel={() => setShowOpenInvestigationModal(false)}
         submitLabel='Confirm'
         cancelLabel='Cancel'
       />

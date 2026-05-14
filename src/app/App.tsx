@@ -12,6 +12,7 @@ import Auth from '@/features/auth/pages/Auth'
 import { usePushRedirect } from './hooks/usePushRedirect'
 import { useForegroundPush } from './hooks/useForegroundPush'
 import AdminRoutes from './routes/AdminRoutes'
+import GuardRoutes from '@/app/routes/GuardRoutes'
 import StaffRoutes from '@/app/routes/StaffRoutes'
 import AccountPage from '@/features/user/pages/AccountPage'
 import { IonPage, IonToast } from '@ionic/react'
@@ -90,6 +91,14 @@ const App: React.FC = () => {
                   render={() => (
                     <ProtectedRoute allowedRoles={['staff']}>
                       <StaffRoutes />
+                    </ProtectedRoute>
+                  )}
+                />
+                <Route
+                  path='/guard/*'
+                  render={() => (
+                    <ProtectedRoute allowedRoles={['guard']}>
+                      <GuardRoutes />
                     </ProtectedRoute>
                   )}
                 />

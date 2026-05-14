@@ -5,6 +5,7 @@
  * It handles authentication tokens, error handling, and request/response formatting.
  */
 
+import { getE2eAccessToken } from './e2eAuth';
 import { supabase } from './supabase';
 import type {
   AuthMeResponse,
@@ -29,6 +30,22 @@ import type {
   SendGlobalAnnouncementResponse,
   AnnouncementRecord,
   DashboardStats,
+  GuardPostListResponse,
+  CreateCustodyAttemptRequest,
+  CreateCustodyAttemptResponse,
+  CustodySessionStatusResponse,
+  RetryCustodySessionRequest,
+  RetryCustodySessionResponse,
+  CancelCustodySessionResponse,
+  StudentCustodyHistoryResponse,
+  GuardDecisionRequest,
+  GuardDecisionResponse,
+  SecurityOfficeReceiptResponse,
+  OpenCustodyInvestigationResponse,
+  NotifyGuardResponse,
+  UpdateClaimedCustodyStatusResponse,
+  GuardScanRequest,
+  GuardScanResponse,
   UserProfile,
   UserSearchResponse,
 } from './api-types';
@@ -57,6 +74,11 @@ class ApiClient {
   }
 
   private async getAccessToken(): Promise<string | null> {
+    const e2eToken = getE2eAccessToken();
+    if (e2eToken) {
+      return e2eToken;
+    }
+
     const { data } = await supabase.auth.getSession();
     return data.session?.access_token ?? null;
   }
@@ -67,10 +89,14 @@ class ApiClient {
     body?: unknown,
     options?: RequestInit & { timeout?: number }
   ): Promise<T> {
+    const hasBody = typeof body !== 'undefined';
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
       ...((options?.headers as Record<string, string>) || {}),
     };
+
+    if (hasBody) {
+      headers['Content-Type'] = headers['Content-Type'] ?? 'application/json';
+    }
 
     const token = await this.getAccessToken();
     if (token) {
@@ -84,7 +110,7 @@ class ApiClient {
       ...options,
     };
 
-    if (body) {
+    if (hasBody) {
       config.body = JSON.stringify(body);
     }
 
@@ -162,6 +188,115 @@ class ApiClient {
       profile_picture_url?: string | null;
     }): Promise<{ user: UserProfile }> =>
       this.request<{ user: UserProfile }>('PATCH', '/auth/profile', updates),
+  };
+
+  // ============================================================================
+  // Student Custody
+  // ============================================================================
+
+  custody = {
+    listGuardPosts: (): Promise<GuardPostListResponse> =>
+      this.request<GuardPostListResponse>('GET', '/custody/guard-posts'),
+
+    createAttempt: (
+      data: CreateCustodyAttemptRequest
+    ): Promise<CreateCustodyAttemptResponse> =>
+      this.request<CreateCustodyAttemptResponse>('POST', '/custody/attempts', data),
+
+    getSessionStatus: (
+      qrCodeSessionId: string
+    ): Promise<CustodySessionStatusResponse> =>
+      this.request<CustodySessionStatusResponse>(
+        'GET',
+        `/custody/sessions/${qrCodeSessionId}/status`
+      ),
+
+    retrySession: (
+      qrCodeSessionId: string,
+      data: RetryCustodySessionRequest
+    ): Promise<RetryCustodySessionResponse> =>
+      this.request<RetryCustodySessionResponse>(
+        'POST',
+        `/custody/sessions/${qrCodeSessionId}/retry`,
+        data
+      ),
+
+    cancelSession: (
+      qrCodeSessionId: string
+    ): Promise<CancelCustodySessionResponse> =>
+      this.request<CancelCustodySessionResponse>(
+        'POST',
+        `/custody/sessions/${qrCodeSessionId}/cancel`
+      ),
+
+    getPostHistory: (postId: number): Promise<StudentCustodyHistoryResponse> =>
+      this.request<StudentCustodyHistoryResponse>(
+        'GET',
+        `/custody/posts/${postId}/history`
+      ),
+  };
+
+  // ============================================================================
+  // Guard Custody
+  // ============================================================================
+
+  guardCustody = {
+    scan: (data: GuardScanRequest): Promise<GuardScanResponse> =>
+      this.request<GuardScanResponse>('POST', '/guard/custody/scan', data),
+
+    decide: (
+      custodyAttemptId: string,
+      data: GuardDecisionRequest
+    ): Promise<GuardDecisionResponse> =>
+      this.request<GuardDecisionResponse>(
+        'POST',
+        `/guard/custody/attempts/${custodyAttemptId}/decision`,
+        data
+      ),
+  };
+
+  // ============================================================================
+  // Staff Custody
+  // ============================================================================
+
+  staffCustody = {
+    receiveInSecurityOffice: (
+      postId: number
+    ): Promise<SecurityOfficeReceiptResponse> =>
+      this.request<SecurityOfficeReceiptResponse>(
+        'POST',
+        '/staff/custody/security-office/receive',
+        { post_id: postId }
+      ),
+
+    openInvestigation: (
+      postId: number
+    ): Promise<OpenCustodyInvestigationResponse> =>
+      this.request<OpenCustodyInvestigationResponse>(
+        'POST',
+        '/staff/custody/investigations/open',
+        { post_id: postId }
+      ),
+
+    notifyGuard: (postId: number): Promise<NotifyGuardResponse> =>
+      this.request<NotifyGuardResponse>(
+        'POST',
+        '/staff/custody/guards/notify',
+        { post_id: postId }
+      ),
+
+    updateClaimedCustodyStatus: (
+      postId: number,
+      custodyStatus: 'in_security_office' | 'under_investigation' | 'claimed_by_student'
+    ): Promise<UpdateClaimedCustodyStatusResponse> =>
+      this.request<UpdateClaimedCustodyStatusResponse>(
+        'PUT',
+        '/staff/custody/status',
+        {
+          post_id: postId,
+          custody_status: custodyStatus,
+        }
+      ),
   };
 
   // ============================================================================
@@ -400,8 +535,8 @@ class ApiClient {
   // ============================================================================
 
   notifications = {
-    send: (data: SendNotificationRequest): Promise<{ success: boolean; notification_id: number }> =>
-      this.request<{ success: boolean; notification_id: number }>('POST', '/notifications/send', data),
+    send: (data: SendNotificationRequest): Promise<{ success: boolean; notification_id: string | number }> =>
+      this.request<{ success: boolean; notification_id: string | number }>('POST', '/notifications/send', data),
 
     list: (): Promise<{ notifications: NotificationRecord[] }> =>
       this.request<{ notifications: NotificationRecord[] }>('GET', '/notifications'),
@@ -409,10 +544,10 @@ class ApiClient {
     getCount: (): Promise<{ unread_count: number }> =>
       this.request<{ unread_count: number }>('GET', '/notifications/count'),
 
-    markAsRead: (id: number): Promise<{ success: boolean }> =>
+    markAsRead: (id: string | number): Promise<{ success: boolean }> =>
       this.request<{ success: boolean }>('PATCH', `/notifications/${id}/read`),
 
-    delete: (id: number): Promise<{ success: boolean }> =>
+    delete: (id: string | number): Promise<{ success: boolean }> =>
       this.request<{ success: boolean }>('DELETE', `/notifications/${id}`),
   };
 

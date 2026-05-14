@@ -10,6 +10,7 @@ interface ClaimItemSubmitParams {
   claimerName: string
   claimerEmail: string
   claimerContactNumber: string
+  claimedAt: string | null
   posterName: string
   staffId: string
   staffName: string
@@ -33,6 +34,7 @@ export function useClaimItemSubmit () {
       claimerName,
       claimerEmail,
       claimerContactNumber,
+      claimedAt,
       posterName,
       staffId,
       staffName,
@@ -96,6 +98,7 @@ export function useClaimItemSubmit () {
           claimer_name: claimerName,
           claimer_school_email: claimerEmail,
           claimer_contact_num: claimerContactNumber,
+          claimed_at: claimedAt,
           poster_name: posterName,
           staff_id: staffId,
           staff_name: staffName

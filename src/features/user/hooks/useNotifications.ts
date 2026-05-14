@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import { notificationApiService } from '@/shared/services'
 import createCache from '@/shared/lib/cache'
 import type { NotificationData } from '@/features/posts/types/notifications'
+import type { NotificationPayloadData } from '@/shared/lib/api-types'
 
 type UseNotificationsReturn = {
   notifications: NotificationData[]
@@ -14,7 +15,7 @@ type UseNotificationsReturn = {
     message: string
     title: string
     type: string
-    data?: any
+    data?: NotificationPayloadData
     userId: string
   }) => Promise<void>
 }
@@ -48,7 +49,7 @@ export default function useNotifications (): UseNotificationsReturn {
       title: string
       type: string
       message: string
-      data?: any
+      data?: NotificationPayloadData
       userId: string
     }) => {
       try {
@@ -118,13 +119,13 @@ export default function useNotifications (): UseNotificationsReturn {
       }
 
       const mapped: NotificationData[] = (data ?? []).map((r: any) => ({
-        notification_id: r.notification_id,
+        notification_id: String(r.notification_id),
         type: r.type,
         title: r.title,
         description: r.description || r.body,
         is_read: r.is_read,
         created_at: r.created_at,
-        data: r.data,
+        data: r.data ?? null,
         sent_to: r.sent_to || userId,
         sent_by: r.sent_by,
         image_url: r.image_url
@@ -149,7 +150,7 @@ export default function useNotifications (): UseNotificationsReturn {
 
   const markAsRead = useCallback(async (notificationId: string) => {
     try {
-      await notificationApiService.markAsRead(Number(notificationId))
+      await notificationApiService.markAsRead(notificationId)
       setNotifications(prev => {
         const updated = prev.map(n =>
           n.notification_id === notificationId ? { ...n, is_read: true } : n
@@ -186,7 +187,7 @@ export default function useNotifications (): UseNotificationsReturn {
 
   const deleteNotification = useCallback(async (notificationId: string) => {
     try {
-      await notificationApiService.deleteNotification(Number(notificationId))
+      await notificationApiService.deleteNotification(notificationId)
       setNotifications(prev => {
         const updated = prev.filter(n => n.notification_id !== notificationId)
         ;(async () => {

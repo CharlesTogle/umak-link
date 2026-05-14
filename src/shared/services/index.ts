@@ -11,6 +11,7 @@ export { notificationApiService } from './notificationApiService';
 export { adminApiService } from './adminApiService';
 export { itemApiService } from './itemApiService';
 export { pendingMatchApiService } from './pendingMatchApiService';
+export { staffCustodyApiService } from './staffCustodyApiService';
 
 // Re-export the main API client
 export { default as api } from '@/shared/lib/api';

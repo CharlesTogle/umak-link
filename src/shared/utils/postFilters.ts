@@ -12,6 +12,7 @@ export type PostStatus =
   | 'Rejected'
   | 'Lost'
   | 'Returned'
+  | 'Under Investigation'
 
 export const STATUS_MAP: Record<PostStatus, string> = {
   Missing: 'missing',
@@ -23,7 +24,8 @@ export const STATUS_MAP: Record<PostStatus, string> = {
   Accepted: 'accepted',
   Rejected: 'rejected',
   Lost: 'lost',
-  Returned: 'returned'
+  Returned: 'returned',
+  'Under Investigation': 'under_investigation'
 }
 
 export type FilterMode = 'intersection' | 'union'
@@ -51,13 +53,15 @@ export function filterPosts (
     const postStatus = (post.post_status || '').toLowerCase()
     const itemStatus = (post.item_status || '').toLowerCase()
     const itemType = (post.item_type || '').toLowerCase()
+    const custodyStatus = (post.custody_status || '').toLowerCase()
 
     // Check matches for each filter
     const matches = expectedValues.map(
       expectedValue =>
         postStatus === expectedValue ||
         itemStatus === expectedValue ||
-        itemType === expectedValue
+        itemType === expectedValue ||
+        custodyStatus === expectedValue
     )
 
     // Apply filter mode

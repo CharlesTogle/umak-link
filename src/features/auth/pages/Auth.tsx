@@ -125,7 +125,8 @@ const Auth: React.FC = () => {
     const type = userType.toLowerCase()
     const routeMap: Record<string, string> = {
       admin: '/admin/dashboard',
-      staff: '/staff/home'
+      staff: '/staff/home',
+      guard: '/guard/home'
     }
     return routeMap[type] || '/user/home'
   }

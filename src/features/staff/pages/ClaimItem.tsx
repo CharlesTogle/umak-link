@@ -46,6 +46,26 @@ interface ClaimFormData {
   itemId: string
 }
 
+function getClaimBlockingMessage (post: PostRecordDetails): string | null {
+  if (post.item_type !== 'found') {
+    return 'Only found items can be claimed.'
+  }
+
+  if (post.post_status !== 'accepted') {
+    return 'This found post must be accepted before it can be claimed.'
+  }
+
+  if (post.item_status !== 'unclaimed') {
+    return 'This found post is no longer available for claim.'
+  }
+
+  if (post.custody_status !== 'in_security_office') {
+    return 'This found post cannot be claimed until the item is received in the Security Office.'
+  }
+
+  return null
+}
+
 export default function ClaimItem () {
   const { postId } = useParams<{ postId: string }>()
   const { navigate } = useNavigation()
@@ -56,6 +76,7 @@ export default function ClaimItem () {
 
   // Post state
   const [post, setPost] = useState<PostRecordDetails | null>(null)
+  const [blockingMessage, setBlockingMessage] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   // Lost item post validation hook
@@ -133,7 +154,7 @@ export default function ClaimItem () {
     if (!hasUnsavedChanges) {
       setHasUnsavedChanges(true)
     }
-  }, [selectedUser, formData])
+  }, [selectedUser, formData, hasUnsavedChanges])
 
   const loadPost = useCallback(async () => {
     if (!postId) {
@@ -171,17 +192,14 @@ export default function ClaimItem () {
         return
       }
 
-      // Only allow 'found' item types to be claimed
-      if (fetchedPost.item_type !== 'found') {
-        setToast({
-          show: true,
-          message: 'Only found items can be claimed',
-          color: 'danger'
-        })
+      const claimBlockingMessage = getClaimBlockingMessage(fetchedPost)
+      if (claimBlockingMessage) {
+        setBlockingMessage(claimBlockingMessage)
         setPost(null)
         return
       }
 
+      setBlockingMessage(null)
       setPost(fetchedPost)
     } catch (error) {
       console.error('Error loading post:', error)
@@ -210,7 +228,12 @@ export default function ClaimItem () {
   }
 
   // Handle user selection from search results
-  const handleUserSelect = (user: any) => {
+  const handleUserSelect = (user: {
+    user_id: string
+    user_name: string
+    email: string
+    profile_picture_url?: string | null
+  }) => {
     console.log('Selected user:', user)
     console.log({
       id: user.user_id,
@@ -351,6 +374,17 @@ export default function ClaimItem () {
           return
         }
 
+        const claimBlockingMessage = getClaimBlockingMessage(latestFound)
+        if (claimBlockingMessage) {
+          setToast({
+            show: true,
+            message: claimBlockingMessage,
+            color: 'danger'
+          })
+          setIsSubmitting(false)
+          return
+        }
+
         itemIdToCheck = latestFound.item_id
       } catch (err) {
         console.error('Error fetching post details:', err)
@@ -426,6 +460,7 @@ export default function ClaimItem () {
           claimerName: selectedUser.name,
           claimerEmail: selectedUser.email,
           claimerContactNumber: formattedNumber,
+          claimedAt: toISODate(date, time, meridian),
           posterName: post.is_anonymous ? 'Anonymous' : post.poster_name,
           staffId: user.user_id,
           staffName: user.user_name,
@@ -508,6 +543,7 @@ export default function ClaimItem () {
         claimerName: selectedUser.name,
         claimerEmail: selectedUser.email,
         claimerContactNumber: formattedNumber,
+        claimedAt: toISODate(date, time, meridian),
         posterName: post.is_anonymous ? 'Anonymous' : post.poster_name,
         staffId: user.user_id,
         staffName: user.user_name,
@@ -562,9 +598,12 @@ export default function ClaimItem () {
         <div className='ion-padding mt-15'>
           <div className='w-full grid place-items-center py-16'>
             <IonText color='danger' className='text-center'>
-              <h2 className='text-xl font-semibold mb-2'>Post not found</h2>
+              <h2 className='text-xl font-semibold mb-2'>
+                {blockingMessage ? 'Post not ready for claim' : 'Post not found'}
+              </h2>
               <p className='text-sm'>
-                The post you're looking for doesn't exist or cannot be claimed.
+                {blockingMessage ||
+                  "The post you're looking for doesn't exist or cannot be claimed."}
               </p>
             </IonText>
             <IonButton
@@ -695,15 +734,17 @@ export default function ClaimItem () {
           existingClaim
             ? `This item has been already claimed by ${
                 existingClaim.claimer_name
-              } (${existingClaim.claimer_school_email}) on ${new Date(
+              } (${existingClaim.claimer_school_email})${
                 existingClaim.claimed_at
-              ).toLocaleDateString('en-US', {
-                month: 'long',
-                day: 'numeric',
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-              })}. Do you want to overwrite this claim?`
+                  ? ` on ${new Date(existingClaim.claimed_at).toLocaleDateString('en-US', {
+                      month: 'long',
+                      day: 'numeric',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}`
+                  : ''
+              }. Do you want to overwrite this claim?`
             : 'Do you want to overwrite the existing claim?'
         }
         onSubmit={handleOverwriteClaim}

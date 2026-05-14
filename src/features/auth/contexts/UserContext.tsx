@@ -1,11 +1,13 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import api from '@/shared/lib/api';
+import { getE2EAuthUser } from '@/shared/lib/e2eAuth';
 import { supabase } from '@/shared/lib/supabase';
 import type { UserProfile } from '@/shared/lib/api-types';
 
 // User type enum
-export type UserType = 'User' | 'Staff' | 'Admin';
+export type UserType = 'User' | 'Staff' | 'Admin' | 'Guard';
 
 // User interface matching backend API
 export interface User {
@@ -59,6 +61,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   const fetchUser = useCallback(async () => {
     try {
+      const e2eUser = getE2EAuthUser();
+      if (e2eUser) {
+        return mapUserProfileToUser(e2eUser);
+      }
+
       // Check if we have a Supabase session
       const { data } = await supabase.auth.getSession();
       if (!data.session) {
