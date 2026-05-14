@@ -1,5 +1,6 @@
 import { claimApiService } from '@/shared/services'
 import { getPostFull } from '@/features/posts/data/posts'
+import type { PostRecordDetails } from '@/features/posts/data/posts'
 
 /**
  * Formats a date/time value for display
@@ -37,6 +38,12 @@ export const getStatusColor = (status: string) => {
       return '#b91c1c' // red-700
     case 'discarded':
       return '#C1272D' // umak-red
+    case 'in_security_office':
+      return '#2563eb' // blue-600
+    case 'under_investigation':
+      return '#C1272D' // umak-red
+    case 'claimed_by_student':
+      return '#16a34a' // green-600
     default:
       return '#f59e0b' // amber-500
   }
@@ -62,6 +69,10 @@ export const getItemStatusOptions = (itemType?: string) => {
     // missing items
     return ['returned', 'lost']
   }
+}
+
+export const getClaimedCustodyStatusOptions = () => {
+  return ['in_security_office', 'under_investigation', 'claimed_by_student']
 }
 
 /**
@@ -116,9 +127,12 @@ export const deleteClaimAndUpdateLinkedItem = async (itemId: string): Promise<{ 
     // Use the backend API to delete the claim and update linked item
     const result = await claimApiService.deleteClaimByItem(itemId)
     return { success: result.success }
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Exception deleting claim record:', err)
-    return { success: false, error: err.message || 'Failed to delete claim record' }
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to delete claim record'
+    }
   }
 }
 
@@ -126,9 +140,10 @@ export const deleteClaimAndUpdateLinkedItem = async (itemId: string): Promise<{ 
  * Performs the status change operation
  */
 export const performStatusChangeOperation = async (params: {
-  record: any
+  record: PostRecordDetails
   selectedStatus: string | null
   selectedItemStatus: string | null
+  selectedCustodyStatus: string | null
   updatePostStatusWithNotification: (
     postId: string,
     status: 'accepted' | 'rejected' | 'pending',
@@ -138,13 +153,19 @@ export const performStatusChangeOperation = async (params: {
     postId: string,
     status: 'claimed' | 'unclaimed' | 'discarded' | 'returned' | 'lost'
   ) => Promise<{ success: boolean; error?: string }>
+  updateClaimedCustodyStatus: (
+    postId: number,
+    custodyStatus: 'in_security_office' | 'under_investigation' | 'claimed_by_student'
+  ) => Promise<{ custody_status: string }>
 }) => {
   const {
     record,
     selectedStatus,
     selectedItemStatus,
+    selectedCustodyStatus,
     updatePostStatusWithNotification,
-    updateItemStatus
+    updateItemStatus,
+    updateClaimedCustodyStatus
   } = params
 
   try {
@@ -198,6 +219,21 @@ export const performStatusChangeOperation = async (params: {
           error: itemStatusResult.error || 'Failed to update item status'
         }
       }
+    }
+
+    if (
+      selectedCustodyStatus &&
+      selectedCustodyStatus !== record.custody_status &&
+      record.item_type === 'found' &&
+      record.item_status === 'claimed'
+    ) {
+      await updateClaimedCustodyStatus(
+        Number(record.post_id),
+        selectedCustodyStatus as
+          | 'in_security_office'
+          | 'under_investigation'
+          | 'claimed_by_student'
+      )
     }
 
     // Refresh the record

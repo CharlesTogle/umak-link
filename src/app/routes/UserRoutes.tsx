@@ -17,6 +17,7 @@ import Notifications from '@/features/user/pages/Notifications'
 import ExpandedHistoryPost from '@/features/user/pages/ExpandedHistoryPost'
 import Matches from '@/features/user/pages/Matches'
 import EditPost from '@/features/user/pages/EditPost'
+import UserCustodyHandover from '@/features/user/custody/pages/UserCustodyHandover'
 
 const HistoryFallback = () => <div className='p-4'>Loading History…</div>
 const NewPostFallback = () => <div className='p-4'>Preparing form…</div>
@@ -48,6 +49,16 @@ export default function UserRoutes () {
           )}
         />
         <Route
+          exact
+          path='/user/post/history/view/:postId/handover'
+          render={() => (
+            <Suspense fallback={<DefaultFallback />}>
+              <UserCustodyHandover />
+            </Suspense>
+          )}
+        />
+        <Route
+          exact
           path='/user/post/history/view/:postId'
           render={() => (
             <Suspense fallback={<DefaultFallback />}>

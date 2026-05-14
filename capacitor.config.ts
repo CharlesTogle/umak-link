@@ -5,6 +5,10 @@ const config: CapacitorConfig = {
   appName: 'project-pbl-softeng',
   webDir: 'dist',
   bundledWebRuntime: false,
+  server: {
+    hostname: 'localhost',
+    androidScheme: 'http',
+  },
   plugins: {
     PushNotifications: {
       presentationOptions: ['badge', 'sound', 'alert'],

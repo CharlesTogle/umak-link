@@ -1,5 +1,12 @@
 import api from '@/shared/lib/api'
+import type { PostRecord } from '@/shared/lib/api-types'
 import type { PublicPost } from '@/features/posts/types/post'
+
+type PostRecordWithClaimDetails = PostRecord & {
+  claimed_by_contact?: string | null
+  claimed_at?: string | null
+  profile_picture_url?: string | null
+}
 
 // Helper function to format date to Manila timezone
 function fmtManila (d: string | null): string | null {
@@ -16,13 +23,14 @@ function fmtManila (d: string | null): string | null {
 }
 
 // Helper function to map API response to PublicPost format
-function mapToPublicPost (r: any): PublicPost {
+function mapToPublicPost (r: PostRecord): PublicPost {
+  const record = r as PostRecordWithClaimDetails
   return {
     user_id: r.poster_id,
     item_id: r.item_id,
     username: r.poster_name,
     item_name: r.item_name,
-    profilepicture_url: r.profile_picture_url,
+    profilepicture_url: record.profile_picture_url ?? null,
     item_image_url: r.item_image_url,
     item_description: r.item_description,
     accepted_on_date: r.accepted_on_date,
@@ -31,16 +39,17 @@ function mapToPublicPost (r: any): PublicPost {
     last_seen_at: fmtManila(r.last_seen_at),
     last_seen_location: r.last_seen_location,
     is_anonymous: r.is_anonymous,
-    post_id: r.post_id,
+    post_id: String(r.post_id),
     submission_date: r.submission_date,
     item_type: r.item_type,
     post_status: r.post_status,
+    custody_status: r.custody_status ?? null,
     accepted_by_staff_name: r.accepted_by_staff_name,
     accepted_by_staff_email: r.accepted_by_staff_email,
     claimed_by_name: r.claimed_by_name,
     claimed_by_email: r.claimed_by_email,
-    claimed_by_contact: r.claimed_by_contact,
-    claimed_at: r.claimed_at,
+    claimed_by_contact: record.claimed_by_contact ?? null,
+    claimed_at: record.claimed_at ?? null,
     claim_processed_by_staff_id: r.claim_processed_by_staff_id,
     claim_id: r.claim_id
   }

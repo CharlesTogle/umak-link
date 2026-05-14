@@ -51,6 +51,7 @@ interface PostListProps {
   withDelete?: boolean // Enable delete action for posts
   customLoading?: boolean | undefined // Use custom loading state instead of internal
   showSecurityQuestionDetails?: boolean
+  emptyStateMessage?: string
 }
 
 export default function PostList ({
@@ -71,8 +72,16 @@ export default function PostList ({
   enableReportForClaimed = false,
   withDelete = false,
   customLoading = undefined,
-  showSecurityQuestionDetails
+  showSecurityQuestionDetails,
+  emptyStateMessage
 }: PostListProps) {
+  const platform = (
+    window as Window & {
+      Capacitor?: {
+        getPlatform?: () => string
+      }
+    }
+  ).Capacitor?.getPlatform?.()
   const [isRefreshingContent, setRefreshingContent] = useState<boolean>(false)
   const [showActions, setShowActions] = useState(false)
   const [activePostId, setActivePostId] = useState<string | null>(null)
@@ -390,6 +399,16 @@ export default function PostList ({
     showSecurityQuestionDetails ??
     ['staff', 'staff-pending', 'postRecords'].includes(variant)
 
+  const isLoading = customLoading !== undefined ? customLoading : loading
+  const seen = new Set<string>()
+  const uniquePosts = posts.filter(p => {
+    if (!p || p.post_id == null) return false
+    const id = String(p.post_id)
+    if (seen.has(id)) return false
+    seen.add(id)
+    return true
+  })
+
   return (
     <IonContent ref={ref} className='bg-default-bg'>
       <div
@@ -403,85 +422,77 @@ export default function PostList ({
 
         {typeof children !== 'undefined' ? children : null}
 
-        {(customLoading !== undefined ? customLoading : loading) ? (
+        {isLoading ? (
           <div className='flex flex-col gap-4 animate-pulse'>
             {[...Array(2)].map((_, index) => (
               <CatalogPostSkeleton className='w-full' key={index} />
             ))}
           </div>
+        ) : uniquePosts.length === 0 && emptyStateMessage ? (
+          <div className='px-4 py-10 text-center text-gray-400'>
+            {emptyStateMessage}
+          </div>
         ) : (
           <div className='flex flex-col gap-4'>
-            {(() => {
-              // Deduplicate posts by post_id while preserving order
-              const seen = new Set<string>()
-              const uniquePosts = [] as typeof posts
-              for (const p of posts) {
-                if (!p || p.post_id == null) continue
-                const id = String(p.post_id)
-                if (seen.has(id)) continue
-                seen.add(id)
-                uniquePosts.push(p)
-              }
-              return uniquePosts.map((post, idx) => {
-                let displayUsername = post.username
-                let showAnonIndicator = false
-                if (post.is_anonymous) {
-                  if (variant === 'staff' || variant === 'staff-pending') {
-                    // Staff: show real username + anon indicator
-                    showAnonIndicator = true
-                  } else {
-                    // User: show only 'Anonymous'
-                    displayUsername = 'Anonymous'
-                  }
+            {uniquePosts.map((post, idx) => {
+              let displayUsername = post.username
+              let showAnonIndicator = false
+              if (post.is_anonymous) {
+                if (variant === 'staff' || variant === 'staff-pending') {
+                  // Staff: show real username + anon indicator
+                  showAnonIndicator = true
+                } else {
+                  // User: show only 'Anonymous'
+                  displayUsername = 'Anonymous'
                 }
-                return (
-                  <CatalogPost
-                    key={String(post.post_id)}
-                    itemName={post.item_name}
-                    description={post.item_description || ''}
-                    lastSeen={post.last_seen_at || ''}
-                    imageUrl={post.item_image_url || ''}
-                    locationLastSeenAt={post.last_seen_location || ''}
-                    user_profile_picture_url={post.profilepicture_url}
-                    username={displayUsername}
-                    className={!hasMore && idx === posts.length - 1 ? '' : ''}
-                    onKebabButtonClick={() =>
-                      handleActionSheetClick(post.post_id)
-                    }
-                    itemStatus={
-                      variant === 'staff-pending'
-                        ? post.item_type
-                        : post.item_status
-                    }
-                    onClick={() => onClick?.(post.post_id)}
-                    postId={post.post_id}
-                    variant={variant}
-                    is_anonymous={post.is_anonymous}
-                    showAnonIndicator={showAnonIndicator}
-                    item_type={post.item_type}
-                    setPosts={setPosts}
-                    user_id={post.user_id}
-                    category={post.category ?? 'others'}
-                    currentUserId={user?.user_id}
-                    submittedOn={
-                      post.submission_date ?? 'MM/DD/YYYY 00:00 AM/PM'
-                    }
-                    showSecurityQuestionDetails={
-                      shouldShowSecurityQuestionDetails
-                    }
-                    onShowToast={(message, color) => {
-                      setToastMessage(message)
-                      setToastColor(color)
-                      setShowToast(true)
-                    }}
-                  />
-                )
-              })
-            })()}
+              }
+              return (
+                <CatalogPost
+                  key={String(post.post_id)}
+                  itemName={post.item_name}
+                  description={post.item_description || ''}
+                  lastSeen={post.last_seen_at || ''}
+                  imageUrl={post.item_image_url || ''}
+                  locationLastSeenAt={post.last_seen_location || ''}
+                  user_profile_picture_url={post.profilepicture_url}
+                  username={displayUsername}
+                  className={!hasMore && idx === uniquePosts.length - 1 ? '' : ''}
+                  onKebabButtonClick={() =>
+                    handleActionSheetClick(post.post_id)
+                  }
+                  itemStatus={
+                    variant === 'staff-pending'
+                      ? post.item_type
+                      : post.item_status
+                  }
+                  claimedAt={post.claimed_at ?? null}
+                  onClick={() => onClick?.(post.post_id)}
+                  postId={post.post_id}
+                  variant={variant}
+                  is_anonymous={post.is_anonymous}
+                  showAnonIndicator={showAnonIndicator}
+                  item_type={post.item_type}
+                  custody_status={post.custody_status ?? null}
+                  setPosts={setPosts}
+                  user_id={post.user_id}
+                  category={post.category ?? 'others'}
+                  currentUserId={user?.user_id}
+                  submittedOn={post.submission_date ?? null}
+                  showSecurityQuestionDetails={
+                    shouldShowSecurityQuestionDetails
+                  }
+                  onShowToast={(message, color) => {
+                    setToastMessage(message)
+                    setToastColor(color)
+                    setShowToast(true)
+                  }}
+                />
+              )
+            })}
           </div>
         )}
 
-        {hasMore ? (
+        {hasMore && uniquePosts.length > 0 ? (
           <IonInfiniteScroll threshold='100px' onIonInfinite={loadMorePosts}>
             <div className='pt-5 bg-white!'>
               <IonInfiniteScrollContent
@@ -491,8 +502,9 @@ export default function PostList ({
             </div>
           </IonInfiniteScroll>
         ) : (
-          !loading &&
-          !hasMore && (
+          !isLoading &&
+          !hasMore &&
+          uniquePosts.length > 0 && (
             <p className='mb-10 py-4 flex justify-center items-center text-gray-400 bg-white!'>
               You're all caught up!
             </p>
@@ -546,6 +558,22 @@ export default function PostList ({
               cssClass: 'edit-btn'
             })
           }
+          if (
+            variant === 'user' &&
+            viewDetailsPath === '/user/post/history/view/:postId' &&
+            post &&
+            post.item_type === 'found' &&
+            post.custody_status === 'with_reporter'
+          ) {
+            buttons.push({
+              text: 'Handover to Guard',
+              handler: () => {
+                if (activePostId) {
+                  navigate(`/user/post/history/view/${activePostId}/handover`)
+                }
+              }
+            })
+          }
           // View details: always (handle postRecords specially)
           buttons.push({
             text: 'View details',
@@ -581,7 +609,6 @@ export default function PostList ({
 
               // Prefer Capacitor Share on native platforms; fall back to web sharePost util
               try {
-                const platform = (window as any).Capacitor?.getPlatform?.()
                 if (platform && platform !== 'web') {
                   try {
                     await Share.share({

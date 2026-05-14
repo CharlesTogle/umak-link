@@ -45,7 +45,7 @@ function Header ({
         setUser(currentUser)
       })
     }
-  }, [])
+  }, [getUser, user])
 
 
   const { unreadCount, error } = useUnreadNotificationCount(user?.user_id)
@@ -76,12 +76,10 @@ function Header ({
     }
 
     const userType = user.user_type.toLowerCase()
-    if (userType === 'staff') {
-      navigate('/staff/notifications')
-    } else if (userType === 'admin') {
+    if (userType === 'admin') {
       navigate('/admin/notifications')
     } else {
-      navigate('/user/notifications')
+      navigate(`/${userType}/notifications`)
     }
   }, [navigate, user?.user_type])
   const handleProfileClick = useCallback(() => {

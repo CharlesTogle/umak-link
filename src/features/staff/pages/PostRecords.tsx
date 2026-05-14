@@ -43,6 +43,7 @@ import { isConnected } from '@/shared/utils/networkCheck'
 import { useUser } from '@/features/auth/contexts/UserContext'
 import { useAuditLogs } from '@/shared/hooks/useAuditLogs'
 import { ConfirmationModal } from '@/shared/components/ConfirmationModal'
+import { staffCustodyApiService } from '@/shared/services'
 // Header Component
 const PostRecordsHeader = memo(
   ({ handleClick }: { handleClick: MouseEventHandler }) => {
@@ -77,8 +78,10 @@ export default function PostRecords () {
   const [showActions, setShowActions] = useState(false)
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null)
   const [showNotifyOwnerModal, setShowNotifyOwnerModal] = useState(false)
+  const [showNotifyGuardModal, setShowNotifyGuardModal] = useState(false)
   const [isRefreshingContent, setRefreshingContent] = useState<boolean>(false)
   const [isNotifyingOwner, setIsNotifyingOwner] = useState<boolean>(false)
+  const [isNotifyingGuard, setIsNotifyingGuard] = useState<boolean>(false)
   const contentRef = useRef<HTMLIonContentElement | null>(null)
   const lastNotifyTimeRef = useRef<Map<string, number>>(new Map())
   const { navigate } = useNavigation()
@@ -133,6 +136,12 @@ export default function PostRecords () {
       options: [
         { value: 'Missing', label: 'Missing' },
         { value: 'Found', label: 'Found' }
+      ]
+    },
+    {
+      categoryName: 'Custody Status',
+      options: [
+        { value: 'Under Investigation', label: 'Under Investigation' }
       ]
     }
   ]
@@ -296,6 +305,9 @@ export default function PostRecords () {
       case 'claim':
         navigate(`/staff/post/claim/${id}`)
         break
+      case 'notifyGuard':
+        setShowNotifyGuardModal(true)
+        break
     }
   }
 
@@ -364,6 +376,30 @@ export default function PostRecords () {
       setIsNotifyingOwner(false)
     }
   }
+
+  const handleNotifyGuardConfirm = async () => {
+    setShowNotifyGuardModal(false)
+    const id = selectedPostId
+    if (!id) return
+
+    setIsNotifyingGuard(true)
+
+    try {
+      await staffCustodyApiService.notifyGuard(Number(id))
+      setToastMessage('Guard notified successfully')
+      setToastColor('success')
+      setShowToast(true)
+    } catch (error) {
+      console.error('Failed to notify guard:', error)
+      setToastMessage(
+        error instanceof Error ? error.message : 'Failed to notify guard'
+      )
+      setToastColor('danger')
+      setShowToast(true)
+    } finally {
+      setIsNotifyingGuard(false)
+    }
+  }
   console.log(filteredPosts.length)
 
   return (
@@ -382,6 +418,9 @@ export default function PostRecords () {
       )}
       {isNotifyingOwner && (
         <IonLoading isOpen message='Notifying owner...' spinner='crescent' />
+      )}
+      {isNotifyingGuard && (
+        <IonLoading isOpen message='Notifying guard...' spinner='crescent' />
       )}
       {loading ? (
         <>
@@ -530,11 +569,23 @@ export default function PostRecords () {
             post &&
             post.item_type === 'found' &&
             post.item_status === 'unclaimed' &&
-            post.post_status === 'accepted'
+            post.post_status === 'accepted' &&
+            post.custody_status === 'in_security_office'
           ) {
             buttons.push({
               text: 'Claim Item',
               handler: () => handleActionSheetClick('claim')
+            })
+          }
+
+          if (
+            post &&
+            post.item_type === 'found' &&
+            post.custody_status === 'under_investigation'
+          ) {
+            buttons.push({
+              text: 'Notify Guard',
+              handler: () => handleActionSheetClick('notifyGuard')
             })
           }
 
@@ -592,6 +643,15 @@ export default function PostRecords () {
         subheading='Are you sure you want to notify the owner that similar items are in the security office?'
         onSubmit={handleNotifyOwnerConfirm}
         onCancel={() => setShowNotifyOwnerModal(false)}
+        submitLabel='Confirm'
+        cancelLabel='Cancel'
+      />
+      <ConfirmationModal
+        isOpen={showNotifyGuardModal}
+        heading='Notify Guard'
+        subheading='Are you sure you want to notify the guard assigned to follow up on this under-investigation item?'
+        onSubmit={handleNotifyGuardConfirm}
+        onCancel={() => setShowNotifyGuardModal(false)}
         submitLabel='Confirm'
         cancelLabel='Cancel'
       />

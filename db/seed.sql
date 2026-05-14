@@ -232,13 +232,58 @@ DECLARE
   $locations$::jsonb;
   post_count integer := 1000;
   seed_hash_prefix text := 'seed-umak-link-';
+  claimed_feed_seed_target integer := 240;
   i integer;
   user_idx integer;
+  claim_seed_index integer := 0;
   template_count integer := jsonb_array_length(templates);
   location_count integer := jsonb_array_length(locations);
   seeded_image_ids integer[];
   seeded_item_ids uuid[];
   seeded_post_ids integer[];
+  seed_staff_ids uuid[];
+  claimer_names text[] := ARRAY[
+    'Andrea Ramos',
+    'Miguel Torres',
+    'Sofia Castillo',
+    'Paolo Mendoza',
+    'Leah Santos',
+    'Noah Garcia',
+    'Alyssa Cruz',
+    'Ethan Villanueva',
+    'Trisha Flores',
+    'Marco Lim',
+    'Jessa Navarro',
+    'Carl Domingo'
+  ];
+  claimer_emails text[] := ARRAY[
+    'andrea.ramos@umak.edu.ph',
+    'miguel.torres@umak.edu.ph',
+    'sofia.castillo@umak.edu.ph',
+    'paolo.mendoza@umak.edu.ph',
+    'leah.santos@umak.edu.ph',
+    'noah.garcia@umak.edu.ph',
+    'alyssa.cruz@umak.edu.ph',
+    'ethan.villanueva@umak.edu.ph',
+    'trisha.flores@umak.edu.ph',
+    'marco.lim@umak.edu.ph',
+    'jessa.navarro@umak.edu.ph',
+    'carl.domingo@umak.edu.ph'
+  ];
+  claimer_contacts text[] := ARRAY[
+    '0917 100 2001',
+    '0917 100 2002',
+    '0917 100 2003',
+    '0917 100 2004',
+    '0917 100 2005',
+    '0917 100 2006',
+    '0917 100 2007',
+    '0917 100 2008',
+    '0917 100 2009',
+    '0917 100 2010',
+    '0917 100 2011',
+    '0917 100 2012'
+  ];
   template jsonb;
   location_path jsonb;
   adjective text;
@@ -260,7 +305,16 @@ DECLARE
   last_seen_minutes integer;
   submitted_at timestamptz;
   accepted_at timestamptz;
+  office_received_at timestamptz;
+  claimed_at timestamptz;
   is_anonymous_post boolean;
+  is_claim_seed boolean;
+  is_reported_claim_seed boolean;
+  claim_processed_by_staff_id uuid;
+  claimer_name text;
+  claimer_school_email text;
+  claimer_contact_num text;
+  created_claim_id uuid;
   created_post_id integer;
   created_item_id uuid;
 BEGIN
@@ -282,8 +336,17 @@ BEGIN
         'ian.castillo@umak.edu.ph',
         'janelle.torres@umak.edu.ph',
         'kyle.domingo@umak.edu.ph'
-      ]
-     );
+	      ]
+	     );
+
+  SELECT array_agg(user_id ORDER BY created_at, user_id)
+  INTO seed_staff_ids
+  FROM public.user_table
+  WHERE user_type = 'Staff'::public.user_type_enum;
+
+  IF coalesce(array_length(seed_staff_ids, 1), 0) = 0 THEN
+    RAISE EXCEPTION 'Seed data requires at least one staff user.';
+  END IF;
 
   SELECT COALESCE(array_agg(item_image_id), ARRAY[]::integer[])
   INTO seeded_image_ids
@@ -338,24 +401,33 @@ BEGIN
       ELSE 'lost'::public.item_type_enum
     END;
 
-    post_status := CASE
-      WHEN i % 29 = 0 THEN 'archived'::public.post_status_enum
-      WHEN i % 17 = 0 OR i % 41 = 0 THEN 'reported'::public.post_status_enum
-      WHEN i % 10 = 0 OR i % 37 = 0 THEN 'rejected'::public.post_status_enum
-      WHEN i % 5 = 0 OR i % 19 = 0 THEN 'pending'::public.post_status_enum
-      ELSE 'accepted'::public.post_status_enum
-    END;
+    is_claim_seed := item_type = 'found'::public.item_type_enum
+      AND i <= claimed_feed_seed_target * 2;
+
+    IF is_claim_seed THEN
+      claim_seed_index := claim_seed_index + 1;
+      is_reported_claim_seed := claim_seed_index % 4 = 0;
+      post_status := 'accepted'::public.post_status_enum;
+    ELSE
+      is_reported_claim_seed := FALSE;
+      post_status := CASE
+        WHEN i % 29 = 0 THEN 'archived'::public.post_status_enum
+        WHEN i % 10 = 0 OR i % 37 = 0 THEN 'rejected'::public.post_status_enum
+        WHEN i % 5 = 0 OR i % 19 = 0 THEN 'pending'::public.post_status_enum
+        ELSE 'accepted'::public.post_status_enum
+      END;
+    END IF;
 
     item_status := CASE
       WHEN item_type = 'lost'::public.item_type_enum THEN 'lost'::public.item_status_enum
+      WHEN is_claim_seed THEN 'unclaimed'::public.item_status_enum
       WHEN post_status IN ('pending'::public.post_status_enum, 'rejected'::public.post_status_enum, 'reported'::public.post_status_enum) THEN 'unclaimed'::public.item_status_enum
       WHEN post_status = 'archived'::public.post_status_enum THEN
         CASE
           WHEN i % 2 = 0 THEN 'returned'::public.item_status_enum
-          ELSE 'claimed'::public.item_status_enum
+          ELSE 'discarded'::public.item_status_enum
         END
       WHEN i % 11 = 0 THEN 'returned'::public.item_status_enum
-      WHEN i % 7 = 0 THEN 'claimed'::public.item_status_enum
       WHEN i % 13 = 0 THEN 'discarded'::public.item_status_enum
       ELSE 'unclaimed'::public.item_status_enum
     END;
@@ -364,11 +436,19 @@ BEGIN
     image_url := template ->> 'image_url';
     item_name := adjective || ' ' || visual_trait || ' ' || name_modifier || ' ' || (template ->> 'name');
     item_description := adjective || ' ' || lower(visual_trait) || ' ' || lower(name_modifier) || ' ' || (template ->> 'description') || ' ' || detail_note || ' ' || context_note || ' ' || condition_note;
-    submitted_at := now() - make_interval(
-      days => 1 + ((i * 5 + (i / 9)) % 210),
-      hours => ((i * 7 + 3) % 24),
-      mins => ((i * 11 + 17) % 60)
-    );
+    IF is_claim_seed THEN
+      submitted_at := now() - make_interval(
+        days => 21 + ((claim_seed_index * 3 + i) % 160),
+        hours => ((claim_seed_index * 5 + i) % 24),
+        mins => ((claim_seed_index * 7 + i) % 60)
+      );
+    ELSE
+      submitted_at := now() - make_interval(
+        days => 1 + ((i * 5 + (i / 9)) % 210),
+        hours => ((i * 7 + 3) % 24),
+        mins => ((i * 11 + 17) % 60)
+      );
+    END IF;
     last_seen_date := (submitted_at AT TIME ZONE 'Asia/Manila')::date - ((i * 2) % 5);
     last_seen_hours := 7 + ((i * 3) % 12);
     last_seen_minutes := (i * 11 + 23) % 60;
@@ -423,6 +503,113 @@ BEGIN
       FROM public.item_table
       WHERE item_id = created_item_id
     );
+
+    IF is_claim_seed THEN
+      claim_processed_by_staff_id := seed_staff_ids[1 + ((claim_seed_index - 1) % array_length(seed_staff_ids, 1))];
+      claimer_name := claimer_names[1 + ((claim_seed_index - 1) % array_length(claimer_names, 1))];
+      claimer_school_email := claimer_emails[1 + ((claim_seed_index - 1) % array_length(claimer_emails, 1))];
+      claimer_contact_num := claimer_contacts[1 + ((claim_seed_index - 1) % array_length(claimer_contacts, 1))];
+      office_received_at := accepted_at + make_interval(
+        hours => 4 + ((claim_seed_index * 5 + i) % 36),
+        mins => ((claim_seed_index * 9 + i) % 60)
+      );
+      claimed_at := office_received_at + make_interval(
+        days => 1 + ((claim_seed_index * 2 + i) % 12),
+        hours => 1 + ((claim_seed_index * 7 + i) % 12),
+        mins => ((claim_seed_index * 11 + i) % 60)
+      );
+      created_claim_id := gen_random_uuid();
+
+      INSERT INTO public.custody_record_table (
+        custody_record_id,
+        post_id,
+        item_id,
+        actor_user_id,
+        record_type,
+        details,
+        occurred_at,
+        created_at
+      )
+      VALUES (
+        gen_random_uuid(),
+        created_post_id,
+        created_item_id,
+        claim_processed_by_staff_id,
+        'security_office_received'::public.custody_record_type_enum,
+        jsonb_build_object(
+          'source', 'seed',
+          'message', 'Seed data: item received in the Security Office.'
+        ),
+        office_received_at,
+        office_received_at
+      );
+
+      INSERT INTO public.claim_table (
+        claim_id,
+        item_id,
+        claimer_name,
+        claimer_school_email,
+        claimer_contact_num,
+        processed_by_staff_id,
+        claimed_at,
+        linked_lost_item_id
+      )
+      VALUES (
+        created_claim_id,
+        created_item_id,
+        claimer_name,
+        claimer_school_email,
+        claimer_contact_num,
+        claim_processed_by_staff_id,
+        claimed_at,
+        NULL
+      );
+
+      UPDATE public.item_table
+      SET status = 'claimed'::public.item_status_enum
+      WHERE item_id = created_item_id;
+
+      INSERT INTO public.custody_record_table (
+        custody_record_id,
+        post_id,
+        item_id,
+        actor_user_id,
+        record_type,
+        details,
+        occurred_at,
+        created_at
+      )
+      VALUES (
+        gen_random_uuid(),
+        created_post_id,
+        created_item_id,
+        claim_processed_by_staff_id,
+        'claimed_by_student'::public.custody_record_type_enum,
+        jsonb_build_object(
+          'source', 'seed',
+          'claimer_name', claimer_name,
+          'claimer_school_email', claimer_school_email,
+          'claimer_contact_num', claimer_contact_num
+        ),
+        claimed_at,
+        claimed_at
+      );
+
+      IF is_reported_claim_seed THEN
+        PERFORM public.create_or_get_fraud_report(
+          p_post_id => created_post_id,
+          p_reason => 'Seed fraud review: claimed item requires manual verification.',
+          p_proof_image_url => NULL,
+          p_claim_id => created_claim_id,
+          p_claimer_name => claimer_name,
+          p_claimer_school_email => claimer_school_email,
+          p_claimer_contact_num => claimer_contact_num,
+          p_claimed_at => claimed_at,
+          p_claim_processed_by_staff_id => claim_processed_by_staff_id,
+          p_reported_by => seed_user_ids[user_idx]
+        );
+      END IF;
+    END IF;
   END LOOP;
 END $$;
 

@@ -1,6 +1,7 @@
 import { googleLogout } from '@react-oauth/google';
 import { SocialLogin } from '@capgo/capacitor-social-login';
 import api from '@/shared/lib/api';
+import { clearE2eAuthOverride } from '@/shared/lib/e2eAuth';
 import { supabase } from '@/shared/lib/supabase';
 import type { UserProfile } from '@/shared/lib/api-types';
 import type { User } from '@/features/auth/contexts/UserContext';
@@ -121,6 +122,8 @@ export const authServices = {
           console.log('[authServices] Social logout not needed or failed:', socialError);
         }
       }
+
+      clearE2eAuthOverride();
 
       return { error: null };
     } catch (error) {
