@@ -2993,93 +2993,36 @@ ALTER FUNCTION public.search_items_fts_staff(search_term text, limit_count integ
 CREATE FUNCTION public.search_users_secure(search_query text, search_limit integer DEFAULT 10) RETURNS TABLE(out_user_id uuid, out_user_name text, out_email text, out_profile_picture_url text, out_user_type text)
     LANGUAGE plpgsql SECURITY DEFINER
     AS $$
-DECLARE
-  requester_type TEXT;
-  current_count INTEGER;
 BEGIN
-  -- ⚠️ TODO: Add system lockdown check here when implemented
-  -- IF is_system_locked THEN RAISE EXCEPTION 'System is in lockdown mode' USING ERRCODE = 'P0003'; END IF;
-
-  -- Verify requester is admin
-  SELECT ut.user_type INTO requester_type
-  FROM user_table ut
-  WHERE ut.user_id = auth.uid();
-
-  IF requester_type IS NULL OR requester_type != 'Admin' THEN
-    RAISE EXCEPTION 'Unauthorized: Only admins can search users'
-      USING ERRCODE = 'P0001';
-  END IF;
-
-  -- Rate limiting check (100 searches per minute per admin)
-  INSERT INTO search_rate_limit (user_id, search_count, window_start)
-  VALUES (auth.uid(), 1, NOW())
-  ON CONFLICT (user_id) DO UPDATE
-  SET 
-    search_count = CASE
-      WHEN search_rate_limit.window_start < NOW() - INTERVAL '1 minute'
-      THEN 1
-      ELSE search_rate_limit.search_count + 1
-    END,
-    window_start = CASE
-      WHEN search_rate_limit.window_start < NOW() - INTERVAL '1 minute'
-      THEN NOW()
-      ELSE search_rate_limit.window_start
-    END
-  RETURNING search_rate_limit.search_count INTO current_count;
-
-  IF current_count > 10 THEN
-    RAISE EXCEPTION 'Rate limit exceeded: Too many searches (max 100 per minute)'
-      USING ERRCODE = 'P0002';
-  END IF;
-
-  -- Validate and sanitize input
+  -- Authorization is enforced in the backend route before this helper is called.
   IF search_query IS NULL OR LENGTH(TRIM(search_query)) < 2 THEN
-    RETURN; -- Return empty result for short queries
+    RETURN;
   END IF;
 
-  -- Limit the search_limit parameter
   IF search_limit IS NULL OR search_limit > 50 THEN
     search_limit := 50;
   END IF;
 
-  -- ⚠️ TODO: Log the search action using your custom audit log function
-  -- PERFORM log_admin_action(
-  --   'search',
-  --   NULL,
-  --   jsonb_build_object(
-  --     'query', search_query, 
-  --     'limit', search_limit,
-  --     'timestamp', NOW()
-  --   )
-  -- );
-
-  -- Execute search with full-text search and fuzzy matching
   RETURN QUERY
-  SELECT 
+  SELECT
     ut.user_id AS out_user_id,
     ut.user_name AS out_user_name,
     ut.email AS out_email,
     ut.profile_picture_url AS out_profile_picture_url,
     ut.user_type::TEXT AS out_user_type
-  FROM user_table ut
-  WHERE 
-    -- Exclude already Admin/Staff users (only show regular users)
+  FROM public.user_table ut
+  WHERE
     ut.user_type = 'User'
     AND (
-      -- Full-text search for better performance on large datasets
-      to_tsvector('english', 
-        COALESCE(ut.user_name, '') || ' ' || 
+      to_tsvector('english',
+        COALESCE(ut.user_name, '') || ' ' ||
         COALESCE(ut.email, '')
       ) @@ plainto_tsquery('english', search_query)
-      OR
-      -- Trigram similarity for fuzzy matching (typo tolerance)
-      ut.user_name ILIKE '%' || search_query || '%'
-      OR
-      ut.email ILIKE '%' || search_query || '%'
+      OR ut.user_name ILIKE '%' || search_query || '%'
+      OR ut.email ILIKE '%' || search_query || '%'
     )
-  ORDER BY 
-    -- Prioritize exact matches first
-    CASE 
+  ORDER BY
+    CASE
       WHEN LOWER(ut.email) = LOWER(search_query) THEN 1
       WHEN LOWER(ut.user_name) = LOWER(search_query) THEN 2
       WHEN LOWER(ut.email) LIKE LOWER(search_query) || '%' THEN 3
@@ -3091,8 +3034,7 @@ BEGIN
 
 EXCEPTION
   WHEN OTHERS THEN
-    -- Log error and re-raise
-    RAISE NOTICE 'Search error for admin %: %', auth.uid(), SQLERRM;
+    RAISE NOTICE 'Search error in search_users_secure: %', SQLERRM;
     RAISE;
 END;
 $$;
@@ -3107,80 +3049,36 @@ ALTER FUNCTION public.search_users_secure(search_query text, search_limit intege
 CREATE FUNCTION public.search_users_secure_staff(search_query text, search_limit integer DEFAULT 10) RETURNS TABLE(out_user_id uuid, out_user_name text, out_email text, out_profile_picture_url text, out_user_type text)
     LANGUAGE plpgsql SECURITY DEFINER
     AS $$
-DECLARE
-  requester_type TEXT;
-  current_count INTEGER;
 BEGIN
-
-  -- Verify requester is admin
-  SELECT ut.user_type INTO requester_type
-  FROM user_table ut
-  WHERE ut.user_id = auth.uid();
-
-  IF requester_type IS NULL OR requester_type != 'Staff' THEN
-    RAISE EXCEPTION 'Unauthorized: Only Staff can use this'
-      USING ERRCODE = 'P0001';
-  END IF;
-
-  -- Rate limiting check (100 searches per minute per admin)
-  INSERT INTO search_rate_limit (user_id, search_count, window_start)
-  VALUES (auth.uid(), 1, NOW())
-  ON CONFLICT (user_id) DO UPDATE
-  SET 
-    search_count = CASE
-      WHEN search_rate_limit.window_start < NOW() - INTERVAL '1 minute'
-      THEN 1
-      ELSE search_rate_limit.search_count + 1
-    END,
-    window_start = CASE
-      WHEN search_rate_limit.window_start < NOW() - INTERVAL '1 minute'
-      THEN NOW()
-      ELSE search_rate_limit.window_start
-    END
-  RETURNING search_rate_limit.search_count INTO current_count;
-
-  IF current_count > 10 THEN
-    RAISE EXCEPTION 'Rate limit exceeded: Too many searches (max 100 per minute)'
-      USING ERRCODE = 'P0002';
-  END IF;
-
-  -- Validate and sanitize input
+  -- Authorization is enforced in the backend route before this helper is called.
   IF search_query IS NULL OR LENGTH(TRIM(search_query)) < 2 THEN
-    RETURN; -- Return empty result for short queries
+    RETURN;
   END IF;
 
-  -- Limit the search_limit parameter
   IF search_limit IS NULL OR search_limit > 50 THEN
     search_limit := 50;
   END IF;
 
-  -- Execute search with full-text search and fuzzy matching
   RETURN QUERY
-  SELECT 
+  SELECT
     ut.user_id AS out_user_id,
     ut.user_name AS out_user_name,
     ut.email AS out_email,
     ut.profile_picture_url AS out_profile_picture_url,
     ut.user_type::TEXT AS out_user_type
-  FROM user_table ut
-  WHERE 
-    -- Exclude already Admin/Staff users (only show regular users)
+  FROM public.user_table ut
+  WHERE
     ut.user_type = 'User'
     AND (
-      -- Full-text search for better performance on large datasets
-      to_tsvector('english', 
-        COALESCE(ut.user_name, '') || ' ' || 
+      to_tsvector('english',
+        COALESCE(ut.user_name, '') || ' ' ||
         COALESCE(ut.email, '')
       ) @@ plainto_tsquery('english', search_query)
-      OR
-      -- Trigram similarity for fuzzy matching (typo tolerance)
-      ut.user_name ILIKE '%' || search_query || '%'
-      OR
-      ut.email ILIKE '%' || search_query || '%'
+      OR ut.user_name ILIKE '%' || search_query || '%'
+      OR ut.email ILIKE '%' || search_query || '%'
     )
-  ORDER BY 
-    -- Prioritize exact matches first
-    CASE 
+  ORDER BY
+    CASE
       WHEN LOWER(ut.email) = LOWER(search_query) THEN 1
       WHEN LOWER(ut.user_name) = LOWER(search_query) THEN 2
       WHEN LOWER(ut.email) LIKE LOWER(search_query) || '%' THEN 3
@@ -3192,8 +3090,7 @@ BEGIN
 
 EXCEPTION
   WHEN OTHERS THEN
-    -- Log error and re-raise
-    RAISE NOTICE 'Search error for admin %: %', auth.uid(), SQLERRM;
+    RAISE NOTICE 'Search error in search_users_secure_staff: %', SQLERRM;
     RAISE;
 END;
 $$;
@@ -24016,8 +23913,6 @@ GRANT ALL ON FUNCTION public.search_items_fts_staff(search_term text, limit_coun
 -- Name: FUNCTION search_users_secure(search_query text, search_limit integer); Type: ACL; Schema: public; Owner: postgres
 --
 
-GRANT ALL ON FUNCTION public.search_users_secure(search_query text, search_limit integer) TO anon;
-GRANT ALL ON FUNCTION public.search_users_secure(search_query text, search_limit integer) TO authenticated;
 GRANT ALL ON FUNCTION public.search_users_secure(search_query text, search_limit integer) TO service_role;
 
 
@@ -24025,8 +23920,6 @@ GRANT ALL ON FUNCTION public.search_users_secure(search_query text, search_limit
 -- Name: FUNCTION search_users_secure_staff(search_query text, search_limit integer); Type: ACL; Schema: public; Owner: postgres
 --
 
-GRANT ALL ON FUNCTION public.search_users_secure_staff(search_query text, search_limit integer) TO anon;
-GRANT ALL ON FUNCTION public.search_users_secure_staff(search_query text, search_limit integer) TO authenticated;
 GRANT ALL ON FUNCTION public.search_users_secure_staff(search_query text, search_limit integer) TO service_role;
 
 
@@ -25685,4 +25578,3 @@ ALTER EVENT TRIGGER pgrst_drop_watch OWNER TO supabase_admin;
 --
 
 \unrestrict cMqR2aQC2V7SafzBKHvSuAMwab1aqNs49qaJJu8g27z1ClcYS101Mg8xEtsIQPp
-
