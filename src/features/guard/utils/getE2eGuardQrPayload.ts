@@ -1,4 +1,4 @@
-import type { GuardManualEntryPayload } from '@/features/guard/types/guard-custody'
+import type { GuardQrPayload } from '@/features/guard/types/guard-custody'
 
 function isE2EGuardScanEnabled (): boolean {
   return (
@@ -7,7 +7,7 @@ function isE2EGuardScanEnabled (): boolean {
   )
 }
 
-export function getE2EGuardQrPayload (): GuardManualEntryPayload | null {
+export function getE2EGuardQrPayload (): GuardQrPayload | null {
   if (!isE2EGuardScanEnabled() || typeof window === 'undefined') {
     return null
   }

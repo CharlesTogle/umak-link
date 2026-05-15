@@ -3,6 +3,7 @@ import api from '@/shared/lib/api'
 import { useAuditLogs } from '@/shared/hooks/useAuditLogs'
 import { useUser } from '@/features/auth/contexts/UserContext'
 import useNotifications from '@/features/user/hooks/useNotifications'
+import type { PostRecordDetails } from '@/shared/lib/api-types'
 
 export interface CreateStaffPostInput {
   item: {
@@ -22,8 +23,13 @@ export interface CreateStaffPostInput {
 }
 
 interface PostResponse {
-  post: any | null
+  post: { post_id: number } | null
   error: string | null
+}
+
+interface StaffItemDetails {
+  item_name: string | null
+  status: string | null
 }
 
 export function usePostActionsStaffServices () {
@@ -110,17 +116,17 @@ export function usePostActionsStaffServices () {
       }
 
       // Fetch post and item details before update
-      let postData: any
-      let itemData: any
+      let postData: PostRecordDetails
+      let itemData: StaffItemDetails
       try {
         postData = await postApiService.getFullPost(parseInt(postId))
-        itemData = await api.items.get(postData.item_id)
+        itemData = (await api.items.get(postData.item_id)) as StaffItemDetails
       } catch (error) {
         console.error('Error fetching post/item data:', error)
         return false
       }
 
-      const oldStatus = postData?.status
+      const oldStatus = postData?.post_status
       const itemName = itemData?.item_name || 'Unknown Item'
 
       // Update post status via API
@@ -171,11 +177,11 @@ export function usePostActionsStaffServices () {
   ): Promise<{ success: boolean; error?: string }> => {
     try {
       // Fetch post details including poster info before status change
-      let postData: any
-      let itemData: any
+      let postData: PostRecordDetails
+      let itemData: StaffItemDetails
       try {
         postData = await postApiService.getFullPost(parseInt(postId))
-        itemData = await api.items.get(postData.item_id)
+        itemData = (await api.items.get(postData.item_id)) as StaffItemDetails
       } catch (error) {
         console.error('Error fetching post/item data:', error)
         return {
@@ -263,7 +269,8 @@ export function usePostActionsStaffServices () {
    */
   const updateItemStatus = async (
     postId: string,
-    newItemStatus: 'claimed' | 'unclaimed' | 'lost' | 'returned' | 'discarded'
+    newItemStatus: 'claimed' | 'unclaimed' | 'lost' | 'returned' | 'discarded',
+    discardReason?: string
   ): Promise<{ success: boolean; error?: string }> => {
     try {
       let currentUser = user
@@ -274,11 +281,11 @@ export function usePostActionsStaffServices () {
       }
 
       // Fetch post and item details
-      let postData: any
-      let itemData: any
+      let postData: PostRecordDetails
+      let itemData: StaffItemDetails
       try {
         postData = await postApiService.getFullPost(parseInt(postId))
-        itemData = await api.items.get(postData.item_id)
+        itemData = (await api.items.get(postData.item_id)) as StaffItemDetails
       } catch (error) {
         console.error('Error fetching post/item data:', error)
         return {
@@ -296,11 +303,13 @@ export function usePostActionsStaffServices () {
 
       const oldStatus = itemData?.status
       const itemName = itemData?.item_name || 'Unknown Item'
+      const normalizedDiscardReason = discardReason?.trim() || undefined
 
       // Update item status via API
       const updateResult = await postApiService.updateItemStatus(
         itemId,
-        newItemStatus
+        newItemStatus,
+        normalizedDiscardReason
       )
 
       if (!updateResult.success) {
@@ -311,15 +320,21 @@ export function usePostActionsStaffServices () {
       // Log the action
       await insertAuditLog({
         user_id: currentUser?.user_id || 'unknown',
-        action_type: 'item_status_updated',
+        action_type: newItemStatus === 'discarded' ? 'item_discarded' : 'item_status_updated',
         details: {
-          message: `${
-            currentUser?.user_name || 'Staff'
-          } changed item status of ${itemName} from ${oldStatus} to ${newItemStatus}`,
+          message:
+            newItemStatus === 'discarded' && normalizedDiscardReason
+              ? `${
+                  currentUser?.user_name || 'Staff'
+                } changed item status of ${itemName} from ${oldStatus} to ${newItemStatus}. Disposition: ${normalizedDiscardReason}`
+              : `${
+                  currentUser?.user_name || 'Staff'
+                } changed item status of ${itemName} from ${oldStatus} to ${newItemStatus}`,
           item_id: itemId,
           post_id: postId,
           old_status: oldStatus,
-          new_status: newItemStatus
+          new_status: newItemStatus,
+          discard_reason: normalizedDiscardReason || null
         }
       })
 

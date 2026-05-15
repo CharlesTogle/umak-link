@@ -13,7 +13,7 @@ import {
   readActiveGuardScanSession,
   storeActiveGuardScanSession
 } from '@/features/guard/state/guardSessionStorage'
-import type { GuardManualEntryPayload } from '@/features/guard/types/guard-custody'
+import type { GuardScanPayload } from '@/features/guard/types/guard-custody'
 
 export default function GuardScan () {
   const { navigate } = useNavigation()
@@ -32,19 +32,13 @@ export default function GuardScan () {
     setShowToast(true)
   }
 
-  const loadReview = async ({
-    qrCodeSessionId,
-    sessionToken
-  }: GuardManualEntryPayload) => {
-    const scan = await guardScanMutation.mutateAsync({
-      qrCodeSessionId,
-      sessionToken
-    })
+  const loadReview = async (payload: GuardScanPayload) => {
+    const scan = await guardScanMutation.mutateAsync(payload)
     storeActiveGuardScanSession(scan)
     navigate(`/guard/scan/review/${scan.custody_attempt_id}`)
   }
 
-  const handleLoadReview = async (payload: GuardManualEntryPayload) => {
+  const handleLoadReview = async (payload: GuardScanPayload) => {
     try {
       await loadReview(payload)
     } catch (error) {

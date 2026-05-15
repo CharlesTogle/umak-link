@@ -90,6 +90,7 @@ export function useUserCustodyPageFlow (postId: number) {
     if (!sessionStatusQuery.data || !activeSession) return
 
     const hasSessionChanged =
+      activeSession.manualEntryCode !== sessionStatusQuery.data.manual_entry_code ||
       activeSession.custodyStatus !== sessionStatusQuery.data.custody_status ||
       activeSession.attemptStatus !== sessionStatusQuery.data.attempt_status ||
       activeSession.qrStatus !== sessionStatusQuery.data.qr_status ||
@@ -103,6 +104,7 @@ export function useUserCustodyPageFlow (postId: number) {
 
     const nextSession = storeActiveUserCustodySession({
       ...activeSession,
+      manualEntryCode: sessionStatusQuery.data.manual_entry_code,
       custodyStatus: sessionStatusQuery.data.custody_status,
       attemptStatus: sessionStatusQuery.data.attempt_status,
       qrStatus: sessionStatusQuery.data.qr_status,

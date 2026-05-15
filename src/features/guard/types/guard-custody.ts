@@ -11,19 +11,25 @@ export type GuardScanResponse = ApiGuardScanResponse
 export type GuardDecisionRequest = ApiGuardDecisionRequest
 export type GuardDecisionResponse = ApiGuardDecisionResponse
 
-export interface GuardManualEntryPayload {
+export interface GuardQrPayload {
   qrCodeSessionId: string
   sessionToken: string
 }
 
+export interface GuardManualCodePayload {
+  manualEntryCode: string
+}
+
+export type GuardScanPayload = GuardQrPayload | GuardManualCodePayload
+
 export interface GuardManualEntryFormProps {
   isSubmitting: boolean
-  onSubmit: (payload: GuardManualEntryPayload) => Promise<void>
+  onSubmit: (payload: GuardManualCodePayload) => Promise<void>
 }
 
 export interface GuardCameraScannerCardProps {
   isSubmitting: boolean
-  onScan: (payload: GuardManualEntryPayload) => Promise<void>
+  onScan: (payload: GuardQrPayload) => Promise<void>
 }
 
 export interface GuardRouteParams {

@@ -7,23 +7,23 @@ export default function GuardManualEntryForm ({
   isSubmitting,
   onSubmit
 }: GuardManualEntryFormProps) {
-  const [qrCodeSessionId, setQrCodeSessionId] = useState('')
-  const [sessionToken, setSessionToken] = useState('')
+  const [manualEntryCode, setManualEntryCode] = useState('')
   const [validationError, setValidationError] = useState('')
 
-  const handleSubmit = async () => {
-    const trimmedQrCodeSessionId = qrCodeSessionId.trim()
-    const trimmedSessionToken = sessionToken.trim()
+  const normalizeManualEntryCode = (value: string) =>
+    value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6)
 
-    if (!trimmedQrCodeSessionId || !trimmedSessionToken) {
-      setValidationError('QR session ID and session token are required.')
+  const handleSubmit = async () => {
+    const trimmedManualEntryCode = normalizeManualEntryCode(manualEntryCode)
+
+    if (!trimmedManualEntryCode) {
+      setValidationError('Manual entry code is required.')
       return
     }
 
     setValidationError('')
     await onSubmit({
-      qrCodeSessionId: trimmedQrCodeSessionId,
-      sessionToken: trimmedSessionToken
+      manualEntryCode: trimmedManualEntryCode
     })
   }
 
@@ -31,36 +31,29 @@ export default function GuardManualEntryForm ({
     <div className='space-y-4 font-default-font' data-testid='guard-manual-entry-form'>
       <div className='space-y-2'>
         <label
-          htmlFor='guard-qr-session-id'
+          htmlFor='guard-manual-entry-code'
           className='text-sm font-semibold text-slate-800'
         >
-          QR Session ID
+          Manual Entry Code
         </label>
         <IonInput
-          id='guard-qr-session-id'
-          value={qrCodeSessionId}
+          id='guard-manual-entry-code'
+          value={manualEntryCode}
           fill='outline'
-          placeholder='Paste the QR session ID'
-          onIonInput={event => setQrCodeSessionId(String(event.detail.value ?? ''))}
-          data-testid='guard-qr-session-id-input'
+          placeholder='Enter the 6-character code'
+          onIonInput={event => {
+            setValidationError('')
+            setManualEntryCode(
+              normalizeManualEntryCode(String(event.detail.value ?? ''))
+            )
+          }}
+          maxlength={6}
+          autoCapitalize='characters'
+          data-testid='guard-manual-entry-code-input'
         />
-      </div>
-
-      <div className='space-y-2'>
-        <label
-          htmlFor='guard-session-token'
-          className='text-sm font-semibold text-slate-800'
-        >
-          Session Token
-        </label>
-        <IonInput
-          id='guard-session-token'
-          value={sessionToken}
-          fill='outline'
-          placeholder='Paste the session token'
-          onIonInput={event => setSessionToken(String(event.detail.value ?? ''))}
-          data-testid='guard-session-token-input'
-        />
+        <p className='text-sm leading-6 text-slate-600'>
+          Only the code shown on the student&apos;s screen is needed here.
+        </p>
       </div>
 
       {validationError ? (

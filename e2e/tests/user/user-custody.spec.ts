@@ -100,6 +100,7 @@ async function mockCustodyFlow (
       body: JSON.stringify({
         custody_attempt_id: 'attempt-123',
         qr_code_session_id: 'qr-session-123',
+        manual_entry_code: 'AB2C3D',
         attempt_status: 'open',
         qr_status: 'active',
         custody_status: 'handover_in_progress',
@@ -123,6 +124,7 @@ async function mockCustodyFlow (
           custody_attempt_id: 'attempt-123',
           post_id: 123,
           item_id: 'item-123',
+          manual_entry_code: 'AB2C3D',
           qr_status: 'expired',
           attempt_status: 'open',
           custody_status: 'handover_in_progress',
@@ -148,6 +150,7 @@ async function mockCustodyFlow (
           custody_attempt_id: 'attempt-123',
           post_id: 123,
           item_id: 'item-123',
+          manual_entry_code: 'AB2C3D',
           qr_status: 'active',
           attempt_status: 'open',
           custody_status: 'handover_in_progress',
@@ -197,6 +200,7 @@ async function mockCustodyFlow (
           custody_attempt_id: 'attempt-123',
           post_id: 123,
           item_id: 'item-123',
+          manual_entry_code: 'AB2C3D',
           qr_status: mode,
           attempt_status: mode,
           custody_status: mode === 'accepted' ? 'with_guard' : 'with_reporter',
@@ -221,6 +225,7 @@ async function mockCustodyFlow (
         custody_attempt_id: 'attempt-123',
         post_id: 123,
         item_id: 'item-123',
+        manual_entry_code: 'AB2C3D',
         qr_status: 'active',
         attempt_status: 'open',
         custody_status: 'handover_in_progress',
@@ -246,6 +251,7 @@ async function mockCustodyFlow (
       body: JSON.stringify({
         custody_attempt_id: 'attempt-123',
         qr_code_session_id: 'qr-session-123',
+        manual_entry_code: 'CD4E5F',
         attempt_status: 'open',
         qr_status: 'active',
         custody_status: 'handover_in_progress',
@@ -323,11 +329,19 @@ test.describe('User custody flow', () => {
     await mockCustodyFlow(page, 'accepted')
     await openHandoverFlow(page)
     await completeHandoverForm(page)
+    const createAttemptRequest = page.waitForRequest('**/custody/attempts')
     await clickIonButtonByTestId(page, 'user-custody-open-qr')
+    const request = await createAttemptRequest
+    const payload = request.postDataJSON() as { session_token: string }
 
     await expect(page.getByTestId('user-custody-qr-card')).toBeVisible()
     await expect(page.getByTestId('user-custody-qr-image')).toBeVisible()
     await expect(page.getByText('This QR code is valid for the whole session.')).toBeVisible()
+    await expect(page.getByTestId('user-custody-manual-entry-details')).toBeVisible()
+    await expect(page.getByTestId('user-custody-manual-entry-code')).toHaveText(
+      'AB2 C3D'
+    )
+    await expect(payload.session_token).toBeTruthy()
   })
 
   test('polling blurs the QR after guard scan and then shows the accepted popup', async ({

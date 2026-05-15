@@ -83,6 +83,7 @@ export function useStartUserCustodyAttemptMutation (postId: number) {
           custody_attempt_id: response.custody_attempt_id,
           post_id: postId,
           item_id: '',
+          manual_entry_code: response.manual_entry_code,
           qr_status: response.qr_status,
           attempt_status: response.attempt_status,
           custody_status: response.custody_status,

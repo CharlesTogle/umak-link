@@ -24,6 +24,7 @@ function getEventAccentColor (event: StudentCustodyHistoryEntry): string {
     case 'guard_rejected':
     case 'attempt_cancelled':
     case 'session_timed_out':
+    case 'discarded':
       return 'bg-umak-red'
     case 'handover_attempted':
       return 'bg-amber-500'
@@ -75,6 +76,12 @@ function UserCustodyTimelineEntry ({
                 <p className='mt-2 text-xs text-slate-600'>
                   Guard post: {entry.full_location_name ?? entry.guard_post_name}
                 </p>
+              )}
+              {entry.discard_reason && (
+                <div className='mt-3 rounded-xl border border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-800'>
+                  <span className='font-semibold'>Discarded reason:</span>{' '}
+                  {entry.discard_reason}
+                </div>
               )}
             </div>
 

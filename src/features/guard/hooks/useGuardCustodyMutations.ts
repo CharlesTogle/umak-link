@@ -6,8 +6,8 @@ import {
 import type {
   GuardDecisionRequest,
   GuardDecisionResponse,
-  GuardManualEntryPayload,
   GuardScanRequest,
+  GuardScanPayload,
   GuardScanResponse
 } from '@/features/guard/types/guard-custody'
 
@@ -17,9 +17,15 @@ const guardCustodyMutationKeys = {
   scan: ['guard-custody', 'scan'] as const
 }
 
-function mapManualEntryPayloadToRequest (
-  payload: GuardManualEntryPayload
+function mapScanPayloadToRequest (
+  payload: GuardScanPayload
 ): GuardScanRequest {
+  if ('manualEntryCode' in payload) {
+    return {
+      manual_entry_code: payload.manualEntryCode
+    }
+  }
+
   return {
     qr_code_session_id: payload.qrCodeSessionId,
     session_token: payload.sessionToken
@@ -27,10 +33,10 @@ function mapManualEntryPayloadToRequest (
 }
 
 export function useGuardScanMutation () {
-  return useMutation<GuardScanResponse, Error, GuardManualEntryPayload>({
+  return useMutation<GuardScanResponse, Error, GuardScanPayload>({
     mutationKey: guardCustodyMutationKeys.scan,
     mutationFn: async payload =>
-      await scanGuardCustodySession(mapManualEntryPayloadToRequest(payload)),
+      await scanGuardCustodySession(mapScanPayloadToRequest(payload)),
     retry: 1
   })
 }

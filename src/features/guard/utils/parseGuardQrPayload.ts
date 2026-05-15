@@ -1,10 +1,10 @@
-import type { GuardManualEntryPayload } from '@/features/guard/types/guard-custody'
+import type { GuardQrPayload } from '@/features/guard/types/guard-custody'
 
 function isObjectRecord (value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
 
-export function parseGuardQrPayload (rawValue: string): GuardManualEntryPayload {
+export function parseGuardQrPayload (rawValue: string): GuardQrPayload {
   const trimmedRawValue = rawValue.trim()
 
   if (!trimmedRawValue) {
