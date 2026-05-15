@@ -4,7 +4,10 @@
  */
 
 import api, { ApiError } from '@/shared/lib/api';
-import type { ProcessClaimRequest, ClaimDetails } from '@/shared/lib/api-types';
+import type {
+  ProcessClaimRequest,
+  ClaimDetails
+} from '@/shared/lib/api-types';
 
 export const claimApiService = {
   /**
@@ -14,12 +17,14 @@ export const claimApiService = {
     foundPostId: number;
     missingPostId?: number | null;
     claimDetails: ClaimDetails;
+    claimVerification?: ProcessClaimRequest['claim_verification'];
   }): Promise<{ success: boolean; claim_id: string }> {
     try {
       const request: ProcessClaimRequest = {
         found_post_id: params.foundPostId,
         missing_post_id: params.missingPostId,
         claim_details: params.claimDetails,
+        claim_verification: params.claimVerification,
       };
 
       return await api.claims.process(request);

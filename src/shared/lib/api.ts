@@ -36,6 +36,16 @@ import type {
   CustodySessionStatusResponse,
   RetryCustodySessionRequest,
   RetryCustodySessionResponse,
+  CreateClaimVerificationSessionRequest,
+  CreateClaimVerificationSessionResponse,
+  JoinClaimVerificationSessionRequest,
+  JoinClaimVerificationSessionResponse,
+  ClaimVerificationSessionStatusResponse,
+  RetryClaimVerificationSessionRequest,
+  RetryClaimVerificationSessionResponse,
+  ScanClaimVerificationRequest,
+  ScanClaimVerificationResponse,
+  CancelClaimVerificationSessionResponse,
   CancelCustodySessionResponse,
   StudentCustodyHistoryResponse,
   GuardDecisionRequest,
@@ -49,6 +59,9 @@ import type {
   UserProfile,
   UserSearchResponse,
 } from './api-types';
+
+type ApiRecord = Record<string, unknown>;
+type ApiRecordList = ApiRecord[];
 
 const configuredApiUrl = import.meta.env.VITE_API_URL;
 if (!configuredApiUrl) {
@@ -440,6 +453,65 @@ class ApiClient {
   };
 
   // ============================================================================
+  // Claim Verification
+  // ============================================================================
+
+  claimVerification = {
+    createSession: (
+      data: CreateClaimVerificationSessionRequest
+    ): Promise<CreateClaimVerificationSessionResponse> =>
+      this.request<CreateClaimVerificationSessionResponse>(
+        'POST',
+        '/claims/verification-sessions',
+        data
+      ),
+
+    joinSession: (
+      data: JoinClaimVerificationSessionRequest
+    ): Promise<JoinClaimVerificationSessionResponse> =>
+      this.request<JoinClaimVerificationSessionResponse>(
+        'POST',
+        '/claims/verification-sessions/join',
+        data
+      ),
+
+    getSessionStatus: (
+      claimVerificationSessionId: string
+    ): Promise<ClaimVerificationSessionStatusResponse> =>
+      this.request<ClaimVerificationSessionStatusResponse>(
+        'GET',
+        `/claims/verification-sessions/${claimVerificationSessionId}/status`
+      ),
+
+    retrySession: (
+      claimVerificationSessionId: string,
+      data: RetryClaimVerificationSessionRequest
+    ): Promise<RetryClaimVerificationSessionResponse> =>
+      this.request<RetryClaimVerificationSessionResponse>(
+        'POST',
+        `/claims/verification-sessions/${claimVerificationSessionId}/retry`,
+        data
+      ),
+
+    scanSession: (
+      data: ScanClaimVerificationRequest
+    ): Promise<ScanClaimVerificationResponse> =>
+      this.request<ScanClaimVerificationResponse>(
+        'POST',
+        '/claims/verification-sessions/scan',
+        data
+      ),
+
+    cancelSession: (
+      claimVerificationSessionId: string
+    ): Promise<CancelClaimVerificationSessionResponse> =>
+      this.request<CancelClaimVerificationSessionResponse>(
+        'POST',
+        `/claims/verification-sessions/${claimVerificationSessionId}/cancel`
+      ),
+  };
+
+  // ============================================================================
   // Fraud Reports
   // ============================================================================
 
@@ -518,14 +590,14 @@ class ApiClient {
 
     matchMissingItem: (postId: string): Promise<{
       success: boolean;
-      matches: any[];
-      missing_post?: any;
+      matches: ApiRecordList;
+      missing_post?: ApiRecord;
       total_matches?: number;
     }> =>
       this.request<{
         success: boolean;
-        matches: any[];
-        missing_post?: any;
+        matches: ApiRecordList;
+        missing_post?: ApiRecord;
         total_matches?: number;
       }>('POST', '/search/match-missing-item', { post_id: postId }),
   };
@@ -602,10 +674,10 @@ class ApiClient {
   // ============================================================================
 
   items = {
-    get: (itemId: string): Promise<any> =>
-      this.request<any>('GET', `/items/${itemId}`),
+    get: (itemId: string): Promise<unknown> =>
+      this.request<unknown>('GET', `/items/${itemId}`),
 
-    updateMetadata: (itemId: string, metadata: Record<string, any>): Promise<{ success: boolean }> =>
+    updateMetadata: (itemId: string, metadata: ApiRecord): Promise<{ success: boolean }> =>
       this.request<{ success: boolean }>('PUT', `/items/${itemId}/metadata`, { item_metadata: metadata }),
   };
 
@@ -627,14 +699,14 @@ class ApiClient {
       limit?: number;
       offset?: number;
       status?: string;
-    }): Promise<{ pending_matches: any[]; count: number }> => {
+    }): Promise<{ pending_matches: ApiRecordList; count: number }> => {
       const queryParams = new URLSearchParams();
       if (params?.limit) queryParams.set('limit', params.limit.toString());
       if (params?.offset) queryParams.set('offset', params.offset.toString());
       if (params?.status) queryParams.set('status', params.status);
 
       const queryString = queryParams.toString();
-      return this.request<{ pending_matches: any[]; count: number }>(
+      return this.request<{ pending_matches: ApiRecordList; count: number }>(
         'GET',
         `/pending-matches${queryString ? `?${queryString}` : ''}`
       );
@@ -649,8 +721,8 @@ class ApiClient {
   // ============================================================================
 
   users = {
-    get: (userId: string): Promise<any> =>
-      this.request<any>('GET', `/users/${userId}`),
+    get: (userId: string): Promise<UserProfile> =>
+      this.request<UserProfile>('GET', `/users/${userId}`),
 
     search: (query: string): Promise<UserSearchResponse> =>
       this.request<UserSearchResponse>('GET', `/users/search?query=${encodeURIComponent(query)}`),
@@ -666,12 +738,12 @@ class ApiClient {
 
     getUsers: (params?: {
       user_type?: string[];
-    }): Promise<{ users: any[] }> => {
+    }): Promise<{ users: Array<Partial<UserProfile>> }> => {
       const queryParams = new URLSearchParams();
       if (params?.user_type?.length) queryParams.set('user_type', params.user_type.join(','));
 
       const queryString = queryParams.toString();
-      return this.request<{ users: any[] }>(
+      return this.request<{ users: Array<Partial<UserProfile>> }>(
         'GET',
         `/admin/users${queryString ? `?${queryString}` : ''}`
       );
@@ -695,8 +767,8 @@ class ApiClient {
         `/admin/audit-logs?limit=${limit || 100}&offset=${offset || 0}`
       ),
 
-    getAuditLog: (id: string): Promise<any> =>
-      this.request<any>('GET', `/admin/audit-logs/${id}`),
+    getAuditLog: (id: string): Promise<ApiRecord> =>
+      this.request<ApiRecord>('GET', `/admin/audit-logs/${id}`),
 
     getAuditLogsByUser: (userId: string, limit?: number, offset?: number): Promise<{ logs: unknown[] }> =>
       this.request<{ logs: unknown[] }>(
@@ -715,7 +787,7 @@ class ApiClient {
       series: { missing: number[]; found: number[]; reports: number[]; pending: number[] };
     }> => this.request('GET', '/admin/stats/weekly'),
 
-    getExportData: (startDate: string, endDate: string): Promise<{ rows: any[] }> =>
+    getExportData: (startDate: string, endDate: string): Promise<{ rows: ApiRecordList }> =>
       this.request(
         'GET',
         `/admin/stats/export?start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}`

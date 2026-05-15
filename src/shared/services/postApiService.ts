@@ -4,7 +4,14 @@
  */
 
 import api from '@/shared/lib/api';
-import type { PostRecord, CreatePostRequest, EditPostRequest } from '@/shared/lib/api-types';
+import type {
+  PostRecord,
+  PostRecordDetails,
+  CreatePostRequest,
+  EditPostRequest,
+  UpdatePostStatusRequest,
+  UpdateItemStatusRequest
+} from '@/shared/lib/api-types';
 import { computeBlockHash64 } from '@/shared/utils/hashUtils';
 import { makeDisplay } from '@/shared/utils/imageUtils';
 
@@ -317,7 +324,7 @@ export const postApiService = {
   /**
    * Get full post details (staff only)
    */
-  async getFullPost(postId: number): Promise<PostRecord> {
+  async getFullPost(postId: number): Promise<PostRecordDetails> {
     try {
       return await api.posts.getFull(postId);
     } catch (error) {
@@ -356,11 +363,14 @@ export const postApiService = {
    */
   async updatePostStatus(
     postId: number,
-    status: string,
+    status: UpdatePostStatusRequest['status'],
     rejectionReason?: string
   ): Promise<{ success: boolean }> {
     try {
-      return await api.posts.updateStatus(postId, { status: status as any, rejection_reason: rejectionReason });
+      return await api.posts.updateStatus(postId, {
+        status,
+        rejection_reason: rejectionReason
+      });
     } catch (error) {
       console.error('[postApiService] Update post status error:', error);
       throw error;
@@ -370,9 +380,16 @@ export const postApiService = {
   /**
    * Update item status (staff only)
    */
-  async updateItemStatus(itemId: string, status: string): Promise<{ success: boolean }> {
+  async updateItemStatus(
+    itemId: string,
+    status: UpdateItemStatusRequest['status'],
+    discardReason?: string
+  ): Promise<{ success: boolean }> {
     try {
-      return await api.posts.updateItemStatus(itemId, { status: status as any });
+      return await api.posts.updateItemStatus(itemId, {
+        status,
+        discard_reason: discardReason
+      });
     } catch (error) {
       console.error('[postApiService] Update item status error:', error);
       throw error;
