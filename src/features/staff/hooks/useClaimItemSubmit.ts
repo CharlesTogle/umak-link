@@ -15,6 +15,10 @@ interface ClaimItemSubmitParams {
   staffId: string
   staffName: string
   missingPostId: string | null
+  claimVerification?: {
+    claim_verification_session_id: string
+    verification_method: 'staff_qr' | 'guard_qr'
+  }
   existingClaim?: ExistingClaimDetails | null
   isOverwrite?: boolean
 }
@@ -39,6 +43,7 @@ export function useClaimItemSubmit () {
       staffId,
       staffName,
       missingPostId,
+      claimVerification,
       existingClaim,
       isOverwrite
     } = params
@@ -103,7 +108,8 @@ export function useClaimItemSubmit () {
           staff_id: staffId,
           staff_name: staffName
         },
-        missingPostId: missingPostId ? Number(missingPostId) : null
+        missingPostId: missingPostId ? Number(missingPostId) : null,
+        claimVerification
       })
 
       onSuccess('Item claimed successfully!')

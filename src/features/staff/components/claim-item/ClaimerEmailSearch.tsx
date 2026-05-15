@@ -104,7 +104,11 @@ export default function ClaimerEmailSearch ({
 
   return (
     <div className='mb-6'>
-      <FormSectionHeader header='Claimer UMak Email' isRequired={true} />
+      <FormSectionHeader header='Claimer Identity' isRequired={true} />
+      <IonText className='mb-3 block text-sm text-slate-600'>
+        Staff-only fallback. If the student QR is scanned, this manual entry is
+        replaced by the verified session details automatically.
+      </IonText>
 
       {/* Toggle Button */}
       <div className='flex justify-end mb-2'>
