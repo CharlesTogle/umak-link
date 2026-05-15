@@ -19,7 +19,8 @@ export type CustodyStatus =
   | 'with_guard'
   | 'in_security_office'
   | 'claimed_by_student'
-  | 'under_investigation';
+  | 'under_investigation'
+  | 'discarded';
 export type CustodyAttemptStatus =
   | 'open'
   | 'accepted'
@@ -43,7 +44,25 @@ export type StudentCustodyHistoryEventType =
   | 'attempt_cancelled'
   | 'under_investigation'
   | 'physical_take_reported'
-  | 'claimed_by_student';
+  | 'claimed_by_student'
+  | 'discarded';
+
+export type ClaimVerificationSessionStatus =
+  | 'awaiting_claimer'
+  | 'qr_active'
+  | 'scanned'
+  | 'completed'
+  | 'expired'
+  | 'cancelled';
+export type ClaimQrSessionStatus =
+  | 'active'
+  | 'scanned'
+  | 'expired'
+  | 'cancelled';
+export type ClaimVerificationMethod =
+  | 'manual_staff'
+  | 'staff_qr'
+  | 'guard_qr';
 
 // ============================================================================
 // Auth Types
@@ -102,6 +121,7 @@ export interface CreateCustodyAttemptRequest {
 export interface CreateCustodyAttemptResponse {
   custody_attempt_id: string;
   qr_code_session_id: string;
+  manual_entry_code: string;
   attempt_status: CustodyAttemptStatus;
   qr_status: QrCodeSessionStatus;
   custody_status: CustodyStatus;
@@ -116,6 +136,7 @@ export interface CustodySessionStatusResponse {
   custody_attempt_id: string;
   post_id: number;
   item_id: string;
+  manual_entry_code: string;
   qr_status: QrCodeSessionStatus;
   attempt_status: CustodyAttemptStatus;
   custody_status: CustodyStatus;
@@ -136,6 +157,7 @@ export interface RetryCustodySessionRequest {
 export interface RetryCustodySessionResponse {
   custody_attempt_id: string;
   qr_code_session_id: string;
+  manual_entry_code: string;
   attempt_status: CustodyAttemptStatus;
   qr_status: QrCodeSessionStatus;
   custody_status: CustodyStatus;
@@ -169,6 +191,7 @@ export interface StudentCustodyHistoryEntry {
   handover_image_url: string | null;
   actor_user_id: string | null;
   actor_name: string | null;
+  discard_reason?: string | null;
 }
 
 export interface StudentCustodyHistoryResponse {
@@ -183,10 +206,18 @@ export interface StudentCustodyHistoryResponse {
 // Guard Custody Types
 // ============================================================================
 
-export interface GuardScanRequest {
+export interface GuardManualEntryCodeScanRequest {
+  manual_entry_code: string;
+}
+
+export interface GuardQrPayloadScanRequest {
   qr_code_session_id: string;
   session_token: string;
 }
+
+export type GuardScanRequest =
+  | GuardManualEntryCodeScanRequest
+  | GuardQrPayloadScanRequest;
 
 export interface GuardScanResponse {
   qr_code_session_id: string;
@@ -264,6 +295,113 @@ export interface UpdateClaimedCustodyStatusResponse {
   item_id: string;
   custody_status: 'in_security_office' | 'under_investigation' | 'claimed_by_student';
   updated_at: string;
+}
+
+// ============================================================================
+// Claim Verification Types
+// ============================================================================
+
+export interface ClaimVerificationRetryMetadata {
+  number_of_attempts: number;
+  max_number_of_attempts: number;
+  retries_remaining: number;
+}
+
+export interface ClaimVerifiedClaimerSummary {
+  user_id: string;
+  user_name: string;
+  email: string;
+  profile_picture_url: string | null;
+}
+
+export interface ClaimVerificationPostSummary {
+  post_id: number;
+  item_id: string;
+  item_name: string | null;
+  item_image_url: string | null;
+  item_description: string | null;
+}
+
+export interface ClaimQrScanPayload {
+  claimQrSessionId: string;
+  sessionToken: string;
+}
+
+export interface CreateClaimVerificationSessionRequest {
+  found_post_id: number;
+}
+
+export type CreateClaimVerificationSessionResponse =
+  ClaimVerificationSessionStatusResponse;
+
+export interface JoinClaimVerificationSessionRequest {
+  join_code: string;
+  session_token: string;
+}
+
+export interface JoinClaimVerificationSessionResponse
+  extends ClaimVerificationRetryMetadata {
+  claim_verification_session_id: string;
+  claim_qr_session_id: string;
+  join_code: string;
+  status: ClaimVerificationSessionStatus;
+  qr_status: ClaimQrSessionStatus;
+  expires_at: string;
+  found_post: ClaimVerificationPostSummary;
+}
+
+export interface ClaimVerificationSessionStatusResponse
+  extends ClaimVerificationRetryMetadata {
+  claim_verification_session_id: string;
+  found_post_id: number;
+  item_id: string;
+  join_code: string;
+  status: ClaimVerificationSessionStatus;
+  qr_status: ClaimQrSessionStatus | null;
+  expires_at: string;
+  scanned_at: string | null;
+  completed_at: string | null;
+  closed_at: string | null;
+  current_window_expired: boolean;
+  can_retry: boolean;
+  verified_claimer: ClaimVerifiedClaimerSummary | null;
+}
+
+export interface RetryClaimVerificationSessionRequest {
+  session_token: string;
+}
+
+export interface RetryClaimVerificationSessionResponse
+  extends ClaimVerificationRetryMetadata {
+  claim_verification_session_id: string;
+  claim_qr_session_id: string;
+  join_code: string;
+  status: ClaimVerificationSessionStatus;
+  qr_status: ClaimQrSessionStatus;
+  expires_at: string;
+}
+
+export interface ScanClaimVerificationRequest {
+  claim_qr_session_id: string;
+  session_token: string;
+}
+
+export interface ScanClaimVerificationResponse {
+  claim_verification_session_id: string;
+  claim_qr_session_id: string;
+  status: ClaimVerificationSessionStatus;
+  qr_status: ClaimQrSessionStatus;
+  scanned_at: string;
+  verified_claimer: ClaimVerifiedClaimerSummary;
+}
+
+export interface CancelClaimVerificationSessionResponse
+  extends ClaimVerificationRetryMetadata {
+  claim_verification_session_id: string;
+  claim_qr_session_id: string | null;
+  status: ClaimVerificationSessionStatus;
+  qr_status: ClaimQrSessionStatus | null;
+  cancelled_at: string;
 }
 
 // ============================================================================
@@ -345,6 +483,7 @@ export interface UpdatePostStatusRequest {
 
 export interface UpdateItemStatusRequest {
   status: ItemStatus;
+  discard_reason?: string;
 }
 
 // ============================================================================
@@ -365,6 +504,10 @@ export interface ProcessClaimRequest {
   found_post_id: number;
   missing_post_id?: number | null;
   claim_details: ClaimDetails;
+  claim_verification?: {
+    claim_verification_session_id: string;
+    verification_method: Exclude<ClaimVerificationMethod, 'manual_staff'>;
+  };
 }
 
 export interface ExistingClaimResponse {
