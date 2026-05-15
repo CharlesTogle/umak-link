@@ -16,6 +16,10 @@ type PostRecordWithClaimDetails = ApiPostRecord & {
 type PostRecordDetailsWithClaimDetails = ApiPostRecordDetails & {
   claimed_by_contact?: string | null
   claimed_at?: string | null
+  claim_processed_by_name?: string | null
+  claim_processed_by_email?: string | null
+  claim_processed_by_profile_picture_url?: string | null
+  claim_processed_by_user_type?: 'User' | 'Staff' | 'Admin' | 'Guard' | null
 }
 
 export interface PostRecordDetails {
@@ -57,6 +61,7 @@ export interface PostRecordDetails {
   claim_processed_by_name: string | null
   claim_processed_by_email: string | null
   claim_processed_by_profile_picture_url: string | null
+  claim_processed_by_user_type: 'User' | 'Staff' | 'Admin' | 'Guard' | null
   linked_lost_item_id: string | null
   returned_at: string | null
 }
@@ -141,9 +146,12 @@ function mapApiPostRecordDetailsToFeaturePostRecordDetails (
     claimer_school_email: record.claimed_by_email,
     claimer_contact_num: detailedRecord.claimed_by_contact ?? null,
     claimed_at: detailedRecord.claimed_at ?? null,
-    claim_processed_by_name: null,
-    claim_processed_by_email: null,
-    claim_processed_by_profile_picture_url: null,
+    claim_processed_by_name: detailedRecord.claim_processed_by_name ?? null,
+    claim_processed_by_email: detailedRecord.claim_processed_by_email ?? null,
+    claim_processed_by_profile_picture_url:
+      detailedRecord.claim_processed_by_profile_picture_url ?? null,
+    claim_processed_by_user_type:
+      detailedRecord.claim_processed_by_user_type ?? null,
     linked_lost_item_id: record.linked_lost_item_id,
     returned_at: record.returned_at_local
   }
@@ -185,6 +193,7 @@ function mapPostRecordToFeaturePostRecordDetails (
     claim_processed_by_name: null,
     claim_processed_by_email: null,
     claim_processed_by_profile_picture_url: null,
+    claim_processed_by_user_type: null,
     linked_lost_item_id: null,
     returned_at: null
   }

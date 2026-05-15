@@ -514,6 +514,7 @@ export interface PostRecord {
 export interface PostRecordDetails extends PostRecord {
   linked_lost_item_id: string | null;
   returned_at_local: string | null;
+  claim_processed_by_user_type?: UserType | null;
 }
 
 export interface PostListResponse {
