@@ -44,6 +44,7 @@ import { staffCustodyApiService } from '@/shared/services'
 import type { StudentCustodyHistoryResponse } from '@/shared/lib/api-types'
 import {
   formatDateTime,
+  formatClaimProcessedByName,
   getStatusColor,
   getStatusOptions,
   getItemStatusOptions,
@@ -930,7 +931,11 @@ export default memo(function ExpandedPostRecord ({
                           </IonAvatar>
                           <div>
                             <p className='text-sm! font-medium! text-gray-900'>
-                              {record.claim_processed_by_name}
+                              {formatClaimProcessedByName({
+                                name: record.claim_processed_by_name,
+                                userType:
+                                  record.claim_processed_by_user_type ?? null
+                              })}
                             </p>
                             <p className='text-sm! text-gray-600'>
                               {record.claim_processed_by_email}

@@ -17,6 +17,15 @@ export const formatDateTime = (value?: string | null) => {
   })
 }
 
+export const formatClaimProcessedByName = (params: {
+  name?: string | null
+  userType?: 'User' | 'Staff' | 'Admin' | 'Guard' | null
+}) => {
+  const name = params.name?.trim() ?? ''
+  if (!name) return ''
+  return params.userType === 'Guard' ? `Guard ${name}` : name
+}
+
 /**
  * Gets the color associated with a status
  */
