@@ -13,7 +13,8 @@ function formatDateTime (value: string | null): string {
 
 export default function GuardSessionSummary ({
   activeSession,
-  latestDecision
+  latestDecision,
+  onLatestDecisionClick
 }: GuardSessionSummaryProps) {
   return (
     <div className='space-y-4'>
@@ -61,8 +62,11 @@ export default function GuardSessionSummary ({
       )}
 
       {latestDecision ? (
-        <div
-          className='rounded-2xl border border-slate-200 bg-slate-50 p-4'
+        <button
+          type='button'
+          onClick={onLatestDecisionClick}
+          disabled={!onLatestDecisionClick}
+          className='w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left disabled:cursor-default'
           data-testid='guard-latest-decision'
         >
           <p className='text-xs font-semibold uppercase tracking-[0.18em] text-slate-500'>
@@ -79,7 +83,12 @@ export default function GuardSessionSummary ({
           <p className='mt-1 text-sm text-slate-600'>
             Guard post: {latestDecision.guard_post_name || 'Unassigned'}
           </p>
-        </div>
+          {onLatestDecisionClick ? (
+            <p className='mt-3 text-xs font-medium text-umak-blue'>
+              Tap to open the full post record.
+            </p>
+          ) : null}
+        </button>
       ) : null}
     </div>
   )

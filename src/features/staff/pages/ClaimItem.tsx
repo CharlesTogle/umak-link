@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import {
+  IonPage,
   IonContent,
   IonButton,
   IonText,
@@ -35,15 +36,9 @@ import { useClaimItemPostValidation } from '@/features/staff/hooks/useClaimItemP
 import { useClaimItemSubmit } from '@/features/staff/hooks/useClaimItemSubmit'
 import { useExistingClaimCheck } from '@/features/staff/hooks/useExistingClaimCheck'
 import { useClaimQrScanner } from '@/features/staff/hooks/useClaimQrScanner'
-import {
-  useScanStaffClaimVerificationMutation,
-  useStaffClaimVerificationSessionQuery,
-  useStaffClaimVerificationStatusQuery
-} from '@/features/staff/hooks/useStaffClaimVerificationQueries'
-import type {
-  ClaimQrScanPayload,
-  ClaimVerifiedClaimerSummary
-} from '@/shared/lib/api-types'
+import { api } from '@/shared/lib/api'
+import type { ClaimQrScanPayload } from '@/shared/lib/api-types'
+import { normalizeClaimCodeInput } from '@/shared/utils/claimCode'
 
 interface SelectedUser {
   id: string
@@ -57,17 +52,32 @@ interface ClaimFormData {
   itemId: string
 }
 
-function getClaimBlockingMessage (post: PostRecordDetails): string | null {
+interface ClaimItemProps {
+  mode?: 'staff' | 'guard'
+}
+
+function getClaimBlockingMessage (
+  post: PostRecordDetails,
+  mode: 'staff' | 'guard'
+): string | null {
   if (post.item_type !== 'found') {
     return 'Only found items can be claimed.'
   }
 
-  if (post.post_status !== 'accepted') {
+  if (mode !== 'guard' && post.post_status !== 'accepted') {
     return 'This found post must be accepted before it can be claimed.'
   }
 
   if (post.item_status !== 'unclaimed') {
     return 'This found post is no longer available for claim.'
+  }
+
+  if (mode === 'guard') {
+    if (post.custody_status !== 'with_guard') {
+      return 'This found post cannot be claimed until the guard still has custody of the item.'
+    }
+
+    return null
   }
 
   if (post.custody_status !== 'in_security_office') {
@@ -100,24 +110,54 @@ function formatLocalPhoneNumber (local: string): string {
   return local
 }
 
-function mapVerifiedClaimerToSelectedUser (
-  claimer: ClaimVerifiedClaimerSummary
+function mapStaffClaimQrToSelectedUser (
+  payload: Extract<ClaimQrScanPayload, { kind: 'staff_claim_user_identity' }>
 ): SelectedUser {
   return {
-    id: claimer.user_id,
-    name: claimer.user_name,
-    email: claimer.email,
-    image: claimer.profile_picture_url
+    id: payload.userId,
+    name: payload.userName,
+    email: payload.email,
+    image: payload.profilePictureUrl
   }
 }
 
-export default function ClaimItem () {
+function mapResolvedClaimUserToSelectedUser (
+  user: {
+    user_id: string
+    user_name: string | null
+    email: string | null
+    profile_picture_url: string | null
+  }
+): SelectedUser {
+  return {
+    id: user.user_id,
+    name: user.user_name?.trim() || user.email?.trim() || 'Unknown User',
+    email: user.email?.trim() || '',
+    image: user.profile_picture_url
+  }
+}
+
+function getLegacyClaimSessionMessage (): string {
+  return 'Scan the student claim QR directly. The live claim-session QR is no longer required on this screen.'
+}
+
+export default function ClaimItem ({
+  mode = 'staff'
+}: ClaimItemProps) {
   const { postId } = useParams<{ postId: string }>()
   const { navigate } = useNavigation()
   const { getUser } = useUser()
+  const isGuardMode = mode === 'guard'
+  const pageTestId = isGuardMode
+    ? 'guard-claim-item-page'
+    : 'staff-claim-item-page'
+  const backPath =
+    isGuardMode && postId
+      ? `/guard/post-record/view/${postId}`
+      : '/staff/post-records'
+  const redirectPath = isGuardMode ? '/guard/home' : '/staff/post-records'
 
   const initialDateTime = initializeDateTimeState()
-  const foundPostId = postId ? Number(postId) : null
 
   const [post, setPost] = useState<PostRecordDetails | null>(null)
   const [blockingMessage, setBlockingMessage] = useState<string | null>(null)
@@ -148,8 +188,7 @@ export default function ClaimItem () {
     contactNumber: '',
     itemId: ''
   })
-  const [manualQrSessionId, setManualQrSessionId] = useState('')
-  const [manualQrSessionToken, setManualQrSessionToken] = useState('')
+  const [manualClaimCode, setManualClaimCode] = useState('')
 
   const { submit, isProcessing } = useClaimItemSubmit()
   const { existingClaim, checkForExistingClaim, clearExistingClaim } =
@@ -169,69 +208,79 @@ export default function ClaimItem () {
   })
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isResolvingClaimCode, setIsResolvingClaimCode] = useState(false)
   const submitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const claimSessionQuery = useStaffClaimVerificationSessionQuery(
-    foundPostId,
-    Boolean(post) && !blockingMessage
-  )
-  const claimSessionStatusQuery = useStaffClaimVerificationStatusQuery(
-    claimSessionQuery.data?.claim_verification_session_id ?? null,
-    Boolean(claimSessionQuery.data?.claim_verification_session_id)
-  )
-  const scanClaimVerificationMutation = useScanStaffClaimVerificationMutation()
-
-  const sessionStatus =
-    claimSessionStatusQuery.data ?? claimSessionQuery.data ?? null
-  const joinedClaimer = sessionStatus?.verified_claimer ?? null
-  const scannedClaimer =
-    sessionStatus?.status === 'scanned' || sessionStatus?.status === 'completed'
-      ? joinedClaimer
-      : null
-  const claimerForSubmission = scannedClaimer
-    ? mapVerifiedClaimerToSelectedUser(scannedClaimer)
-    : selectedUser
-  const claimVerificationError =
-    claimSessionQuery.error instanceof Error
-      ? claimSessionQuery.error.message
-      : claimSessionStatusQuery.error instanceof Error &&
-          !claimSessionQuery.data
-        ? claimSessionStatusQuery.error.message
-        : null
-  const isSessionLoading =
-    claimSessionQuery.isLoading || claimSessionStatusQuery.isLoading
-  const isVerifyingClaimer = scanClaimVerificationMutation.isPending
+  const claimerForSubmission = selectedUser
+  const isVerifyingClaimer = isResolvingClaimCode
 
   const handleVerifyClaimQr = useCallback(
     async (payload: ClaimQrScanPayload) => {
-      try {
-        await scanClaimVerificationMutation.mutateAsync({
-          claimQrSessionId: payload.claimQrSessionId,
-          sessionToken: payload.sessionToken
-        })
-        setManualQrSessionId('')
-        setManualQrSessionToken('')
-        setSelectedUser(null)
+      if (payload.kind === 'staff_claim_manual_code') {
+        const normalizedClaimCode = normalizeClaimCodeInput(payload.manualEntryCode)
+
+        if (normalizedClaimCode.length !== 6) {
+          setToast({
+            show: true,
+            message: 'The scanned claim QR is missing a valid claim code.',
+            color: 'danger'
+          })
+          return
+        }
+
+        try {
+          setIsResolvingClaimCode(true)
+          const resolvedUser = await api.users.resolveClaimCode(
+            normalizedClaimCode,
+            isGuardMode && post
+              ? { foundPostId: Number(post.post_id) }
+              : undefined
+          )
+          setManualClaimCode(normalizedClaimCode)
+          setSelectedUser(mapResolvedClaimUserToSelectedUser(resolvedUser))
+          setSearchText('')
+          clearResults()
+          setToast({
+            show: true,
+            message: 'Student claim QR scanned successfully.',
+            color: 'success'
+          })
+        } catch (error) {
+          setToast({
+            show: true,
+            message:
+              error instanceof Error
+                ? error.message
+                : 'Failed to resolve the student claim QR.',
+            color: 'danger'
+          })
+        } finally {
+          setIsResolvingClaimCode(false)
+        }
+
+        return
+      }
+
+      if (payload.kind === 'staff_claim_user_identity') {
+        setManualClaimCode('')
+        setSelectedUser(mapStaffClaimQrToSelectedUser(payload))
         setSearchText('')
         clearResults()
-        await claimSessionStatusQuery.refetch()
         setToast({
           show: true,
-          message: 'Student QR verified successfully.',
+          message: 'Student claim QR scanned successfully.',
           color: 'success'
         })
-      } catch (error) {
-        setToast({
-          show: true,
-          message:
-            error instanceof Error
-              ? error.message
-              : 'Failed to verify the student QR.',
-          color: 'danger'
-        })
+        return
       }
+
+      setToast({
+        show: true,
+        message: getLegacyClaimSessionMessage(),
+        color: 'danger'
+      })
     },
-    [claimSessionStatusQuery, clearResults, scanClaimVerificationMutation]
+    [clearResults, isGuardMode, post]
   )
 
   const claimQrScanner = useClaimQrScanner({
@@ -244,8 +293,7 @@ export default function ClaimItem () {
         selectedUser !== null ||
         formData.contactNumber.trim() !== '' ||
         formData.itemId.trim() !== '' ||
-        manualQrSessionId.trim() !== '' ||
-        manualQrSessionToken.trim() !== ''
+        manualClaimCode.trim() !== ''
 
       if (userChanged) {
         setHasUnsavedChanges(true)
@@ -255,8 +303,7 @@ export default function ClaimItem () {
     formData.contactNumber,
     formData.itemId,
     hasUnsavedChanges,
-    manualQrSessionId,
-    manualQrSessionToken,
+    manualClaimCode,
     selectedUser
   ])
 
@@ -296,7 +343,7 @@ export default function ClaimItem () {
         return
       }
 
-      const claimBlockingMessage = getClaimBlockingMessage(fetchedPost)
+      const claimBlockingMessage = getClaimBlockingMessage(fetchedPost, mode)
       if (claimBlockingMessage) {
         setBlockingMessage(claimBlockingMessage)
         setPost(null)
@@ -315,7 +362,7 @@ export default function ClaimItem () {
     } finally {
       setLoading(false)
     }
-  }, [postId])
+  }, [mode, postId])
 
   useEffect(() => {
     void loadPost()
@@ -343,14 +390,59 @@ export default function ClaimItem () {
       email: user.email,
       image: user.profile_picture_url
     })
+    setManualClaimCode('')
     setSearchText('')
     clearResults()
   }
 
   const handleRemoveUser = () => {
     setSelectedUser(null)
+    setManualClaimCode('')
     setSearchText('')
     clearResults()
+  }
+
+  const handleResolveClaimCode = async () => {
+    const normalizedClaimCode = normalizeClaimCodeInput(manualClaimCode)
+
+    if (normalizedClaimCode.length !== 6) {
+      setToast({
+        show: true,
+        message: 'Enter the full 6-character claim code first.',
+        color: 'danger'
+      })
+      return
+    }
+
+    try {
+      setIsResolvingClaimCode(true)
+      const resolvedUser = await api.users.resolveClaimCode(
+        normalizedClaimCode,
+        isGuardMode && post
+          ? { foundPostId: Number(post.post_id) }
+          : undefined
+      )
+      setManualClaimCode(normalizedClaimCode)
+      setSelectedUser(mapResolvedClaimUserToSelectedUser(resolvedUser))
+      setSearchText('')
+      clearResults()
+      setToast({
+        show: true,
+        message: 'Claim code matched successfully.',
+        color: 'success'
+      })
+    } catch (error) {
+      setToast({
+        show: true,
+        message:
+          error instanceof Error
+            ? error.message
+            : 'Failed to resolve the claim code.',
+        color: 'danger'
+      })
+    } finally {
+      setIsResolvingClaimCode(false)
+    }
   }
 
   const handleDateChange = (iso: string) => {
@@ -383,9 +475,9 @@ export default function ClaimItem () {
       [field]: value
     }))
 
-    if (field === 'itemId' && value.trim()) {
+    if (!isGuardMode && field === 'itemId' && value.trim()) {
       await validateAndFetchPost(value)
-    } else if (field === 'itemId' && !value.trim()) {
+    } else if (!isGuardMode && field === 'itemId' && !value.trim()) {
       clearPost()
     }
   }
@@ -405,16 +497,6 @@ export default function ClaimItem () {
         setToast({
           show: true,
           message: 'User not authenticated.',
-          color: 'danger'
-        })
-        setIsSubmitting(false)
-        return
-      }
-
-      if (!sessionStatus?.claim_verification_session_id) {
-        setToast({
-          show: true,
-          message: 'Claim session unavailable. Reload the page and try again.',
           color: 'danger'
         })
         setIsSubmitting(false)
@@ -444,7 +526,7 @@ export default function ClaimItem () {
         return
       }
 
-      if (formData.itemId.trim() && !lostItemPost) {
+      if (!isGuardMode && formData.itemId.trim() && !lostItemPost) {
         setToast({
           show: true,
           message: 'Referenced lost item not found. Please verify the Item ID.',
@@ -458,36 +540,13 @@ export default function ClaimItem () {
         setToast({
           show: true,
           message:
-            'Scan the student QR or use the staff-only manual claimer field before submitting the claim.',
+            isGuardMode
+              ? 'Scan the student QR or enter the 6-character claim code before submitting the guard claim.'
+              : 'Scan the student QR or use the staff-only manual claimer field before submitting the claim.',
           color: 'danger'
         })
         setIsSubmitting(false)
         return
-      }
-
-      let claimVerification:
-        | {
-            claim_verification_session_id: string
-            verification_method: 'staff_qr'
-          }
-        | undefined
-
-      if (scannedClaimer) {
-        if (sessionStatus.status !== 'scanned') {
-          setToast({
-            show: true,
-            message: 'Scan the live student QR before completing the claim.',
-            color: 'danger'
-          })
-          setIsSubmitting(false)
-          return
-        }
-
-        claimVerification = {
-          claim_verification_session_id:
-            sessionStatus.claim_verification_session_id,
-          verification_method: 'staff_qr'
-        }
       }
 
       let itemIdToCheck: string | null = null
@@ -500,7 +559,7 @@ export default function ClaimItem () {
           return
         }
 
-        const claimBlockingMessage = getClaimBlockingMessage(latestFound)
+        const claimBlockingMessage = getClaimBlockingMessage(latestFound, mode)
         if (claimBlockingMessage) {
           setToast({
             show: true,
@@ -533,7 +592,7 @@ export default function ClaimItem () {
         }
       }
 
-      if (lostItemPost?.post_id) {
+      if (!isGuardMode && lostItemPost?.post_id) {
         try {
           const latestMissing = await getPostFull(lostItemPost.post_id)
           if (!latestMissing) {
@@ -589,8 +648,8 @@ export default function ClaimItem () {
           posterName: post.is_anonymous ? 'Anonymous' : post.poster_name,
           staffId: user.user_id,
           staffName: user.user_name,
-          missingPostId: lostItemPost ? lostItemPost.post_id : null,
-          claimVerification,
+          missingPostId: isGuardMode ? null : (lostItemPost ? lostItemPost.post_id : null),
+          redirectPath,
           existingClaim,
           isOverwrite: false
         },
@@ -647,15 +706,6 @@ export default function ClaimItem () {
       return
     }
 
-    const claimVerification =
-      scannedClaimer && sessionStatus?.status === 'scanned'
-        ? {
-            claim_verification_session_id:
-              sessionStatus.claim_verification_session_id,
-            verification_method: 'staff_qr' as const
-          }
-        : undefined
-
     const connected = await isConnected(8000)
     if (!connected) {
       setToast({
@@ -677,8 +727,8 @@ export default function ClaimItem () {
         posterName: post.is_anonymous ? 'Anonymous' : post.poster_name,
         staffId: user.user_id,
         staffName: user.user_name,
-        missingPostId: lostItemPost ? lostItemPost.post_id : null,
-        claimVerification,
+        missingPostId: isGuardMode ? null : (lostItemPost ? lostItemPost.post_id : null),
+        redirectPath,
         existingClaim,
         isOverwrite: true
       },
@@ -712,96 +762,71 @@ export default function ClaimItem () {
   }, [])
 
   if (loading) {
-    return <ClaimItemLoadingSkeleton />
+    return (
+      <IonPage data-testid={pageTestId}>
+        <ClaimItemLoadingSkeleton />
+      </IonPage>
+    )
   }
 
   if (!post) {
     return (
-      <IonContent>
-        <div className='fixed top-0 z-10 w-full'>
-          <HeaderWithButtons
-            loading={false}
-            onCancel={() => navigate('/staff/post-records', 'back')}
-            onSubmit={() => {}}
-            withSubmit={false}
-          />
-        </div>
-        <div className='ion-padding mt-15'>
-          <div className='grid w-full place-items-center py-16'>
-            <IonText color='danger' className='text-center'>
-              <h2 className='mb-2 text-xl font-semibold'>
-                {blockingMessage ? 'Post not ready for claim' : 'Post not found'}
-              </h2>
-              <p className='text-sm'>
-                {blockingMessage ||
-                  "The post you're looking for doesn't exist or cannot be claimed."}
-              </p>
-            </IonText>
-            <IonButton
-              className='mt-6'
-              onClick={() => navigate('/staff/post-records', 'back')}
-              style={{ '--background': 'var(--color-umak-blue)' }}
-            >
-              Go Back
-            </IonButton>
+      <IonPage data-testid={pageTestId}>
+        <IonContent>
+          <div className='fixed top-0 z-10 w-full'>
+            <HeaderWithButtons
+              loading={false}
+              onCancel={() => navigate(backPath, 'back')}
+              onSubmit={() => {}}
+              withSubmit={false}
+            />
           </div>
-        </div>
-      </IonContent>
-    )
-  }
-
-  if (!claimSessionQuery.isLoading && claimVerificationError) {
-    return (
-      <IonContent>
-        <div className='fixed top-0 z-10 w-full'>
-          <HeaderWithButtons
-            loading={false}
-            onCancel={() => navigate('/staff/post-records', 'back')}
-            onSubmit={() => {}}
-            withSubmit={false}
-          />
-        </div>
-        <div className='ion-padding mt-15'>
-          <div className='grid w-full place-items-center py-16'>
-            <IonText color='danger' className='text-center'>
-              <h2 className='mb-2 text-xl font-semibold'>
-                Claim session unavailable
-              </h2>
-              <p className='text-sm'>{claimVerificationError}</p>
-            </IonText>
-            <IonButton
-              className='mt-6'
-              onClick={() => navigate('/staff/post-records', 'back')}
-              style={{ '--background': 'var(--color-umak-blue)' }}
-            >
-              Go Back
-            </IonButton>
+          <div className='ion-padding mt-15'>
+            <div className='grid w-full place-items-center py-16'>
+              <IonText color='danger' className='text-center'>
+                <h2 className='mb-2 text-xl font-semibold'>
+                  {blockingMessage ? 'Post not ready for claim' : 'Post not found'}
+                </h2>
+                <p className='text-sm'>
+                  {blockingMessage ||
+                    "The post you're looking for doesn't exist or cannot be claimed."}
+                </p>
+              </IonText>
+              <IonButton
+                className='mt-6'
+                onClick={() => navigate(backPath, 'back')}
+                style={{ '--background': 'var(--color-umak-blue)' }}
+              >
+                Go Back
+              </IonButton>
+            </div>
           </div>
-        </div>
-      </IonContent>
+        </IonContent>
+      </IonPage>
     )
   }
 
   return (
-    <IonContent>
-      <div className='fixed top-0 z-10 w-full'>
-        <HeaderWithButtons
-          loading={isProcessing || isSubmitting}
-          onCancel={() => {
-            if (hasUnsavedChanges) {
-              setShowCancelModal(true)
-            } else {
-              navigate('/staff/post-records', 'back')
-            }
-          }}
-          onSubmit={() => setShowConfirmModal(true)}
-          withSubmit={true}
-        />
-      </div>
+    <IonPage data-testid={pageTestId}>
+      <IonContent>
+        <div className='fixed top-0 z-10 w-full'>
+          <HeaderWithButtons
+            loading={isProcessing || isSubmitting}
+            onCancel={() => {
+              if (hasUnsavedChanges) {
+                setShowCancelModal(true)
+              } else {
+                navigate(backPath, 'back')
+              }
+            }}
+            onSubmit={() => setShowConfirmModal(true)}
+            withSubmit={true}
+          />
+        </div>
 
       <div className='ion-padding mt-15'>
         <CardHeader
-          title='Process Claim'
+          title={isGuardMode ? 'Process Guard Claim' : 'Process Claim'}
           icon={checkmarkCircle}
           hasLineBelow
         />
@@ -820,30 +845,26 @@ export default function ClaimItem () {
         </div>
 
         <ClaimVerificationPanel
-          isSessionLoading={isSessionLoading}
+          mode={mode}
           isVerifying={isVerifyingClaimer}
           isScannerSupported={claimQrScanner.isSupported}
-          joinedClaimer={joinedClaimer}
-          sessionStatus={sessionStatus}
-          manualQrSessionId={manualQrSessionId}
-          manualQrSessionToken={manualQrSessionToken}
+          manualClaimCode={manualClaimCode}
           scannerState={claimQrScanner.state}
           videoRef={claimQrScanner.videoRef}
+          isResolvingClaimCode={isResolvingClaimCode}
           onCloseCamera={claimQrScanner.closeCamera}
-          onManualQrSessionIdChange={setManualQrSessionId}
-          onManualQrSessionTokenChange={setManualQrSessionToken}
+          onManualClaimCodeChange={value => {
+            setManualClaimCode(normalizeClaimCodeInput(value))
+          }}
           onOpenCamera={() => {
             void claimQrScanner.openCamera()
           }}
-          onVerifyManualEntry={() => {
-            void handleVerifyClaimQr({
-              claimQrSessionId: manualQrSessionId,
-              sessionToken: manualQrSessionToken
-            })
+          onResolveClaimCode={() => {
+            void handleResolveClaimCode()
           }}
         />
 
-        {!scannedClaimer ? (
+        {!isGuardMode ? (
           <ClaimerEmailSearch
             searchText={searchText}
             onSearchChange={handleSearchChange}
@@ -854,11 +875,12 @@ export default function ClaimItem () {
           />
         ) : null}
 
-        {selectedUser && !scannedClaimer ? (
+        {selectedUser ? (
           <SelectedUserCard user={selectedUser} onRemove={handleRemoveUser} />
         ) : null}
 
         <ClaimFormFields
+          mode={mode}
           contactNumber={formData.contactNumber}
           onContactNumberChange={value =>
             handleFormChange('contactNumber', value)
@@ -885,8 +907,7 @@ export default function ClaimItem () {
             isSubmitting ||
             isVerifyingClaimer ||
             !normalizeToLocal(formData.contactNumber) ||
-            (!!formData.itemId && !lostItemPost) ||
-            !sessionStatus?.claim_verification_session_id
+            (!isGuardMode && !!formData.itemId && !lostItemPost)
           }
         >
           {isProcessing || isSubmitting ? (
@@ -946,7 +967,7 @@ export default function ClaimItem () {
         isOpen={showCancelModal}
         heading='Discard changes?'
         subheading='You have unsaved changes. Are you sure you want to discard them?'
-        onSubmit={() => navigate('/staff/post-records', 'back')}
+        onSubmit={() => navigate(backPath, 'back')}
         onCancel={() => setShowCancelModal(false)}
         submitLabel='Discard'
         cancelLabel='Keep Editing'
@@ -959,6 +980,7 @@ export default function ClaimItem () {
         color={toast.color}
         onDidDismiss={() => setToast(prev => ({ ...prev, show: false }))}
       />
-    </IonContent>
+      </IonContent>
+    </IonPage>
   )
 }

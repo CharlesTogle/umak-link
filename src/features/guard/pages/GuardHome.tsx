@@ -3,39 +3,61 @@ import { useState } from 'react'
 import { useIonViewWillEnter } from '@ionic/react'
 import { checkmarkCircleOutline, shieldCheckmarkOutline } from 'ionicons/icons'
 import Header from '@/shared/components/Header'
+import GuardActiveClaimReviewList from '@/features/guard/components/GuardActiveClaimReviewList'
+import { getPostFull } from '@/features/posts/data/posts'
+import { useGuardActiveClaimReviewsQuery } from '@/features/guard/hooks/useGuardActiveClaimReviewsQuery'
 import { useNavigation } from '@/shared/hooks/useNavigation'
 import GuardPageSectionHeader from '@/features/guard/components/GuardPageSectionHeader'
-import GuardSessionSummary from '@/features/guard/components/GuardSessionSummary'
 import GuardStatusBanner from '@/features/guard/components/GuardStatusBanner'
 import GuardSurfaceCard from '@/features/guard/components/GuardSurfaceCard'
 import {
-  clearLastGuardDecision,
-  readActiveGuardScanSession,
-  readLastGuardDecision
+  readLastGuardDecision,
+  clearLastGuardDecision
 } from '@/features/guard/state/guardSessionStorage'
 import type {
-  GuardDecisionSummary,
-  StoredGuardScanSession
+  GuardDecisionSummary
 } from '@/features/guard/types/guard-custody'
 
 export default function GuardHome () {
   const { navigate } = useNavigation()
-  const [activeSession, setActiveSession] = useState<StoredGuardScanSession | null>(
-    () => readActiveGuardScanSession()
-  )
   const [latestDecision, setLatestDecision] = useState<GuardDecisionSummary | null>(
     () => readLastGuardDecision()
   )
+  const activeReviewsQuery = useGuardActiveClaimReviewsQuery()
+  const activeReviewPosts = activeReviewsQuery.data?.posts ?? []
 
   useIonViewWillEnter(() => {
-    setActiveSession(readActiveGuardScanSession())
-    setLatestDecision(readLastGuardDecision())
-  })
+    void activeReviewsQuery.refetch()
 
-  const handleDismissDecision = () => {
-    clearLastGuardDecision()
-    setLatestDecision(null)
-  }
+    const refreshLatestDecision = async () => {
+      const storedDecision = readLastGuardDecision()
+      if (!storedDecision) {
+        setLatestDecision(null)
+        return
+      }
+
+      if (!storedDecision.post_id) {
+        clearLastGuardDecision()
+        setLatestDecision(null)
+        return
+      }
+
+      try {
+        const latestPost = await getPostFull(String(storedDecision.post_id))
+        if (!latestPost || latestPost.custody_status !== 'with_guard') {
+          clearLastGuardDecision()
+          setLatestDecision(null)
+          return
+        }
+      } catch (error) {
+        console.error('Failed to refresh the latest guard decision:', error)
+      }
+
+      setLatestDecision(storedDecision)
+    }
+
+    void refreshLatestDecision()
+  })
 
   return (
     <IonPage data-testid='guard-home-page'>
@@ -43,7 +65,7 @@ export default function GuardHome () {
       <IonContent fullscreen className='bg-gray-50'>
         <GuardPageSectionHeader
           title='Guard Handover'
-          subtitle='Review student handovers and continue saved guard sessions.'
+          subtitle='Review student handovers and track items currently in your custody.'
           icon={shieldCheckmarkOutline}
           testId='guard-home-section-header'
         />
@@ -129,48 +151,21 @@ export default function GuardHome () {
             </GuardSurfaceCard>
 
             <GuardSurfaceCard
-              title='Current Session'
-              subtitle='Resume an active review or confirm the last recorded decision.'
+              title='In Your Custody'
+              subtitle='Posts you accepted stay here after relogin until they move out of guard custody.'
               testId='guard-home-session-card'
             >
-              <GuardSessionSummary
-                activeSession={activeSession}
-                latestDecision={latestDecision}
+              <GuardActiveClaimReviewList
+                posts={activeReviewPosts}
+                isLoading={activeReviewsQuery.isLoading}
+                errorMessage={
+                  activeReviewsQuery.error instanceof Error
+                    ? activeReviewsQuery.error.message
+                    : null
+                }
+                emptyMessage='No accepted handover posts are assigned to your account right now.'
+                onPostClick={postId => navigate(`/guard/post-record/view/${postId}`)}
               />
-
-              <div className='mt-4 space-y-3'>
-                {activeSession ? (
-                  <IonButton
-                    expand='block'
-                    onClick={() =>
-                      navigate(
-                        `/guard/scan/review/${activeSession.scan.custody_attempt_id}`
-                      )}
-                    data-testid='guard-resume-review'
-                  >
-                    Continue Review
-                  </IonButton>
-                ) : (
-                  <IonButton
-                    expand='block'
-                    onClick={() => navigate('/guard/scan')}
-                    data-testid='guard-open-scan-secondary'
-                  >
-                    Start New Review
-                  </IonButton>
-                )}
-
-                {latestDecision ? (
-                  <IonButton
-                    fill='outline'
-                    expand='block'
-                    onClick={handleDismissDecision}
-                    data-testid='guard-dismiss-decision'
-                  >
-                    Dismiss Latest Result
-                  </IonButton>
-                ) : null}
-              </div>
             </GuardSurfaceCard>
           </div>
         </div>

@@ -29,6 +29,17 @@ import type {
   UserCustodyPageState
 } from '@/features/user/custody/types/user-custody'
 
+function isTerminalAttemptStatus (
+  status: string | null | undefined
+): status is 'accepted' | 'rejected' | 'timed_out' | 'cancelled' {
+  return (
+    status === 'accepted' ||
+    status === 'rejected' ||
+    status === 'timed_out' ||
+    status === 'cancelled'
+  )
+}
+
 function getInitialSession (postId: number): StoredUserCustodySession | null {
   const storedSession = readActiveUserCustodySession()
 
@@ -65,7 +76,7 @@ export function useUserCustodyPageFlow (postId: number) {
   const [activeSession, setActiveSession] = useState<StoredUserCustodySession | null>(() =>
     getInitialSession(postId)
   )
-  const handledDecisionRef = useRef<string | null>(null)
+  const handledTerminalStatusRef = useRef<string | null>(null)
   const historyListPath = '/user/history'
   const historyPath = `/user/post/history/view/${postId}`
 
@@ -118,26 +129,37 @@ export function useUserCustodyPageFlow (postId: number) {
   }, [activeSession, sessionStatusQuery.data])
 
   useEffect(() => {
-    if (
-      sessionStatusQuery.data?.attempt_status !== 'accepted' &&
-      sessionStatusQuery.data?.attempt_status !== 'rejected'
-    ) {
+    const attemptStatus = sessionStatusQuery.data?.attempt_status
+    if (!isTerminalAttemptStatus(attemptStatus)) {
       return
     }
 
-    const decisionKey = `${sessionStatusQuery.data.attempt_status}:${sessionStatusQuery.data.decision_at ?? 'decision-missing'}`
-    if (handledDecisionRef.current === decisionKey) return
+    const terminalStatusKey = `${attemptStatus}:${sessionStatusQuery.data?.decision_at ?? sessionStatusQuery.data?.expires_at ?? sessionStatusQuery.data?.qr_status ?? 'status-missing'}`
+    if (handledTerminalStatusRef.current === terminalStatusKey) return
 
-    handledDecisionRef.current = decisionKey
+    handledTerminalStatusRef.current = terminalStatusKey
     void queryClient.invalidateQueries({
       queryKey: userCustodyQueryKeys.history(postId)
     })
-    dispatch({
-      type: 'resultModalShown',
-      status: sessionStatusQuery.data.attempt_status
-    })
     clearActiveUserCustodySession()
     setActiveSession(null)
+
+    if (attemptStatus === 'accepted' || attemptStatus === 'rejected') {
+      dispatch({
+        type: 'resultModalShown',
+        status: attemptStatus
+      })
+      return
+    }
+
+    dispatch({
+      type: 'toastShown',
+      color: 'warning',
+      message:
+        attemptStatus === 'timed_out'
+          ? 'This handover session timed out. Start a new handover if you still need to continue.'
+          : 'This handover session is no longer active.'
+    })
   }, [postId, queryClient, sessionStatusQuery.data])
 
   const handleGoBack = () => {

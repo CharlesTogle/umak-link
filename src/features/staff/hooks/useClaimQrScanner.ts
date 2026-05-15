@@ -28,12 +28,12 @@ interface UseClaimQrScannerOptions {
 }
 
 const CAMERA_IDLE_MESSAGE =
-  'Open the camera and point it at the student QR. The staff claim form updates after the scan.'
+  'Open the camera and point it at the student claim QR. The claim form updates after the scan.'
 const CAMERA_SCANNING_MESSAGE =
-  'Hold the claim QR inside the frame until the student is verified.'
+  'Hold the student claim QR inside the frame until the scan completes.'
 const CAMERA_STARTING_MESSAGE = 'Opening the camera...'
 const CAMERA_UNSUPPORTED_MESSAGE =
-  'Camera scanning is not available on this device. Use manual QR entry below.'
+  'Camera scanning is not available on this device. Use the fallback option on this screen.'
 const CAMERA_PERMISSION_MESSAGE =
   'Camera access was blocked. Allow camera access, then open the scanner again.'
 
@@ -108,7 +108,7 @@ function getScannerErrorMessage (error: unknown): string {
     }
   }
 
-  return 'Unable to scan the QR code right now. Use manual QR entry below.'
+  return 'Unable to scan the QR code right now. Use the fallback option on this screen.'
 }
 
 export function useClaimQrScanner ({

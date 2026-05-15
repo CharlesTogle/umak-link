@@ -5,29 +5,41 @@ const ACTIVE_USER_CUSTODY_SESSION_KEY = 'user.active-custody-session'
 function canUseStorage (): boolean {
   return (
     typeof window !== 'undefined' &&
-    typeof window.sessionStorage !== 'undefined'
+    typeof window.localStorage !== 'undefined'
   )
 }
 
 export function readActiveUserCustodySession (): StoredUserCustodySession | null {
   if (!canUseStorage()) return null
 
-  const rawValue = window.sessionStorage.getItem(ACTIVE_USER_CUSTODY_SESSION_KEY)
+  const rawValue = window.localStorage.getItem(ACTIVE_USER_CUSTODY_SESSION_KEY)
   if (!rawValue) return null
 
   try {
     return JSON.parse(rawValue) as StoredUserCustodySession
   } catch {
-    window.sessionStorage.removeItem(ACTIVE_USER_CUSTODY_SESSION_KEY)
+    window.localStorage.removeItem(ACTIVE_USER_CUSTODY_SESSION_KEY)
     return null
   }
+}
+
+export function readResumableUserCustodySession (
+  postId: number
+): StoredUserCustodySession | null {
+  const session = readActiveUserCustodySession()
+
+  if (!session || session.postId !== postId || session.attemptStatus !== 'open') {
+    return null
+  }
+
+  return session
 }
 
 export function storeActiveUserCustodySession (
   session: StoredUserCustodySession
 ): StoredUserCustodySession {
   if (canUseStorage()) {
-    window.sessionStorage.setItem(
+    window.localStorage.setItem(
       ACTIVE_USER_CUSTODY_SESSION_KEY,
       JSON.stringify(session)
     )
@@ -38,5 +50,5 @@ export function storeActiveUserCustodySession (
 
 export function clearActiveUserCustodySession (): void {
   if (!canUseStorage()) return
-  window.sessionStorage.removeItem(ACTIVE_USER_CUSTODY_SESSION_KEY)
+  window.localStorage.removeItem(ACTIVE_USER_CUSTODY_SESSION_KEY)
 }

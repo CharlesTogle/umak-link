@@ -46,6 +46,7 @@ import type {
   ScanClaimVerificationRequest,
   ScanClaimVerificationResponse,
   CancelClaimVerificationSessionResponse,
+  GuardActiveClaimReviewsResponse,
   CancelCustodySessionResponse,
   StudentCustodyHistoryResponse,
   GuardDecisionRequest,
@@ -57,6 +58,7 @@ import type {
   GuardScanRequest,
   GuardScanResponse,
   UserProfile,
+  UserClaimCodeResponse,
   UserSearchResponse,
 } from './api-types';
 
@@ -266,6 +268,9 @@ class ApiClient {
         `/guard/custody/attempts/${custodyAttemptId}/decision`,
         data
       ),
+
+    listActiveClaimReviews: (): Promise<GuardActiveClaimReviewsResponse> =>
+      this.request<GuardActiveClaimReviewsResponse>('GET', '/guard/reviews/active'),
   };
 
   // ============================================================================
@@ -721,11 +726,33 @@ class ApiClient {
   // ============================================================================
 
   users = {
+    getMyClaimCode: (): Promise<UserClaimCodeResponse> =>
+      this.request<UserClaimCodeResponse>('GET', '/users/me/claim-code'),
+
     get: (userId: string): Promise<UserProfile> =>
       this.request<UserProfile>('GET', `/users/${userId}`),
 
     search: (query: string): Promise<UserSearchResponse> =>
       this.request<UserSearchResponse>('GET', `/users/search?query=${encodeURIComponent(query)}`),
+
+    resolveClaimCode: (
+      code: string,
+      options?: { foundPostId?: number }
+    ): Promise<UserProfile> => {
+      const queryParams = new URLSearchParams();
+      if (
+        typeof options?.foundPostId === 'number' &&
+        Number.isFinite(options.foundPostId)
+      ) {
+        queryParams.set('found_post_id', String(options.foundPostId));
+      }
+
+      const queryString = queryParams.toString();
+      return this.request<UserProfile>(
+        'GET',
+        `/users/claim-code/${encodeURIComponent(code)}${queryString ? `?${queryString}` : ''}`
+      );
+    },
   };
 
   // ============================================================================

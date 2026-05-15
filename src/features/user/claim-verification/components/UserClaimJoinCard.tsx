@@ -22,7 +22,7 @@ export default function UserClaimJoinCard ({
       <p className='text-lg font-extrabold text-umak-blue'>Join Claim Session</p>
       <p className='mt-3 text-sm leading-relaxed text-slate-700'>
         Enter the join code shown on the guard or staff claim screen. UMak-LINK
-        will generate your unique claim QR for this verification session.
+        will generate your live claim QR for this verification session.
       </p>
 
       <div className='mt-4'>
@@ -45,7 +45,7 @@ export default function UserClaimJoinCard ({
           '--background': 'var(--color-umak-blue)'
         }}
       >
-        {isJoining ? <IonSpinner name='crescent' /> : 'Generate Claim QR'}
+        {isJoining ? <IonSpinner name='crescent' /> : 'Generate Live Claim QR'}
       </IonButton>
 
       {hasActiveSession && onResume ? (

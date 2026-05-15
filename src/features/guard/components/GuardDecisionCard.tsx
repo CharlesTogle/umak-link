@@ -5,10 +5,14 @@ import type { GuardDecisionCardProps } from '@/features/guard/types/guard-custod
 export default function GuardDecisionCard ({
   decisionReason,
   isSubmitting,
+  pendingDecision,
   onDecisionReasonChange,
   onAccept,
   onReject
 }: GuardDecisionCardProps) {
+  const isAcceptPending = isSubmitting && pendingDecision === 'accepted'
+  const isRejectPending = isSubmitting && pendingDecision === 'rejected'
+
   return (
     <GuardSurfaceCard
       title='Decision'
@@ -45,10 +49,10 @@ export default function GuardDecisionCard ({
             onClick={onAccept}
             data-testid='guard-accept-button'
           >
-            {isSubmitting ? (
+            {isAcceptPending ? (
               <>
                 <IonSpinner name='crescent' className='mr-2 h-4 w-4' />
-                Saving
+                Accepting...
               </>
             ) : (
               'Accept Handover'
@@ -57,13 +61,20 @@ export default function GuardDecisionCard ({
 
           <IonButton
             color='danger'
-            fill='outline'
+            fill={isRejectPending ? 'solid' : 'outline'}
             expand='block'
             disabled={isSubmitting}
             onClick={onReject}
             data-testid='guard-reject-button'
           >
-            Reject Handover
+            {isRejectPending ? (
+              <>
+                <IonSpinner name='dots' className='mr-2 h-4 w-4' />
+                Rejecting...
+              </>
+            ) : (
+              'Reject Handover'
+            )}
           </IonButton>
         </div>
       </div>

@@ -18,6 +18,7 @@ import ExpandedHistoryPost from '@/features/user/pages/ExpandedHistoryPost'
 import Matches from '@/features/user/pages/Matches'
 import EditPost from '@/features/user/pages/EditPost'
 import UserCustodyHandover from '@/features/user/custody/pages/UserCustodyHandover'
+import UserClaimIdentityQr from '@/features/user/claim-verification/pages/UserClaimIdentityQr'
 import UserClaimJoinSession from '@/features/user/claim-verification/pages/UserClaimJoinSession'
 import UserClaimQrSession from '@/features/user/claim-verification/pages/UserClaimQrSession'
 
@@ -47,6 +48,15 @@ export default function UserRoutes () {
           render={() => (
             <Suspense fallback={<HistoryFallback />}>
               <History />
+            </Suspense>
+          )}
+        />
+        <Route
+          exact
+          path='/user/claim/qr'
+          render={() => (
+            <Suspense fallback={<DefaultFallback />}>
+              <UserClaimIdentityQr />
             </Suspense>
           )}
         />

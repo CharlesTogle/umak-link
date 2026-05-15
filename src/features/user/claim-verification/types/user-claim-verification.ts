@@ -16,6 +16,11 @@ export interface RetryUserClaimSessionResult
   sessionToken: string
 }
 
+export interface UserClaimManualCodeState {
+  manualEntryCode: string
+  expiresAt: string
+}
+
 export interface StoredUserClaimSession {
   claimVerificationSessionId: string
   claimQrSessionId: string

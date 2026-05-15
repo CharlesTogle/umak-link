@@ -165,49 +165,55 @@ export default function SettingsList () {
   // Accept an external permissions snapshot (e.g., from native layer).
   // Re-check authoritative native permissions to avoid marking any
   // permission as granted prematurely.
-  const handlePermissionSnapshot = async (snapshot: any) => {
-    try {
-      console.log(
-        'Applying external permission snapshot (rechecking native)',
-        snapshot
-      )
+  const handlePermissionSnapshot = useCallback(
+    async (snapshot: unknown) => {
+      try {
+        console.log(
+          'Applying external permission snapshot (rechecking native)',
+          snapshot
+        )
 
-      // Perform authoritative permission checks and fall back safely
+        // Perform authoritative permission checks and fall back safely
+        const [cameraStatus, notifsStatus] = await Promise.all([
+          Camera.checkPermissions().catch(() => ({
+            camera: 'denied',
+            photos: 'denied'
+          })),
+          PushNotifications.checkPermissions().catch(() => ({
+            receive: 'denied'
+          }))
+        ])
 
-      const [cameraStatus, notifsStatus] = await Promise.all([
-        Camera.checkPermissions().catch(() => ({
-          camera: 'denied',
-          photos: 'denied'
-        })),
-        PushNotifications.checkPermissions().catch(() => ({
-          receive: 'denied'
-        }))
-      ])
+        const cameraGranted =
+          cameraStatus?.camera === 'granted' &&
+          cameraStatus?.photos === 'granted'
+        const notifsGranted = notifsStatus?.receive === 'granted'
 
-      const cameraGranted =
-        cameraStatus?.camera === 'granted' && cameraStatus?.photos === 'granted'
-      const notifsGranted = notifsStatus?.receive === 'granted'
+        setPermState({
+          camera: cameraGranted ? 'granted' : 'denied',
+          notifications: notifsGranted ? 'granted' : 'denied'
+        })
 
-      setPermState({
-        camera: cameraGranted ? 'granted' : 'denied',
-        notifications: notifsGranted ? 'granted' : 'denied'
-      })
-
-      // If notifications are truly granted, ensure registration
-      if (notifsGranted) {
-        try {
-          await syncNotificationRegistration()
-        } catch (e) {
-          console.warn('Push registration failed after permissions snapshot', e)
+        // If notifications are truly granted, ensure registration
+        if (notifsGranted) {
+          try {
+            await syncNotificationRegistration()
+          } catch (e) {
+            console.warn(
+              'Push registration failed after permissions snapshot',
+              e
+            )
+          }
         }
-      }
 
-      setToastMessage('Permissions synced')
-      setToastOpen(true)
-    } catch (err) {
-      console.error('Failed to apply permission snapshot', err)
-    }
-  }
+        setToastMessage('Permissions synced')
+        setToastOpen(true)
+      } catch (err) {
+        console.error('Failed to apply permission snapshot', err)
+      }
+    },
+    [syncNotificationRegistration]
+  )
 
   const checkPermissions = useCallback(async () => {
     try {
@@ -255,9 +261,10 @@ export default function SettingsList () {
 
   // Listen for external permission snapshots (useful for native bridges)
   useEffect(() => {
-    const handler = (e: any) => {
-      if (!e?.detail) return
-      void handlePermissionSnapshot(e.detail)
+    const handler = (event: Event) => {
+      const customEvent = event as CustomEvent<unknown>
+      if (customEvent.detail == null) return
+      void handlePermissionSnapshot(customEvent.detail)
     }
     window.addEventListener('permissionsSnapshot', handler as EventListener)
     return () =>
@@ -265,7 +272,7 @@ export default function SettingsList () {
         'permissionsSnapshot',
         handler as EventListener
       )
-  }, [])
+  }, [handlePermissionSnapshot])
 
   return (
     <>

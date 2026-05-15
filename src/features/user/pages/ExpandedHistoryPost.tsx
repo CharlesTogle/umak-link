@@ -26,6 +26,7 @@ import { isConnected } from '@/shared/utils/networkCheck'
 import { arrowBack } from 'ionicons/icons'
 import UserCustodyTimelineCard from '@/features/user/custody/components/UserCustodyTimelineCard'
 import { useUserCustodyHistoryQuery } from '@/features/user/custody/hooks/useUserCustodyQueries'
+import { readResumableUserCustodySession } from '@/features/user/custody/state/userCustodySessionStorage'
 
 export default function ExpandedHistoryPost () {
   const { postId } = useParams<{ postId: string }>()
@@ -228,9 +229,15 @@ export default function ExpandedHistoryPost () {
             onActionSheetDismiss={() => setShowActions(false)}
             actionSheetButtons={(() => {
               const buttons = []
+              const effectiveCustodyStatus =
+                custodyHistoryQuery.data?.custody_status ?? post?.custody_status
               const canEditPost =
                 post?.post_status === 'pending' &&
-                post?.custody_status === 'with_reporter'
+                effectiveCustodyStatus === 'with_reporter'
+              const numericPostId = Number(postId)
+              const hasResumableHandoverSession =
+                Number.isFinite(numericPostId) &&
+                readResumableUserCustodySession(numericPostId) !== null
 
               // Edit: only for post_status 'pending', and only while custody is with_reporter
               if (canEditPost) {
@@ -245,10 +252,14 @@ export default function ExpandedHistoryPost () {
               if (
                 post &&
                 post.item_type === 'found' &&
-                custodyHistoryQuery.data?.custody_status === 'with_reporter'
+                (custodyHistoryQuery.data?.custody_status === 'with_reporter' ||
+                  hasResumableHandoverSession)
               ) {
                 buttons.push({
-                  text: 'Handover to Guard',
+                  text:
+                    hasResumableHandoverSession
+                      ? 'Resume Handover to Guard'
+                      : 'Handover to Guard',
                   handler: () => {
                     if (postId) {
                       navigate(`/user/post/history/view/${postId}/handover`)
@@ -264,18 +275,19 @@ export default function ExpandedHistoryPost () {
                 post.item_status !== 'returned'
               ) {
                 buttons.push({
-                  text: 'Join Claim Session',
+                  text: 'Open Claim QR',
                   handler: () => {
-                    navigate('/user/claim/join')
+                    navigate('/user/claim/qr')
                   }
                 })
               }
-              // Delete: only for item_status 'unclaimed' or 'lost'
+              // Delete: only for item_status 'unclaimed' or 'lost', and only while custody is with_reporter
               if (
                 post &&
                 (post.item_status === 'unclaimed' ||
                   post.item_status === 'lost') &&
-                post.post_status !== 'accepted'
+                post.post_status !== 'accepted' &&
+                effectiveCustodyStatus === 'with_reporter'
               ) {
                 buttons.push({
                   text: 'Delete',

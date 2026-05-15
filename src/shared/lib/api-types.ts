@@ -94,6 +94,11 @@ export interface UserSearchResponse {
   results: UserProfile[];
 }
 
+export interface UserClaimCodeResponse {
+  claim_manual_entry_code: string;
+  expires_at: string;
+}
+
 // ============================================================================
 // Student Custody Types
 // ============================================================================
@@ -322,10 +327,29 @@ export interface ClaimVerificationPostSummary {
   item_description: string | null;
 }
 
-export interface ClaimQrScanPayload {
+export interface ClaimSessionQrScanPayload {
+  kind: 'claim_session';
   claimQrSessionId: string;
   sessionToken: string;
 }
+
+export interface StaffClaimManualCodeQrScanPayload {
+  kind: 'staff_claim_manual_code';
+  manualEntryCode: string;
+}
+
+export interface StaffClaimUserQrScanPayload {
+  kind: 'staff_claim_user_identity';
+  userId: string;
+  userName: string;
+  email: string;
+  profilePictureUrl: string | null;
+}
+
+export type ClaimQrScanPayload =
+  | ClaimSessionQrScanPayload
+  | StaffClaimManualCodeQrScanPayload
+  | StaffClaimUserQrScanPayload;
 
 export interface CreateClaimVerificationSessionRequest {
   found_post_id: number;
@@ -402,6 +426,27 @@ export interface CancelClaimVerificationSessionResponse
   status: ClaimVerificationSessionStatus;
   qr_status: ClaimQrSessionStatus | null;
   cancelled_at: string;
+}
+
+export interface GuardActiveClaimReviewRecord {
+  post_id: number;
+  item_id: string;
+  item_name: string | null;
+  item_description: string | null;
+  item_image_url: string | null;
+  category: string | null;
+  last_seen_at: string | null;
+  last_seen_location: string | null;
+  poster_name: string | null;
+  poster_profile_picture_url: string | null;
+  submitted_on_date_local: string | null;
+  custody_status: CustodyStatus | null;
+  post_status: PostStatus | null;
+  item_status: ItemStatus | null;
+}
+
+export interface GuardActiveClaimReviewsResponse {
+  posts: GuardActiveClaimReviewRecord[];
 }
 
 // ============================================================================

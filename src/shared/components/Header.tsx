@@ -16,7 +16,6 @@ import { useUser } from '@/features/auth/contexts/UserContext'
 import { useUnreadNotificationCount } from '@/features/user/hooks/useUnreadNotificationCount'
 import type { User } from '@/features/auth/contexts/UserContext'
 
-
 const toolbarStyle = {
   ['--background']: 'var(--color-umak-blue, #1D2981)'
 } as React.CSSProperties
@@ -46,7 +45,6 @@ function Header ({
       })
     }
   }, [getUser, user])
-
 
   const { unreadCount, error } = useUnreadNotificationCount(user?.user_id)
   useEffect(() => {
@@ -101,6 +99,8 @@ function Header ({
   const notificationIconClass = isNotificationPage
     ? 'text-amber-500 '
     : 'text-white'
+  const profileImageSrc = profilePicUrl || user?.profile_picture_url || null
+
   return (
     <IonHeader className='ion-no-border'>
       <IonToolbar style={toolbarStyle}>
@@ -141,9 +141,9 @@ function Header ({
             {/* Profile Icon */}
             <IonButtons slot='end'>
               <IonButton onClick={handleProfileClick}>
-                {profilePicUrl ? (
+                {profileImageSrc ? (
                   <img
-                    src={profilePicUrl}
+                    src={profileImageSrc}
                     alt='Profile'
                     className='w-8 h-8 rounded-full object-cover'
                   />

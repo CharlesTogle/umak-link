@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react'
 import QRCode from 'qrcode'
 
 export default function UserCustodyQrCode ({
-  value
+  value,
+  alt = 'Custody handover QR code'
 }: {
   value: string
+  alt?: string
 }) {
   const [qrDataUrl, setQrDataUrl] = useState<string>('')
 
@@ -44,7 +46,7 @@ export default function UserCustodyQrCode ({
 
   return (
     <img
-      alt='Custody handover QR code'
+      alt={alt}
       className='h-[280px] w-[280px] rounded-2xl bg-white p-3'
       data-testid='user-custody-qr-image'
       src={qrDataUrl}

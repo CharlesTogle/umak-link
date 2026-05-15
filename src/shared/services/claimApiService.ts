@@ -11,7 +11,7 @@ import type {
 
 export const claimApiService = {
   /**
-   * Process a claim (staff only)
+   * Process a claim from a staff or guard client
    */
   async processClaim(params: {
     foundPostId: number;

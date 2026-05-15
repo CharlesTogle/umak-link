@@ -1,5 +1,5 @@
 import { IonContent, IonPage, IonToast } from '@ionic/react'
-import { useReducer } from 'react'
+import { useReducer, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { documentTextOutline } from 'ionicons/icons'
 import Header from '@/shared/components/Header'
@@ -40,6 +40,7 @@ export default function GuardReview () {
   const { custodyAttemptId } = useParams<GuardRouteParams>()
   const { navigate } = useNavigation()
   const [state, dispatch] = useReducer(guardReviewReducer, initialGuardReviewState)
+  const [pendingDecision, setPendingDecision] = useState<GuardDecisionRequest['decision'] | null>(null)
   const storedSession = findStoredSession(custodyAttemptId)
   const guardDecisionMutation = useGuardDecisionMutation(custodyAttemptId)
 
@@ -70,6 +71,8 @@ export default function GuardReview () {
   const handleDecision = async (
     decision: GuardDecisionRequest['decision']
   ) => {
+    setPendingDecision(decision)
+
     try {
       const payload: GuardDecisionRequest = {
         qr_code_session_id: scan.qr_code_session_id,
@@ -82,6 +85,7 @@ export default function GuardReview () {
 
       clearActiveGuardScanSession()
       storeLastGuardDecision({
+        post_id: scan.post_id,
         custody_attempt_id: response.custody_attempt_id,
         qr_code_session_id: response.qr_code_session_id,
         attempt_status: response.attempt_status,
@@ -106,6 +110,7 @@ export default function GuardReview () {
           : 'Unable to save the guard decision.',
         color: 'danger'
       })
+      setPendingDecision(null)
     }
   }
 
@@ -131,6 +136,7 @@ export default function GuardReview () {
             <GuardDecisionCard
               decisionReason={state.decisionReason}
               isSubmitting={guardDecisionMutation.isPending}
+              pendingDecision={pendingDecision}
               onDecisionReasonChange={value =>
                 dispatch({
                   type: 'decisionReasonChanged',
