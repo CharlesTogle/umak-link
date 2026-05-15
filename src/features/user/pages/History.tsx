@@ -1,4 +1,5 @@
 import { documentTextOutline, createOutline } from 'ionicons/icons'
+import { useIonViewWillEnter } from '@ionic/react'
 import Header from '@/shared/components/Header'
 import PostList from '@/shared/components/PostList'
 import FilterSortBar from '@/shared/components/FilterSortBar'
@@ -8,10 +9,10 @@ import type {
 } from '@/shared/components/FilterSortBar'
 import { useEffect, useRef, useState } from 'react'
 import { useUser } from '@/features/auth/contexts/UserContext'
-import { useNavigation } from '@/shared/hooks/useNavigation'
 import { useFilterAndSortPosts } from '@/shared/hooks/useFilterAndSortPosts'
 import { type PostStatus, type SortDirection } from '@/shared/utils/postFilters'
 import { useOwnPostsFetching } from '@/features/user/hooks/useOwnPostsFetching'
+import { useNavigation } from '@/shared/hooks/useNavigation'
 
 export default function History () {
   const PAGE_SIZE = 5
@@ -59,10 +60,22 @@ export default function History () {
       console.log('end')
     }
     if (userId) {
-      initLoading()
+      void initLoading()
       console.log('History - Fetched posts for user:', userId)
     }
-  }, [userId])
+  }, [fetchPosts, userId])
+
+  useIonViewWillEnter(() => {
+    if (!userId) return
+
+    const refreshHistory = async () => {
+      setOwnLoading(true)
+      await refreshPosts()
+      setOwnLoading(false)
+    }
+
+    void refreshHistory()
+  })
 
   useEffect(() => {
     console.log('History - Total Posts after filtering:', allPosts.length)
@@ -119,7 +132,7 @@ export default function History () {
   ]
 
   useEffect(() => {
-    const handler = async (_ev?: Event) => {
+    const handler = async () => {
       // Smooth scroll to top
       await contentRef.current?.scrollToTop?.(400)
     }
