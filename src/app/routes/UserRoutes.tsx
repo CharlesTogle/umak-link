@@ -18,6 +18,8 @@ import ExpandedHistoryPost from '@/features/user/pages/ExpandedHistoryPost'
 import Matches from '@/features/user/pages/Matches'
 import EditPost from '@/features/user/pages/EditPost'
 import UserCustodyHandover from '@/features/user/custody/pages/UserCustodyHandover'
+import UserClaimJoinSession from '@/features/user/claim-verification/pages/UserClaimJoinSession'
+import UserClaimQrSession from '@/features/user/claim-verification/pages/UserClaimQrSession'
 
 const HistoryFallback = () => <div className='p-4'>Loading History…</div>
 const NewPostFallback = () => <div className='p-4'>Preparing form…</div>
@@ -45,6 +47,24 @@ export default function UserRoutes () {
           render={() => (
             <Suspense fallback={<HistoryFallback />}>
               <History />
+            </Suspense>
+          )}
+        />
+        <Route
+          exact
+          path='/user/claim/join'
+          render={() => (
+            <Suspense fallback={<DefaultFallback />}>
+              <UserClaimJoinSession />
+            </Suspense>
+          )}
+        />
+        <Route
+          exact
+          path='/user/claim/session/:claimVerificationSessionId'
+          render={() => (
+            <Suspense fallback={<DefaultFallback />}>
+              <UserClaimQrSession />
             </Suspense>
           )}
         />

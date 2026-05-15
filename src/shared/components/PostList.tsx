@@ -548,8 +548,15 @@ export default function PostList ({
               cssClass: 'delete-btn'
             })
           }
-          // Edit: only for post_status 'pending'
-          if (post && post.post_status === 'pending') {
+          const isHistoryView =
+            variant === 'user' &&
+            viewDetailsPath === '/user/post/history/view/:postId'
+          const canEditPost =
+            post?.post_status === 'pending' &&
+            (!isHistoryView || post?.custody_status === 'with_reporter')
+
+          // Edit: only for post_status 'pending', and for history posts only while with_reporter
+          if (canEditPost) {
             buttons.push({
               text: 'Edit',
               handler: () => {
@@ -559,8 +566,7 @@ export default function PostList ({
             })
           }
           if (
-            variant === 'user' &&
-            viewDetailsPath === '/user/post/history/view/:postId' &&
+            isHistoryView &&
             post &&
             post.item_type === 'found' &&
             post.custody_status === 'with_reporter'

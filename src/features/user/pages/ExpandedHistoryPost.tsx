@@ -228,8 +228,12 @@ export default function ExpandedHistoryPost () {
             onActionSheetDismiss={() => setShowActions(false)}
             actionSheetButtons={(() => {
               const buttons = []
-              // Edit: only for post_status 'pending'
-              if (post && post.post_status === 'pending') {
+              const canEditPost =
+                post?.post_status === 'pending' &&
+                post?.custody_status === 'with_reporter'
+
+              // Edit: only for post_status 'pending', and only while custody is with_reporter
+              if (canEditPost) {
                 buttons.push({
                   text: 'Edit',
                   handler: () => {
@@ -249,6 +253,20 @@ export default function ExpandedHistoryPost () {
                     if (postId) {
                       navigate(`/user/post/history/view/${postId}/handover`)
                     }
+                  }
+                })
+              }
+              if (
+                post &&
+                post.item_type === 'missing' &&
+                post.post_status === 'accepted' &&
+                post.item_status !== 'claimed' &&
+                post.item_status !== 'returned'
+              ) {
+                buttons.push({
+                  text: 'Join Claim Session',
+                  handler: () => {
+                    navigate('/user/claim/join')
                   }
                 })
               }
