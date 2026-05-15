@@ -26,7 +26,7 @@ function getStatusMessage (
     return 'The guard rejected the handover. Try again later or choose a different guard post.'
   }
   if (sessionStatus.attempt_status === 'timed_out') {
-    return 'The handover session timed out after the allowed QR windows.'
+    return 'The handover session timed out. Start a new handover session if you still need to continue.'
   }
   if (sessionStatus.current_window_expired && sessionStatus.can_retry) {
     return 'The current QR window expired. Generate a fresh QR to continue the same session.'

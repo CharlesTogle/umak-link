@@ -2,6 +2,7 @@ import { memo, useEffect, useState, useCallback, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { useNavigation } from '@/shared/hooks/useNavigation'
 import {
+  IonPage,
   IonContent,
   IonCard,
   IonCardContent,
@@ -17,6 +18,7 @@ import {
 } from '@ionic/react'
 import { personCircle, arrowBack } from 'ionicons/icons'
 import LazyImage from '@/shared/components/LazyImage'
+import CustodyTimelineCard from '@/shared/components/CustodyTimelineCard'
 import { HeaderWithBackButton } from '@/shared/components/HeaderVariants'
 import Post from '@/features/posts/components/Post'
 import { sharePost } from '@/shared/utils/shareUtils'
@@ -39,6 +41,7 @@ import { useUser } from '@/features/auth/contexts/UserContext'
 import { useAuditLogs } from '@/shared/hooks/useAuditLogs'
 import PostSkeleton from '@/features/posts/components/PostSkeleton'
 import { staffCustodyApiService } from '@/shared/services'
+import type { StudentCustodyHistoryResponse } from '@/shared/lib/api-types'
 import {
   formatDateTime,
   getStatusColor,
@@ -50,9 +53,24 @@ import {
   performStatusChangeOperation
 } from './ExpandedPostRecord.helpers'
 
-export default memo(function ExpandedPostRecord () {
+interface ExpandedPostRecordProps {
+  mode?: 'staff' | 'guard'
+}
+
+export default memo(function ExpandedPostRecord ({
+  mode = 'staff'
+}: ExpandedPostRecordProps) {
   const { postId } = useParams<{ postId: string }>()
   const { navigate } = useNavigation()
+  const isGuardMode = mode === 'guard'
+  const pageTestId = isGuardMode
+    ? 'guard-post-record-page'
+    : 'staff-post-record-page'
+  const backPath = isGuardMode ? '/guard/home' : '/staff/post-records'
+  const recordViewPath = isGuardMode
+    ? '/guard/post-record/view'
+    : '/staff/post-record/view'
+  const claimPath = isGuardMode ? '/guard/post/claim' : '/staff/post/claim'
   const { updatePostStatusWithNotification, updateItemStatus } =
     usePostActionsStaffServices()
   const { sendNotification } = useNotifications()
@@ -60,6 +78,12 @@ export default memo(function ExpandedPostRecord () {
   const { insertAuditLog } = useAuditLogs()
 
   const [record, setRecord] = useState<PostRecordDetails | null>(null)
+  const [custodyHistory, setCustodyHistory] =
+    useState<StudentCustodyHistoryResponse | null>(null)
+  const [custodyHistoryError, setCustodyHistoryError] = useState<string | null>(
+    null
+  )
+  const [loadingCustodyHistory, setLoadingCustodyHistory] = useState(false)
   const [linkedPost, setLinkedPost] = useState<
     PublicPost | PostRecordDetails | null
   >(null)
@@ -92,6 +116,32 @@ export default memo(function ExpandedPostRecord () {
     null
   )
 
+  const resetCustodyHistory = useCallback(() => {
+    setCustodyHistory(null)
+    setCustodyHistoryError(null)
+    setLoadingCustodyHistory(false)
+  }, [])
+
+  const loadCustodyHistory = useCallback(async (targetPostId: string) => {
+    setLoadingCustodyHistory(true)
+    setCustodyHistoryError(null)
+
+    try {
+      const history = await staffCustodyApiService.getPostHistory(
+        Number(targetPostId)
+      )
+      setCustodyHistory(history)
+    } catch (error) {
+      console.error('Error loading custody history', error)
+      setCustodyHistory(null)
+      setCustodyHistoryError(
+        error instanceof Error ? error.message : 'Failed to load custody history'
+      )
+    } finally {
+      setLoadingCustodyHistory(false)
+    }
+  }, [])
+
   const loadPost = useCallback(async () => {
     if (!postId) return
 
@@ -99,6 +149,7 @@ export default memo(function ExpandedPostRecord () {
     try {
       const connected = await isConnected()
       if (!connected) {
+        resetCustodyHistory()
         setToast({
           show: true,
           message: 'Failed to load Post - No Internet Connection'
@@ -110,6 +161,7 @@ export default memo(function ExpandedPostRecord () {
       const data = await getPostFull(postId)
 
       if (!data) {
+        resetCustodyHistory()
         setToast({ show: true, message: 'Post record not found' })
         setLoading(false)
         return
@@ -118,6 +170,12 @@ export default memo(function ExpandedPostRecord () {
       setRecord(data)
       setSelectedStatus(data.post_status)
       setSelectedItemStatus(data.item_status)
+
+      if (data.item_type === 'found') {
+        void loadCustodyHistory(data.post_id)
+      } else {
+        resetCustodyHistory()
+      }
 
       // Fetch linked post if available
       setLoadingLinkedPost(true)
@@ -155,11 +213,12 @@ export default memo(function ExpandedPostRecord () {
       }
     } catch (err) {
       console.error('Error loading post record', err)
+      resetCustodyHistory()
       setToast({ show: true, message: 'Failed to load post record' })
     } finally {
       setLoading(false)
     }
-  }, [postId])
+  }, [loadCustodyHistory, postId, resetCustodyHistory])
 
   useEffect(() => {
     loadPost()
@@ -191,7 +250,7 @@ export default memo(function ExpandedPostRecord () {
         setShowNotifyOwnerModal(true)
         break
       case 'claim':
-        navigate(`/staff/post/claim/${record.post_id}`)
+        navigate(`${claimPath}/${record.post_id}`)
         break
       case 'notifyGuard':
         setShowNotifyGuardModal(true)
@@ -272,7 +331,7 @@ export default memo(function ExpandedPostRecord () {
         setSelectedItemStatus(null)
         setSelectedCustodyStatus(null)
         setDiscardReason('')
-        navigate(`/staff/post/claim/${record.post_id}`)
+        navigate(`${claimPath}/${record.post_id}`)
         return
       }
     }
@@ -355,6 +414,11 @@ export default memo(function ExpandedPostRecord () {
 
       if (result.updatedRecord) {
         setRecord(result.updatedRecord)
+        if (result.updatedRecord.item_type === 'found') {
+          await loadCustodyHistory(result.updatedRecord.post_id)
+        } else {
+          resetCustodyHistory()
+        }
       }
 
       setIsSubmitting(false)
@@ -469,6 +533,11 @@ export default memo(function ExpandedPostRecord () {
       const updatedData = await getPostFull(record.post_id)
       if (updatedData) {
         setRecord(updatedData)
+        if (updatedData.item_type === 'found') {
+          await loadCustodyHistory(updatedData.post_id)
+        } else {
+          resetCustodyHistory()
+        }
       }
     } else {
       setToast({
@@ -548,6 +617,9 @@ export default memo(function ExpandedPostRecord () {
     try {
       setIsSubmitting(true)
       await staffCustodyApiService.notifyGuard(Number(record.post_id))
+      if (record.item_type === 'found') {
+        await loadCustodyHistory(record.post_id)
+      }
       setToast({
         show: true,
         message: 'Guard notified successfully'
@@ -621,10 +693,11 @@ export default memo(function ExpandedPostRecord () {
   const showItemStatusSection = !showCustodyStatusSection
 
   return (
-    <IonContent>
-      <div className='fixed top-0 w-full z-10 max-h-screen'>
-        <HeaderWithBackButton onBack={() => window.history.back()} />
-      </div>
+    <IonPage data-testid={pageTestId}>
+      <IonContent>
+        <div className='fixed top-0 w-full z-10 max-h-screen'>
+          <HeaderWithBackButton onBack={() => navigate(backPath, 'back')} />
+        </div>
 
       {loading && (
         <div>
@@ -640,7 +713,7 @@ export default memo(function ExpandedPostRecord () {
             </p>
           </div>
           <IonButton
-            onClick={() => navigate('/staff/post-records', 'back')}
+            onClick={() => navigate(backPath, 'back')}
             fill='solid'
             style={{
               '--background': 'var(--color-umak-blue)',
@@ -731,7 +804,7 @@ export default memo(function ExpandedPostRecord () {
                         : linkedPost.poster_profile_picture_url
                     }
                     onClick={() =>
-                      navigate(`/staff/post-record/view/${linkedPost.post_id}`)
+                      navigate(`${recordViewPath}/${linkedPost.post_id}`)
                     }
                   />
                 )}
@@ -870,6 +943,35 @@ export default memo(function ExpandedPostRecord () {
                 )}
               </IonCardContent>
             </IonCard>
+
+            {record.item_type === 'found' &&
+              (custodyHistoryError ? (
+                <IonCard className='mb-4 border border-rose-200 bg-rose-50 shadow-sm'>
+                  <IonCardContent className='p-5'>
+                    <p className='text-sm font-semibold text-rose-700'>
+                      Failed to load custody history
+                    </p>
+                    <p className='mt-1 text-sm text-rose-600'>
+                      {custodyHistoryError}
+                    </p>
+                  </IonCardContent>
+                </IonCard>
+              ) : (
+                <CustodyTimelineCard
+                  history={
+                    custodyHistory ?? {
+                      post_id: Number(record.post_id),
+                      item_id: record.item_id,
+                      post_status: record.post_status,
+                      custody_status:
+                        (record.custody_status ??
+                          'untracked') as StudentCustodyHistoryResponse['custody_status'],
+                      history: []
+                    }
+                  }
+                  isLoading={loadingCustodyHistory}
+                />
+              ))}
           </div>
         )}
       </div>
@@ -887,15 +989,30 @@ export default memo(function ExpandedPostRecord () {
         onDidDismiss={() => setShowActions(false)}
         buttons={(() => {
           const buttons = []
+          const canGuardClaim =
+            isGuardMode &&
+            record &&
+            record.item_type === 'found' &&
+            record.item_status === 'unclaimed' &&
+            record.custody_status === 'with_guard'
+          const canStaffClaim =
+            !isGuardMode &&
+            record &&
+            record.item_type === 'found' &&
+            record.item_status === 'unclaimed' &&
+            record.post_status === 'accepted' &&
+            record.custody_status === 'in_security_office'
 
-          // Share: always available
-          buttons.push({
-            text: 'Share',
-            handler: () => handleActionSheetClick('share')
-          })
+          if (!isGuardMode) {
+            buttons.push({
+              text: 'Share',
+              handler: () => handleActionSheetClick('share')
+            })
+          }
 
           // Notify the owner: only for missing items with status 'lost'
           if (
+            !isGuardMode &&
             record &&
             record.item_type === 'missing' &&
             record.item_status === 'lost'
@@ -906,19 +1023,14 @@ export default memo(function ExpandedPostRecord () {
             })
           }
 
-          if (
-            record &&
-            record.item_type === 'found' &&
-            record.item_status === 'unclaimed' &&
-            record.post_status === 'accepted' &&
-            record.custody_status === 'in_security_office'
-          )
+          if (canGuardClaim || canStaffClaim)
             buttons.push({
               text: 'Claim Item',
               handler: () => handleActionSheetClick('claim')
             })
 
           if (
+            !isGuardMode &&
             record &&
             record.item_type === 'found' &&
             (record.custody_status === 'with_guard' ||
@@ -931,6 +1043,7 @@ export default memo(function ExpandedPostRecord () {
           }
 
           if (
+            !isGuardMode &&
             record &&
             record.item_type === 'found' &&
             record.custody_status === 'with_guard'
@@ -942,6 +1055,7 @@ export default memo(function ExpandedPostRecord () {
           }
 
           if (
+            !isGuardMode &&
             record &&
             record.item_type === 'found' &&
             record.custody_status === 'under_investigation'
@@ -952,11 +1066,12 @@ export default memo(function ExpandedPostRecord () {
             })
           }
 
-          // Change Status: always available
-          buttons.push({
-            text: 'Change Status',
-            handler: () => handleActionSheetClick('changeStatus')
-          })
+          if (!isGuardMode) {
+            buttons.push({
+              text: 'Change Status',
+              handler: () => handleActionSheetClick('changeStatus')
+            })
+          }
 
           // Cancel: always available
           buttons.push({
@@ -1237,6 +1352,7 @@ export default memo(function ExpandedPostRecord () {
         submitLabel='Confirm'
         cancelLabel='Cancel'
       />
-    </IonContent>
+      </IonContent>
+    </IonPage>
   )
 })

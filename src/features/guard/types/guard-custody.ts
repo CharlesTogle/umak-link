@@ -42,6 +42,7 @@ export interface StoredGuardScanSession {
 }
 
 export interface GuardDecisionSummary {
+  post_id: number
   custody_attempt_id: string
   qr_code_session_id: string
   attempt_status: GuardDecisionResponse['attempt_status']
@@ -55,6 +56,7 @@ export type GuardToastColor = 'success' | 'danger'
 export interface GuardDecisionCardProps {
   decisionReason: string
   isSubmitting: boolean
+  pendingDecision: GuardDecisionRequest['decision'] | null
   onDecisionReasonChange: (value: string) => void
   onAccept: () => void
   onReject: () => void
@@ -80,6 +82,7 @@ export interface GuardReviewSummaryCardProps {
 export interface GuardSessionSummaryProps {
   activeSession?: StoredGuardScanSession | null
   latestDecision?: GuardDecisionSummary | null
+  onLatestDecisionClick?: () => void
 }
 
 export interface GuardStatusBannerProps {

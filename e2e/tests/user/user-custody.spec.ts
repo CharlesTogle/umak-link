@@ -1,7 +1,7 @@
 import type { Page } from '../../../../umak-link-web/node_modules/@playwright/test'
 import { test, expect } from '../../fixtures/user.fixture'
 
-type FlowMode = 'accepted' | 'rejected' | 'retry'
+type FlowMode = 'accepted' | 'rejected' | 'retry' | 'timed_out'
 
 async function attachHandoverImage (page: Page) {
   await page
@@ -9,11 +9,8 @@ async function attachHandoverImage (page: Page) {
     .setInputFiles('src/shared/assets/umak-seal.png')
 }
 
-async function openHandoverFlow (page: Page) {
-  await page.goto('/user/history')
-  await expect(page.getByText('Blue Umbrella')).toBeVisible()
-  await page.getByRole('button', { name: 'More options' }).first().click()
-  await page.getByText('Handover to Guard').click()
+async function goToHandoverPage (page: Page) {
+  await page.goto('/user/post/history/view/123/handover')
   await expect(page).toHaveURL('/user/post/history/view/123/handover')
 }
 
@@ -217,6 +214,53 @@ async function mockCustodyFlow (
       return
     }
 
+    if (mode === 'timed_out' && statusPollCount >= 2) {
+      if (!finalEventRecorded) {
+        finalEventRecorded = true
+        currentCustodyStatus = 'with_reporter'
+        history.push({
+          history_id: `timed-out-${history.length + 1}`,
+          event_type: 'session_timed_out',
+          source_record_type: 'custody_attempt',
+          message: 'Handover session timed out at Main Gate',
+          occurred_at: '2026-05-14T08:15:00.000Z',
+          custody_attempt_id: 'attempt-123',
+          qr_code_session_id: 'qr-session-123',
+          attempt_number: currentAttemptNumber,
+          guard_post_id: 'guard-post-001',
+          guard_post_name: 'Main Gate',
+          full_location_name: 'Main Gate',
+          handover_image_url: 'https://example.com/custody-handover.webp',
+          actor_user_id: null,
+          actor_name: null
+        })
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          qr_code_session_id: 'qr-session-123',
+          custody_attempt_id: 'attempt-123',
+          post_id: 123,
+          item_id: 'item-123',
+          manual_entry_code: 'AB2C3D',
+          qr_status: 'expired',
+          attempt_status: 'timed_out',
+          custody_status: 'with_reporter',
+          expires_at: '2026-05-14T08:15:00.000Z',
+          scanned_at: null,
+          decision_at: null,
+          current_window_expired: false,
+          can_retry: false,
+          number_of_attempts: currentAttemptNumber,
+          max_number_of_attempts: 5,
+          retries_remaining: 0
+        })
+      })
+      return
+    }
+
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -323,11 +367,35 @@ test.describe('User custody flow', () => {
     await expect(page.getByText('Handover to Guard')).toBeVisible()
   })
 
+  test('history actions show resume handover when a session is already open', async ({
+    page
+  }) => {
+    await mockCustodyFlow(page, 'accepted')
+    await goToHandoverPage(page)
+    await completeHandoverForm(page)
+    await clickIonButtonByTestId(page, 'user-custody-open-qr')
+    await expect(page.getByTestId('user-custody-current-status')).toContainText(
+      'handover in progress'
+    )
+
+    await page.goto('/user/post/history/view/123')
+    await expect(page.getByText('Blue Umbrella')).toBeVisible()
+    await expect(page.getByTestId('user-custody-current-status')).toContainText(
+      'handover in progress'
+    )
+    await page.getByRole('button', { name: 'More options' }).click()
+    await expect(page.getByText('Resume Handover to Guard')).toBeVisible()
+
+    await page.getByText('Resume Handover to Guard').click()
+    await expect(page).toHaveURL('/user/post/history/view/123/handover')
+    await expect(page.getByTestId('user-custody-qr-card')).toBeVisible()
+  })
+
   test('student can open a unique QR code from the handover form', async ({
     page
   }) => {
     await mockCustodyFlow(page, 'accepted')
-    await openHandoverFlow(page)
+    await goToHandoverPage(page)
     await completeHandoverForm(page)
     const createAttemptRequest = page.waitForRequest('**/custody/attempts')
     await clickIonButtonByTestId(page, 'user-custody-open-qr')
@@ -344,17 +412,53 @@ test.describe('User custody flow', () => {
     await expect(payload.session_token).toBeTruthy()
   })
 
+  test('student can resume an open handover after sessionStorage is cleared', async ({
+    page
+  }) => {
+    await mockCustodyFlow(page, 'accepted')
+    await goToHandoverPage(page)
+    await completeHandoverForm(page)
+    await clickIonButtonByTestId(page, 'user-custody-open-qr')
+
+    await expect(page.getByTestId('user-custody-qr-card')).toBeVisible()
+    await page.evaluate(() => window.sessionStorage.clear())
+    await page.goto('/user/post/history/view/123')
+    await expect(page.getByTestId('user-custody-current-status')).toContainText(
+      'handover in progress'
+    )
+    await page.getByRole('button', { name: 'More options' }).click()
+    await page.getByText('Resume Handover to Guard').click()
+
+    await expect(page.getByTestId('user-custody-qr-card')).toBeVisible()
+    await expect(page.getByTestId('user-custody-cancel')).toBeVisible()
+
+    await clickIonButtonByTestId(page, 'user-custody-cancel')
+    await page.getByText('Cancel handover session?').waitFor()
+    await page.getByRole('button', { name: 'Cancel Session' }).click()
+
+    await expect(page).toHaveURL('/user/post/history/view/123')
+    await expect(
+      page.getByTestId('user-custody-history-attempt_cancelled').first()
+    ).toBeVisible()
+  })
+
   test('polling blurs the QR after guard scan and then shows the accepted popup', async ({
     page
   }) => {
     await mockCustodyFlow(page, 'accepted')
-    await openHandoverFlow(page)
+    await goToHandoverPage(page)
     await completeHandoverForm(page)
     await clickIonButtonByTestId(page, 'user-custody-open-qr')
 
     await expect(page.getByTestId('user-custody-qr-card')).toBeVisible()
     await page.waitForTimeout(5200)
     await expect(page.getByTestId('user-custody-qr-overlay')).toBeVisible()
+    await expect(page.getByTestId('user-custody-manual-entry-code')).toHaveText(
+      '• • • • • •'
+    )
+    await expect(page.getByText(
+      'Manual entry is locked after the guard scans the live QR.'
+    )).toBeVisible()
 
     await page.waitForTimeout(5200)
     await expect(page.getByTestId('user-custody-result-modal')).toBeVisible()
@@ -370,7 +474,7 @@ test.describe('User custody flow', () => {
     page
   }) => {
     await mockCustodyFlow(page, 'rejected')
-    await openHandoverFlow(page)
+    await goToHandoverPage(page)
     await completeHandoverForm(page)
     await clickIonButtonByTestId(page, 'user-custody-open-qr')
 
@@ -388,14 +492,14 @@ test.describe('User custody flow', () => {
     page
   }) => {
     await mockCustodyFlow(page, 'retry')
-    await openHandoverFlow(page)
+    await goToHandoverPage(page)
     await completeHandoverForm(page)
     await clickIonButtonByTestId(page, 'user-custody-open-qr')
 
     await expect(page.getByTestId('user-custody-retry')).toBeVisible()
     await clickIonButtonByTestId(page, 'user-custody-retry')
-    await expect(page.getByTestId('user-custody-status-message')).toContainText(
-      'Polling the server every 5 seconds'
+    await expect(page.getByTestId('user-custody-attempt-counter')).toContainText(
+      '2 / 5'
     )
 
     await clickIonButtonByTestId(page, 'user-custody-cancel')
@@ -403,6 +507,30 @@ test.describe('User custody flow', () => {
     await page.getByRole('button', { name: 'Cancel Session' }).click()
 
     await expect(page).toHaveURL('/user/post/history/view/123')
-    await expect(page.getByTestId('user-custody-history-attempt_cancelled')).toBeVisible()
+    await expect(
+      page.getByTestId('user-custody-history-attempt_cancelled').first()
+    ).toBeVisible()
+  })
+
+  test('timed out session clears the live handover view and restores the handover action', async ({
+    page
+  }) => {
+    await mockCustodyFlow(page, 'timed_out')
+    await goToHandoverPage(page)
+    await completeHandoverForm(page)
+    await clickIonButtonByTestId(page, 'user-custody-open-qr')
+
+    await expect(page.getByTestId('user-custody-qr-card')).toBeVisible()
+    await page.waitForTimeout(5200)
+    await expect(page.getByTestId('user-custody-qr-card')).toHaveCount(0)
+    await expect(
+      page.getByTestId('user-custody-history-session_timed_out').first()
+    ).toBeVisible()
+    await expect(page.getByTestId('user-custody-open-qr')).toBeVisible()
+
+    await page.goto('/user/history')
+    await expect(page.getByText('Blue Umbrella')).toBeVisible()
+    await page.getByRole('button', { name: 'More options' }).first().click()
+    await expect(page.getByText('Handover to Guard')).toBeVisible()
   })
 })

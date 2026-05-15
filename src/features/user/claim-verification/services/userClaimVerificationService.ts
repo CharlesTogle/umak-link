@@ -6,7 +6,8 @@ import type {
 import type {
   JoinUserClaimSessionResult,
   RetryUserClaimSessionResult,
-  StoredUserClaimSession
+  StoredUserClaimSession,
+  UserClaimManualCodeState
 } from '@/features/user/claim-verification/types/user-claim-verification'
 
 export class UserClaimVerificationError extends Error {
@@ -43,6 +44,19 @@ function generateSessionToken (): string {
   }
 
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+export interface StaffClaimUserQrValueInput {
+  manualEntryCode: string
+}
+
+export function buildStaffClaimUserQrValue (
+  user: StaffClaimUserQrValueInput
+): string {
+  return JSON.stringify({
+    payload_type: 'staff_claim_manual_entry_code',
+    manual_entry_code: user.manualEntryCode
+  })
 }
 
 export function buildUserClaimQrValue (
@@ -115,6 +129,18 @@ export async function fetchUserClaimSessionStatus (
 ): Promise<ClaimVerificationSessionStatusResponse> {
   try {
     return await api.claimVerification.getSessionStatus(claimVerificationSessionId)
+  } catch (error) {
+    throw mapApiError(error)
+  }
+}
+
+export async function fetchCurrentUserClaimCode (): Promise<UserClaimManualCodeState> {
+  try {
+    const response = await api.users.getMyClaimCode()
+    return {
+      manualEntryCode: response.claim_manual_entry_code,
+      expiresAt: response.expires_at
+    }
   } catch (error) {
     throw mapApiError(error)
   }

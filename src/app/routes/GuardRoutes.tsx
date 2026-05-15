@@ -6,6 +6,8 @@ import Notifications from '@/features/user/pages/Notifications'
 import GuardHome from '@/features/guard/pages/GuardHome'
 import GuardReview from '@/features/guard/pages/GuardReview'
 import GuardScan from '@/features/guard/pages/GuardScan'
+import GuardPostRecord from '@/features/guard/pages/GuardPostRecord'
+import GuardClaimItem from '@/features/guard/pages/GuardClaimItem'
 import Settings from '@/shared/pages/Settings'
 
 function GuardNotificationsRoute () {
@@ -32,6 +34,16 @@ export default function GuardRoutes () {
           <Redirect to='/guard/home' />
         </Route>
         <Route exact path='/guard/home' render={() => <GuardHome />} />
+        <Route
+          exact
+          path='/guard/post-record/view/:postId'
+          render={() => <GuardPostRecord />}
+        />
+        <Route
+          exact
+          path='/guard/post/claim/:postId'
+          render={() => <GuardClaimItem />}
+        />
         <Route exact path='/guard/scan' render={() => <GuardScan />} />
         <Route
           exact

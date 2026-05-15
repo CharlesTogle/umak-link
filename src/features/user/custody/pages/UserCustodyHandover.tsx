@@ -33,10 +33,15 @@ export default function UserCustodyHandover () {
     state
   } = useUserCustodyPageFlow(numericPostId)
 
+  const custodyStatus = custodyHistoryQuery.data?.custody_status ?? null
+  const isHandoverInProgressWithoutSession =
+    custodyStatus === 'handover_in_progress' && !activeSession
   const shouldShowUnavailableState =
+    !activeSession &&
     !isEligibleForHandover &&
     !postQuery.isLoading &&
-    !custodyHistoryQuery.isLoading
+    !custodyHistoryQuery.isLoading &&
+    !custodyHistoryQuery.isFetching
 
   return (
     <IonContent>
@@ -53,10 +58,14 @@ export default function UserCustodyHandover () {
           {shouldShowUnavailableState && (
             <div className='rounded-2xl border border-slate-200 bg-white p-5 shadow-md'>
               <p className='text-lg font-extrabold text-umak-blue'>
-                Handover unavailable
+                {isHandoverInProgressWithoutSession
+                  ? 'Resume unavailable'
+                  : 'Handover unavailable'}
               </p>
               <p className='mt-3 text-sm leading-relaxed text-slate-700'>
-                This found item is no longer in the reporter-held custody state.
+                {isHandoverInProgressWithoutSession
+                  ? 'This item already has an open handover session. Reopen it from the same device that started it, or wait for the session to expire.'
+                  : 'This found item is no longer in the reporter-held custody state.'}
               </p>
             </div>
           )}

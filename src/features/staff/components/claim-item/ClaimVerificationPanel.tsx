@@ -1,6 +1,5 @@
 import type { CSSProperties, RefObject } from 'react'
 import {
-  IonAvatar,
   IonButton,
   IonCard,
   IonCardContent,
@@ -12,169 +11,59 @@ import {
   cameraOutline,
   checkmarkCircle,
   closeOutline,
-  personCircle,
-  qrCodeOutline,
-  shieldCheckmarkOutline
+  keyOutline
 } from 'ionicons/icons'
-import type {
-  ClaimVerifiedClaimerSummary,
-  ClaimVerificationSessionStatusResponse
-} from '@/shared/lib/api-types'
 
 interface ClaimVerificationPanelProps {
-  isSessionLoading: boolean
+  mode: 'staff' | 'guard'
   isVerifying: boolean
   isScannerSupported: boolean
-  joinedClaimer: ClaimVerifiedClaimerSummary | null
-  sessionStatus: ClaimVerificationSessionStatusResponse | null
-  manualQrSessionId: string
-  manualQrSessionToken: string
+  manualClaimCode: string
   scannerState: {
     isOpen: boolean
     message: string
   }
   videoRef: RefObject<HTMLVideoElement | null>
+  isResolvingClaimCode: boolean
   onCloseCamera: () => void
-  onManualQrSessionIdChange: (value: string) => void
-  onManualQrSessionTokenChange: (value: string) => void
+  onManualClaimCodeChange: (value: string) => void
   onOpenCamera: () => void
-  onVerifyManualEntry: () => void
-}
-
-function formatStatusLabel (
-  sessionStatus: ClaimVerificationSessionStatusResponse | null
-): string {
-  if (!sessionStatus) return 'Preparing session'
-
-  switch (sessionStatus.status) {
-    case 'awaiting_claimer':
-      return 'Waiting for student'
-    case 'qr_active':
-      return 'Ready to scan'
-    case 'scanned':
-      return 'QR verified'
-    case 'completed':
-      return 'Completed'
-    case 'expired':
-      return 'Expired'
-    case 'cancelled':
-      return 'Cancelled'
-    default:
-      return sessionStatus.status
-  }
-}
-
-function getStatusTone (
-  sessionStatus: ClaimVerificationSessionStatusResponse | null
-): string {
-  switch (sessionStatus?.status) {
-    case 'scanned':
-    case 'completed':
-      return 'border-emerald-200 bg-emerald-50 text-emerald-700'
-    case 'expired':
-    case 'cancelled':
-      return 'border-rose-200 bg-rose-50 text-rose-700'
-    case 'qr_active':
-      return 'border-amber-200 bg-amber-50 text-amber-700'
-    default:
-      return 'border-slate-200 bg-slate-50 text-slate-600'
-  }
+  onResolveClaimCode: () => void
 }
 
 export default function ClaimVerificationPanel ({
-  isSessionLoading,
+  mode,
   isVerifying,
   isScannerSupported,
-  joinedClaimer,
-  sessionStatus,
-  manualQrSessionId,
-  manualQrSessionToken,
+  manualClaimCode,
   scannerState,
   videoRef,
+  isResolvingClaimCode,
   onCloseCamera,
-  onManualQrSessionIdChange,
-  onManualQrSessionTokenChange,
+  onManualClaimCodeChange,
   onOpenCamera,
-  onVerifyManualEntry
+  onResolveClaimCode
 }: ClaimVerificationPanelProps) {
-  const isQrVerified = sessionStatus?.status === 'scanned' || sessionStatus?.status === 'completed'
+  const statusTone = 'border-[#1D2981]/20 bg-[#1D2981]/10 text-[#1D2981]'
 
   return (
     <IonCard className='mb-6 rounded-2xl border border-slate-200/70 shadow-sm'>
       <IonCardContent className='p-4'>
         <div className='flex items-start justify-between gap-3'>
           <div>
-            <p className='text-lg font-extrabold text-umak-blue'>Claim Session</p>
+            <p className='text-lg font-extrabold text-umak-blue'>Student Claim QR</p>
             <p className='mt-1 text-sm leading-relaxed text-slate-600'>
-              The claim session starts as soon as this page opens. Ask the student
-              to join, generate their unique QR code, then scan it here. Staff can
-              still type a claimer manually if needed.
+              {mode === 'guard'
+                ? 'Ask the student to open their claim QR in UMak-LINK, then scan it here. Guards can also use the 6-character claim code if the camera cannot read the QR.'
+                : 'Ask the student to open their claim QR in UMak-LINK, then scan it here. Staff can still search or type a claimer manually if needed.'}
             </p>
           </div>
           <span
-            className={`rounded-full border px-3 py-1 text-xs font-semibold ${getStatusTone(
-              sessionStatus
-            )}`}
+            className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusTone}`}
           >
-            {formatStatusLabel(sessionStatus)}
+            Direct QR
           </span>
         </div>
-
-        <div className='my-4 h-px w-full bg-slate-200' />
-
-        <div className='rounded-2xl border border-[#1D2981]/10 bg-[#1D2981]/5 p-4'>
-          <div className='flex items-center gap-2 text-sm font-semibold text-umak-blue'>
-            <IonIcon icon={qrCodeOutline} className='text-lg' />
-            <span>Join Code</span>
-          </div>
-          <p className='mt-3 text-2xl font-extrabold tracking-[0.2em] text-slate-900'>
-            {isSessionLoading ? 'Loading...' : sessionStatus?.join_code ?? 'Unavailable'}
-          </p>
-          <p className='mt-2 text-sm leading-6 text-slate-600'>
-            Ask the student to open UMak-LINK, join the claim session, and
-            generate the unique claim QR code for this item.
-          </p>
-        </div>
-
-        {joinedClaimer ? (
-          <div className='mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4'>
-            <div className='flex items-center gap-3'>
-              <IonAvatar className='h-14 w-14 shrink-0'>
-                {joinedClaimer.profile_picture_url ? (
-                  <img
-                    src={joinedClaimer.profile_picture_url}
-                    alt={joinedClaimer.user_name}
-                    className='object-cover'
-                  />
-                ) : (
-                  <div className='grid h-full w-full place-items-center bg-white text-emerald-600'>
-                    <IonIcon icon={personCircle} className='text-4xl' />
-                  </div>
-                )}
-              </IonAvatar>
-              <div className='min-w-0 flex-1'>
-                <p className='text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700'>
-                  {isQrVerified ? 'QR Verified Student' : 'Joined Student'}
-                </p>
-                <p className='truncate text-base font-semibold text-slate-900'>
-                  {joinedClaimer.user_name}
-                </p>
-                <p className='truncate text-sm text-slate-600'>
-                  {joinedClaimer.email}
-                </p>
-              </div>
-              <div className='rounded-full border border-emerald-200 bg-white px-3 py-1 text-[11px] font-semibold text-emerald-700'>
-                {isQrVerified ? 'Autofilled' : 'Waiting for scan'}
-              </div>
-            </div>
-            {!isQrVerified ? (
-              <p className='mt-3 text-sm leading-6 text-emerald-800/80'>
-                The student joined this session. Scan the live QR to lock the
-                claim to this student before submission.
-              </p>
-            ) : null}
-          </div>
-        ) : null}
 
         <div className='mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4'>
           <div className='flex items-center gap-2 text-sm font-semibold text-slate-900'>
@@ -182,8 +71,7 @@ export default function ClaimVerificationPanel ({
             <span>Camera Scanner</span>
           </div>
           <p className='mt-2 text-sm leading-6 text-slate-600'>
-            Point the camera at the student&apos;s unique claim QR to verify the
-            live session.
+            Point the camera at the student&apos;s claim QR to fill in the claimer details.
           </p>
 
           <div className='mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 shadow-sm'>
@@ -200,7 +88,7 @@ export default function ClaimVerificationPanel ({
                 <IonIcon icon={cameraOutline} className='text-4xl' />
                 <p className='text-base font-semibold'>Camera preview appears here.</p>
                 <p className='text-sm leading-6 text-white/75'>
-                  Hold the student QR inside the frame until verification completes.
+                  Hold the student claim QR inside the frame until the claimer details appear.
                 </p>
               </div>
             )}
@@ -254,54 +142,43 @@ export default function ClaimVerificationPanel ({
 
             <p className='text-sm leading-6 text-slate-600'>
               {isScannerSupported
-                ? 'If the camera cannot scan the code, use manual QR entry below.'
-                : 'If this device cannot scan QR codes, use manual QR entry below.'}
+                ? mode === 'guard'
+                  ? 'If the camera cannot scan the code, use the claim code below.'
+                  : 'If the camera cannot scan the code, use the claimer search or claim code below.'
+                : mode === 'guard'
+                  ? 'If this device cannot scan QR codes, use the claim code below.'
+                  : 'If this device cannot scan QR codes, use the claimer search or claim code below.'}
             </p>
           </div>
         </div>
 
         <div className='mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4'>
           <div className='flex items-center gap-2 text-sm font-semibold text-slate-900'>
-            <IonIcon icon={shieldCheckmarkOutline} className='text-lg text-umak-blue' />
-            <span>Manual QR Entry</span>
+            <IonIcon icon={keyOutline} className='text-lg text-umak-blue' />
+            <span>Manual Claim Code</span>
           </div>
           <p className='mt-2 text-sm leading-6 text-slate-600'>
-            Use this only if the camera cannot scan the student&apos;s QR code.
+            If the camera cannot scan the student&apos;s QR, ask them to read the
+            6-character claim code shown below it.
           </p>
 
           <div className='mt-4 space-y-4'>
             <div>
               <label
-                htmlFor='claim-qr-session-id'
+                htmlFor='claim-manual-code'
                 className='text-sm font-semibold text-slate-800'
               >
-                Claim QR Session ID
+                Claim Code
               </label>
               <IonInput
-                id='claim-qr-session-id'
-                value={manualQrSessionId}
+                id='claim-manual-code'
+                value={manualClaimCode}
                 fill='outline'
-                placeholder='Paste the claim_qr_session_id'
+                placeholder='Enter the 6-character code'
+                maxlength={6}
+                autoCapitalize='characters'
                 onIonInput={event =>
-                  onManualQrSessionIdChange(String(event.detail.value ?? ''))
-                }
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor='claim-qr-session-token'
-                className='text-sm font-semibold text-slate-800'
-              >
-                Session Token
-              </label>
-              <IonInput
-                id='claim-qr-session-token'
-                value={manualQrSessionToken}
-                fill='outline'
-                placeholder='Paste the session_token'
-                onIonInput={event =>
-                  onManualQrSessionTokenChange(String(event.detail.value ?? ''))
+                  onManualClaimCodeChange(String(event.detail.value ?? ''))
                 }
               />
             </div>
@@ -309,12 +186,8 @@ export default function ClaimVerificationPanel ({
             <IonButton
               expand='block'
               fill='outline'
-              onClick={onVerifyManualEntry}
-              disabled={
-                isVerifying ||
-                !manualQrSessionId.trim() ||
-                !manualQrSessionToken.trim()
-              }
+              onClick={onResolveClaimCode}
+              disabled={isResolvingClaimCode || manualClaimCode.trim().length !== 6}
               style={
                 {
                   '--border-color': 'var(--color-umak-blue)',
@@ -322,15 +195,15 @@ export default function ClaimVerificationPanel ({
                 } as CSSProperties
               }
             >
-              {isVerifying ? (
+              {isResolvingClaimCode ? (
                 <>
                   <IonSpinner name='crescent' className='mr-2 h-4 w-4' />
-                  Verifying Student
+                  Loading Claimer
                 </>
               ) : (
                 <>
                   <IonIcon icon={checkmarkCircle} slot='start' />
-                  Verify Student QR
+                  Use Claim Code
                 </>
               )}
             </IonButton>

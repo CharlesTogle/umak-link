@@ -10,16 +10,70 @@ test.describe('Guard custody flow', () => {
   })
 
   test('guard home shows the handover workflow and empty state', async ({
-    page
+    page,
+    mockGuardEmptyActiveClaimReviews
   }) => {
+    await mockGuardEmptyActiveClaimReviews()
     await page.goto('/guard/home')
 
     await expect(page.getByTestId('guard-home-page')).toBeVisible()
     await expect(page.getByTestId('guard-home-title')).toContainText(
       'Review custody handovers'
     )
-    await expect(page.getByTestId('guard-no-active-session')).toBeVisible()
+    await expect(page.getByTestId('guard-home-session-card')).toContainText(
+      'No accepted handover posts are assigned to your account right now.'
+    )
     await expect(page.getByTestId('guard-start-scan')).toBeVisible()
+    await expect(page.getByTestId('guard-open-scan-secondary')).toHaveCount(0)
+  })
+
+  test('guard can reroute to an in-custody post and see the post record page body', async ({
+    page,
+    mockGuardActiveClaimReviews,
+    mockGuardPostRecordFallback
+  }) => {
+    await mockGuardActiveClaimReviews()
+    await mockGuardPostRecordFallback()
+    await page.goto('/guard/home')
+
+    const custodyPost = page.getByTestId('guard-custody-post-2410')
+
+    await expect(custodyPost).toBeVisible()
+    await expect(custodyPost).toContainText('Black Wallet')
+
+    await custodyPost.click()
+
+    await expect(page).toHaveURL(/\/guard\/post-record\/view\/2410$/)
+    await expect(page.getByTestId('guard-post-record-page')).toBeVisible()
+    await expect(page.getByText('Post Details')).toBeVisible()
+    await expect(page.getByText('Poster Details')).toBeVisible()
+    await expect(page.getByText('No record found')).toHaveCount(0)
+  })
+
+  test('guard can open the claim flow from a pending in-custody post', async ({
+    page,
+    mockGuardActiveClaimReviews,
+    mockGuardPostRecordFallback,
+    mockGuardClaimVerificationSession
+  }) => {
+    await mockGuardActiveClaimReviews()
+    await mockGuardPostRecordFallback()
+    await mockGuardClaimVerificationSession()
+    await page.goto('/guard/home')
+
+    await page.getByTestId('guard-custody-post-2410').click()
+
+    await expect(page).toHaveURL(/\/guard\/post-record\/view\/2410$/)
+    await expect(page.getByTestId('guard-post-record-page')).toBeVisible()
+
+    await page.getByRole('button', { name: 'More options' }).click()
+    await expect(page.getByText('Claim Item')).toBeVisible()
+
+    await page.getByText('Claim Item').click()
+
+    await expect(page).toHaveURL(/\/guard\/post\/claim\/2410$/)
+    await expect(page.getByTestId('guard-claim-item-page')).toBeVisible()
+    await expect(page.getByText('Process Guard Claim')).toBeVisible()
   })
 
   test('guard can load a handover review from manual QR session entry', async ({
@@ -78,9 +132,11 @@ test.describe('Guard custody flow', () => {
 
   test('guard can accept a custody handover and see the recorded result on home', async ({
     page,
+    mockGuardEmptyActiveClaimReviews,
     mockGuardDecisionSuccess,
     mockGuardScanSuccess
   }) => {
+    await mockGuardEmptyActiveClaimReviews()
     await mockGuardScanSuccess()
     await mockGuardDecisionSuccess('accepted')
     await page.goto('/guard/scan')
@@ -102,16 +158,15 @@ test.describe('Guard custody flow', () => {
     await expect(page.getByTestId('guard-decision-banner')).toContainText(
       'Handover accepted'
     )
-    await expect(page.getByTestId('guard-latest-decision')).toContainText(
-      'Accepted'
-    )
   })
 
   test('guard can reject a custody handover and see the rejected result on home', async ({
     page,
+    mockGuardEmptyActiveClaimReviews,
     mockGuardDecisionSuccess,
     mockGuardScanSuccess
   }) => {
+    await mockGuardEmptyActiveClaimReviews()
     await mockGuardScanSuccess()
     await mockGuardDecisionSuccess('rejected')
     await page.goto('/guard/scan')
@@ -132,9 +187,6 @@ test.describe('Guard custody flow', () => {
     await expect(page).toHaveURL('/guard/home')
     await expect(page.getByTestId('guard-decision-banner')).toContainText(
       'Handover rejected'
-    )
-    await expect(page.getByTestId('guard-latest-decision')).toContainText(
-      'Rejected'
     )
   })
 })

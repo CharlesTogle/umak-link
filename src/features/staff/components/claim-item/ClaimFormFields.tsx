@@ -7,6 +7,7 @@ import type { PublicPost } from '@/features/posts/types/post'
 import PostCardSkeleton from '@/features/posts/components/PostCardSkeleton'
 
 interface ClaimFormFieldsProps {
+  mode: 'staff' | 'guard'
   contactNumber: string
   onContactNumberChange: (value: string) => void
   dateTimeValue: string
@@ -20,6 +21,7 @@ interface ClaimFormFieldsProps {
 }
 
 export default function ClaimFormFields ({
+  mode,
   contactNumber,
   onContactNumberChange,
   dateTimeValue,
@@ -57,22 +59,24 @@ export default function ClaimFormFields ({
       />
 
       {/* Item ID Field */}
-      <div className='mb-6'>
-        <FormSectionHeader header='Lost Item ID' isRequired={false} />
-        <p className='text-sm text-gray-600 mb-3'>
-          Enter the Item ID of the claimer&apos;s Missing Item post.
-        </p>
-        <input
-          type='text'
-          placeholder='Enter Item ID'
-          value={itemId}
-          onChange={e => onItemIdChange(e.target.value)}
-          className='w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-umak-blue'
-        />
-      </div>
+      {mode === 'staff' ? (
+        <div className='mb-6'>
+          <FormSectionHeader header='Lost Item ID' isRequired={false} />
+          <p className='text-sm text-gray-600 mb-3'>
+            Enter the Item ID of the claimer&apos;s Missing Item post.
+          </p>
+          <input
+            type='text'
+            placeholder='Enter Item ID'
+            value={itemId}
+            onChange={e => onItemIdChange(e.target.value)}
+            className='w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-umak-blue'
+          />
+        </div>
+      ) : null}
 
       {/* Claimer's Lost Item Post Display (if available) */}
-      {itemId && (
+      {mode === 'staff' && itemId && (
         <div className='mb-6'>
           <FormSectionHeader header="Claimer's Lost Item Post" />
           {lostItemPostLoading ? (

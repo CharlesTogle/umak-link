@@ -19,6 +19,7 @@ interface ClaimItemSubmitParams {
     claim_verification_session_id: string
     verification_method: 'staff_qr' | 'guard_qr'
   }
+  redirectPath?: string
   existingClaim?: ExistingClaimDetails | null
   isOverwrite?: boolean
 }
@@ -44,6 +45,7 @@ export function useClaimItemSubmit () {
       staffName,
       missingPostId,
       claimVerification,
+      redirectPath,
       existingClaim,
       isOverwrite
     } = params
@@ -116,7 +118,7 @@ export function useClaimItemSubmit () {
 
       // Navigate back after success
       setTimeout(() => {
-        navigate('/staff/post-records', 'back')
+        navigate(redirectPath || '/staff/post-records', 'back')
       }, 1000)
     } catch (error) {
       console.error('Error claiming item:', error)

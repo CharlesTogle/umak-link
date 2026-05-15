@@ -27,6 +27,7 @@ import { usePostActionsStaffServices } from '@/features/staff/hooks/usePostStaff
 import { ChoiceModal } from '@/shared/components/ChoiceModal'
 import { rejectReasons } from '@/features/staff/utils/catalogPostHandlers'
 import { useUser, type User } from '@/features/auth/contexts/UserContext'
+import { readResumableUserCustodySession } from '@/features/user/custody/state/userCustodySessionStorage'
 
 interface PostListProps {
   ref?: React.RefObject<HTMLIonContentElement | null>
@@ -528,16 +529,20 @@ export default function PostList ({
         header='Post actions'
         buttons={(() => {
           const post = posts.find(p => p.post_id === activePostId)
+          const isHistoryView =
+            variant === 'user' &&
+            viewDetailsPath === '/user/post/history/view/:postId'
           const buttons = []
 
-          // Delete: only if withDelete is true AND (item_status 'unclaimed'/'lost' OR post_status 'rejected'/'pending')
+          // Delete: only if enabled, otherwise allowed by status, and for history posts only while with_reporter
           if (
             withDelete &&
             post &&
             (post.item_status === 'unclaimed' ||
               post.item_status === 'lost' ||
               post.post_status === 'rejected' ||
-              post.post_status === 'pending')
+              post.post_status === 'pending') &&
+            (!isHistoryView || post.custody_status === 'with_reporter')
           ) {
             buttons.push({
               text: 'Delete',
@@ -548,12 +553,13 @@ export default function PostList ({
               cssClass: 'delete-btn'
             })
           }
-          const isHistoryView =
-            variant === 'user' &&
-            viewDetailsPath === '/user/post/history/view/:postId'
           const canEditPost =
             post?.post_status === 'pending' &&
             (!isHistoryView || post?.custody_status === 'with_reporter')
+          const numericActivePostId = Number(activePostId)
+          const hasResumableHandoverSession =
+            Number.isFinite(numericActivePostId) &&
+            readResumableUserCustodySession(numericActivePostId) !== null
 
           // Edit: only for post_status 'pending', and for history posts only while with_reporter
           if (canEditPost) {
@@ -569,10 +575,14 @@ export default function PostList ({
             isHistoryView &&
             post &&
             post.item_type === 'found' &&
-            post.custody_status === 'with_reporter'
+            (post.custody_status === 'with_reporter' ||
+              hasResumableHandoverSession)
           ) {
             buttons.push({
-              text: 'Handover to Guard',
+              text:
+                hasResumableHandoverSession
+                  ? 'Resume Handover to Guard'
+                  : 'Handover to Guard',
               handler: () => {
                 if (activePostId) {
                   navigate(`/user/post/history/view/${activePostId}/handover`)

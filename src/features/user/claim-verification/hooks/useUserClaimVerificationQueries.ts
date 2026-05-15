@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ClaimVerificationSessionStatusResponse } from '@/shared/lib/api-types'
 import {
   cancelUserClaimSession,
+  fetchCurrentUserClaimCode,
   fetchUserClaimSessionStatus,
   joinUserClaimSession,
   retryUserClaimSession
@@ -14,6 +15,7 @@ import type {
 const USER_CLAIM_POLL_INTERVAL_MS = 5000
 
 export const userClaimVerificationQueryKeys = {
+  manualCode: ['user-claim-verification', 'manual-code'] as const,
   sessionStatus: (claimVerificationSessionId: string) =>
     ['user-claim-verification', 'session-status', claimVerificationSessionId] as const
 }
@@ -39,6 +41,16 @@ export function useUserClaimSessionStatusQuery (
       shouldContinuePolling(query.state.data)
         ? USER_CLAIM_POLL_INTERVAL_MS
         : false,
+    retry: 1
+  })
+}
+
+export function useUserClaimManualEntryCodeQuery (enabled = true) {
+  return useQuery({
+    queryKey: userClaimVerificationQueryKeys.manualCode,
+    queryFn: async () => await fetchCurrentUserClaimCode(),
+    enabled,
+    staleTime: Infinity,
     retry: 1
   })
 }

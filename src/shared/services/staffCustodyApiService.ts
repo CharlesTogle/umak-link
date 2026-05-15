@@ -1,6 +1,9 @@
 import api from '@/shared/lib/api'
 
 export const staffCustodyApiService = {
+  getPostHistory: (postId: number) =>
+    api.custody.getPostHistory(postId),
+
   receiveInSecurityOffice: (postId: number) =>
     api.staffCustody.receiveInSecurityOffice(postId),
 

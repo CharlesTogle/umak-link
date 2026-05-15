@@ -1,10 +1,11 @@
 import { ApiError, api } from '@/shared/lib/api'
 import type {
+  GuardActiveClaimReviewsResponse,
   GuardDecisionRequest,
   GuardDecisionResponse,
   GuardScanRequest,
   GuardScanResponse
-} from '@/features/guard/types/guard-custody'
+} from '@/shared/lib/api-types'
 
 export class GuardCustodyError extends Error {
   statusCode: number
@@ -44,6 +45,14 @@ export async function submitGuardCustodyDecision (
 ): Promise<GuardDecisionResponse> {
   try {
     return await api.guardCustody.decide(custodyAttemptId, payload)
+  } catch (error) {
+    throw mapGuardCustodyError(error)
+  }
+}
+
+export async function fetchGuardActiveClaimReviews (): Promise<GuardActiveClaimReviewsResponse> {
+  try {
+    return await api.guardCustody.listActiveClaimReviews()
   } catch (error) {
     throw mapGuardCustodyError(error)
   }
