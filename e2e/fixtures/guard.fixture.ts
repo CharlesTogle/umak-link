@@ -53,16 +53,21 @@ export const test = base.extend<GuardFixtures>({
   mockGuardScanSuccess: async ({ page }, applyFixture) => {
     await applyFixture(async () => {
       await page.route('**/guard/custody/scan', async route => {
-        const body = route.request().postDataJSON() as {
-          qr_code_session_id: string
-          session_token: string
-        }
+        const body = route.request().postDataJSON() as
+          | {
+            manual_entry_code: string
+          }
+          | {
+            qr_code_session_id: string
+            session_token: string
+          }
 
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
           body: JSON.stringify({
-            qr_code_session_id: body.qr_code_session_id,
+            qr_code_session_id:
+              'qr_code_session_id' in body ? body.qr_code_session_id : 'qr-session-001',
             custody_attempt_id: 'attempt-001',
             post_id: 123,
             item_id: 'item-001',

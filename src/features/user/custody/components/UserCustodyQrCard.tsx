@@ -8,6 +8,10 @@ export default function UserCustodyQrCard ({
 }: UserCustodyQrCardProps) {
   const hasBeenScanned =
     sessionStatus?.scanned_at !== null && sessionStatus?.attempt_status === 'open'
+  const formattedManualEntryCode = activeSession.manualEntryCode.replace(
+    /(.{3})(?=.)/g,
+    '$1 '
+  )
 
   return (
     <div
@@ -44,6 +48,35 @@ export default function UserCustodyQrCard ({
             The item stays with you until the guard accepts the handover in the
             app.
           </p>
+        </div>
+
+        <div
+          className='w-full rounded-2xl border border-white/15 bg-slate-950/20 p-4'
+          data-testid='user-custody-manual-entry-details'
+        >
+          <p className='text-xs font-semibold uppercase tracking-[0.18em] text-white/70'>
+            Manual Guard Entry
+          </p>
+          <p className='mt-2 text-sm leading-6 text-white/85'>
+            If the guard camera cannot scan this QR, ask the guard to type this
+            code on the Guard Scan page.
+          </p>
+
+          <div className='mt-4 rounded-2xl bg-white/10 px-4 py-5 text-center'>
+            <p className='text-xs font-semibold uppercase tracking-[0.16em] text-white/70'>
+              Manual Entry Code
+            </p>
+            <p
+              className='mt-3 font-mono text-3xl font-bold tracking-[0.35em] text-white'
+              data-testid='user-custody-manual-entry-code'
+            >
+              {formattedManualEntryCode}
+            </p>
+            <p className='mt-3 text-xs leading-5 text-white/70'>
+              6 characters only. The guard does not need the long session ID or
+              token.
+            </p>
+          </div>
         </div>
 
         <img

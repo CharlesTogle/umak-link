@@ -144,6 +144,7 @@ export const performStatusChangeOperation = async (params: {
   selectedStatus: string | null
   selectedItemStatus: string | null
   selectedCustodyStatus: string | null
+  discardReason?: string
   updatePostStatusWithNotification: (
     postId: string,
     status: 'accepted' | 'rejected' | 'pending',
@@ -151,7 +152,8 @@ export const performStatusChangeOperation = async (params: {
   ) => Promise<{ success: boolean; error?: string }>
   updateItemStatus: (
     postId: string,
-    status: 'claimed' | 'unclaimed' | 'discarded' | 'returned' | 'lost'
+    status: 'claimed' | 'unclaimed' | 'discarded' | 'returned' | 'lost',
+    discardReason?: string
   ) => Promise<{ success: boolean; error?: string }>
   updateClaimedCustodyStatus: (
     postId: number,
@@ -163,6 +165,7 @@ export const performStatusChangeOperation = async (params: {
     selectedStatus,
     selectedItemStatus,
     selectedCustodyStatus,
+    discardReason,
     updatePostStatusWithNotification,
     updateItemStatus,
     updateClaimedCustodyStatus
@@ -210,7 +213,8 @@ export const performStatusChangeOperation = async (params: {
           | 'unclaimed'
           | 'discarded'
           | 'returned'
-          | 'lost'
+          | 'lost',
+        discardReason
       )
 
       if (!itemStatusResult.success) {

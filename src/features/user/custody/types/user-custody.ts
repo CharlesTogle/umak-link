@@ -23,11 +23,13 @@ export interface StartUserCustodyAttemptResult
   guardPostName: string
   handoverImageHash: string
   handoverImageUrl: string
+  manualEntryCode: string
   sessionToken: string
 }
 
 export interface RetryUserCustodySessionResult
   extends RetryCustodySessionResponse {
+  manualEntryCode: string
   sessionToken: string
 }
 
@@ -35,6 +37,7 @@ export interface StoredUserCustodySession {
   postId: number
   custodyAttemptId: string
   qrCodeSessionId: string
+  manualEntryCode: string
   sessionToken: string
   guardPostId: string
   guardPostName: string

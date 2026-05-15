@@ -67,6 +67,7 @@ export function mapStartAttemptResultToStoredSession (
     postId,
     custodyAttemptId: result.custody_attempt_id,
     qrCodeSessionId: result.qr_code_session_id,
+    manualEntryCode: result.manualEntryCode,
     sessionToken: result.sessionToken,
     guardPostId: result.guardPostId,
     guardPostName: result.guardPostName,
@@ -89,6 +90,7 @@ export function mapRetryResultToStoredSession (
 ): StoredUserCustodySession {
   return {
     ...currentSession,
+    manualEntryCode: result.manualEntryCode,
     sessionToken: result.sessionToken,
     custodyStatus: result.custody_status,
     attemptStatus: result.attempt_status,
@@ -152,6 +154,7 @@ export async function startUserCustodyAttempt (
 
     return {
       ...response,
+      manualEntryCode: response.manual_entry_code,
       guardPostId: input.guardPostId,
       guardPostName: input.guardPostName,
       handoverImageHash,
@@ -174,6 +177,7 @@ export async function retryUserCustodySession (
 
     return {
       ...response,
+      manualEntryCode: response.manual_entry_code,
       sessionToken
     }
   } catch (error) {

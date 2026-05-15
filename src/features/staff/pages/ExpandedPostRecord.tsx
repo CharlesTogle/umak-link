@@ -12,7 +12,8 @@ import {
   IonModal,
   IonButton,
   IonChip,
-  IonLabel
+  IonLabel,
+  IonTextarea
 } from '@ionic/react'
 import { personCircle, arrowBack } from 'ionicons/icons'
 import LazyImage from '@/shared/components/LazyImage'
@@ -77,6 +78,7 @@ export default memo(function ExpandedPostRecord () {
   const [selectedCustodyStatus, setSelectedCustodyStatus] = useState<string | null>(
     null
   )
+  const [discardReason, setDiscardReason] = useState('')
   const [showRejectionModal, setShowRejectionModal] = useState(false)
   const [showUnclaimConfirmModal, setShowUnclaimConfirmModal] = useState(false)
   const [showNotifyOwnerModal, setShowNotifyOwnerModal] = useState(false)
@@ -204,6 +206,7 @@ export default memo(function ExpandedPostRecord () {
         setSelectedStatus(record.post_status)
         setSelectedItemStatus(record.item_status)
         setSelectedCustodyStatus(record.custody_status)
+        setDiscardReason('')
         setShowStatusModal(true)
         break
     }
@@ -220,6 +223,10 @@ export default memo(function ExpandedPostRecord () {
   const isCustodyStatusActive = (status: string) => {
     return selectedCustodyStatus === status
   }
+
+  const isDiscardTransitionSelected =
+    selectedItemStatus === 'discarded' && record?.item_status !== 'discarded'
+  const normalizedDiscardReason = discardReason.trim()
 
   const handleApplyStatusChange = async () => {
     if (!record) return
@@ -264,6 +271,7 @@ export default memo(function ExpandedPostRecord () {
         setSelectedStatus(null)
         setSelectedItemStatus(null)
         setSelectedCustodyStatus(null)
+        setDiscardReason('')
         navigate(`/staff/post/claim/${record.post_id}`)
         return
       }
@@ -279,6 +287,14 @@ export default memo(function ExpandedPostRecord () {
         show: true,
         message:
           'Pending found posts can be accepted or rejected only after Security Office receipt.'
+      })
+      return
+    }
+
+    if (isDiscardTransitionSelected && normalizedDiscardReason.length === 0) {
+      setToast({
+        show: true,
+        message: 'Please record what will happen to the discarded item'
       })
       return
     }
@@ -315,6 +331,9 @@ export default memo(function ExpandedPostRecord () {
         selectedStatus,
         selectedItemStatus,
         selectedCustodyStatus,
+        discardReason: isDiscardTransitionSelected
+          ? normalizedDiscardReason
+          : undefined,
         updatePostStatusWithNotification,
         updateItemStatus,
         updateClaimedCustodyStatus: staffCustodyApiService.updateClaimedCustodyStatus
@@ -343,6 +362,7 @@ export default memo(function ExpandedPostRecord () {
       setSelectedStatus(null)
       setSelectedItemStatus(null)
       setSelectedCustodyStatus(null)
+      setDiscardReason('')
 
       if (statusChangeTimeoutRef.current) {
         clearTimeout(statusChangeTimeoutRef.current)
@@ -383,6 +403,14 @@ export default memo(function ExpandedPostRecord () {
       return
     }
 
+    if (isDiscardTransitionSelected && normalizedDiscardReason.length === 0) {
+      setToast({
+        show: true,
+        message: 'Please record what will happen to the discarded item'
+      })
+      return
+    }
+
     setShowRejectionModal(false)
     setIsSubmitting(true)
     const result = await updatePostStatusWithNotification(
@@ -392,6 +420,31 @@ export default memo(function ExpandedPostRecord () {
     )
 
     if (result.success) {
+      if (
+        selectedItemStatus &&
+        selectedItemStatus !== record.item_status
+      ) {
+        const itemStatusResult = await updateItemStatus(
+          record.post_id,
+          selectedItemStatus as
+            | 'claimed'
+            | 'unclaimed'
+            | 'discarded'
+            | 'returned'
+            | 'lost',
+          isDiscardTransitionSelected ? normalizedDiscardReason : undefined
+        )
+
+        if (!itemStatusResult.success) {
+          setToast({
+            show: true,
+            message: itemStatusResult.error || 'Failed to update item status'
+          })
+          setIsSubmitting(false)
+          return
+        }
+      }
+
       if (
         selectedCustodyStatus &&
         selectedCustodyStatus !== record.custody_status &&
@@ -428,6 +481,7 @@ export default memo(function ExpandedPostRecord () {
     setSelectedStatus(null)
     setSelectedItemStatus(null)
     setSelectedCustodyStatus(null)
+    setDiscardReason('')
   }
 
   const handleUnclaimConfirm = async () => {
@@ -922,6 +976,7 @@ export default memo(function ExpandedPostRecord () {
           setSelectedStatus(null)
           setSelectedItemStatus(null)
           setSelectedCustodyStatus(null)
+          setDiscardReason('')
         }}
         backdropDismiss={true}
         initialBreakpoint={0.4}
@@ -1022,6 +1077,26 @@ export default memo(function ExpandedPostRecord () {
                     )
                   })}
                 </div>
+                {isDiscardTransitionSelected && (
+                  <div className='mt-4'>
+                    <p className='text-xs! font-semibold! text-black! uppercase! tracking-wide! mb-2!'>
+                      Discarded Reason
+                    </p>
+                    <p className='mb-2 text-sm text-gray-500'>
+                      Record what will happen to the item after it is discarded.
+                    </p>
+                    <IonTextarea
+                      value={discardReason}
+                      onIonInput={event =>
+                        setDiscardReason(event.detail.value ?? '')
+                      }
+                      autoGrow
+                      fill='outline'
+                      rows={4}
+                      placeholder='Example: Turned over to campus recycling after the storage retention period.'
+                    />
+                  </div>
+                )}
               </>
             )}
 
@@ -1069,6 +1144,7 @@ export default memo(function ExpandedPostRecord () {
                 setSelectedStatus(null)
                 setSelectedItemStatus(null)
                 setSelectedCustodyStatus(null)
+                setDiscardReason('')
               }}
               className='flex text-umak-blue'
             >
@@ -1103,6 +1179,7 @@ export default memo(function ExpandedPostRecord () {
           setSelectedStatus(null)
           setSelectedItemStatus(null)
           setSelectedCustodyStatus(null)
+          setDiscardReason('')
         }}
       />
 
@@ -1117,6 +1194,7 @@ export default memo(function ExpandedPostRecord () {
           setSelectedStatus(null)
           setSelectedItemStatus(null)
           setSelectedCustodyStatus(null)
+          setDiscardReason('')
         }}
         submitLabel={isSubmitting ? 'Processing...' : 'Confirm'}
         cancelLabel='Cancel'

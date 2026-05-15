@@ -30,13 +30,9 @@ test.describe('Guard custody flow', () => {
     await page.goto('/guard/scan')
 
     await page
-      .getByTestId('guard-qr-session-id-input')
+      .getByTestId('guard-manual-entry-code-input')
       .locator('input')
-      .fill('qr-session-001')
-    await page
-      .getByTestId('guard-session-token-input')
-      .locator('input')
-      .fill('plain-session-token')
+      .fill('AB2C3D')
 
     await page.getByTestId('guard-scan-submit').click()
 
@@ -90,13 +86,9 @@ test.describe('Guard custody flow', () => {
     await page.goto('/guard/scan')
 
     await page
-      .getByTestId('guard-qr-session-id-input')
+      .getByTestId('guard-manual-entry-code-input')
       .locator('input')
-      .fill('qr-session-001')
-    await page
-      .getByTestId('guard-session-token-input')
-      .locator('input')
-      .fill('plain-session-token')
+      .fill('AB2C3D')
     await page.getByTestId('guard-scan-submit').click()
 
     await expect(page.getByTestId('guard-review-page')).toBeVisible()
@@ -125,13 +117,9 @@ test.describe('Guard custody flow', () => {
     await page.goto('/guard/scan')
 
     await page
-      .getByTestId('guard-qr-session-id-input')
+      .getByTestId('guard-manual-entry-code-input')
       .locator('input')
-      .fill('qr-session-001')
-    await page
-      .getByTestId('guard-session-token-input')
-      .locator('input')
-      .fill('plain-session-token')
+      .fill('AB2C3D')
     await page.getByTestId('guard-scan-submit').click()
 
     await expect(page.getByTestId('guard-review-page')).toBeVisible()

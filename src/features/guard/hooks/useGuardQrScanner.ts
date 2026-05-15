@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react'
 import type {
-  GuardManualEntryPayload,
+  GuardQrPayload,
   GuardQrScannerAction,
   GuardQrScannerState
 } from '@/features/guard/types/guard-custody'
@@ -98,7 +98,7 @@ function getScannerErrorMessage (error: unknown): string {
 }
 
 interface UseGuardQrScannerOptions {
-  onDetected: (payload: GuardManualEntryPayload) => Promise<void>
+  onDetected: (payload: GuardQrPayload) => Promise<void>
 }
 
 export function useGuardQrScanner ({
