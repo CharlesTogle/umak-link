@@ -168,12 +168,16 @@ async function syncMissingProfileFieldsFromSession (
         );
       } catch (error) {
         console.warn('[UserContext] Failed to upload Google profile picture to storage:', error);
-        resolvedProfilePictureUrl = currentProfilePictureUrl ?? fallbacks.profilePictureUrl;
+        resolvedProfilePictureUrl = currentProfilePictureUrl;
       }
     }
   }
 
-  if (resolvedProfilePictureUrl && resolvedProfilePictureUrl !== currentProfilePictureUrl) {
+  if (
+    resolvedProfilePictureUrl &&
+    isManagedProfilePictureUrl(resolvedProfilePictureUrl) &&
+    resolvedProfilePictureUrl !== currentProfilePictureUrl
+  ) {
     updates.profile_picture_url = resolvedProfilePictureUrl;
   }
 
@@ -181,9 +185,7 @@ async function syncMissingProfileFieldsFromSession (
     return {
       ...profile,
       user_name: currentUserName ?? fallbacks.userName,
-      profile_picture_url:
-        resolvedProfilePictureUrl ??
-        fallbacks.profilePictureUrl,
+      profile_picture_url: resolvedProfilePictureUrl,
     };
   }
 
@@ -195,9 +197,7 @@ async function syncMissingProfileFieldsFromSession (
     return {
       ...profile,
       user_name: currentUserName ?? fallbacks.userName,
-      profile_picture_url:
-        resolvedProfilePictureUrl ??
-        fallbacks.profilePictureUrl,
+      profile_picture_url: resolvedProfilePictureUrl,
     };
   }
 }

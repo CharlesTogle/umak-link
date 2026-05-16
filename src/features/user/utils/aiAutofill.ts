@@ -1,18 +1,7 @@
 import { Capacitor } from '@capacitor/core'
 import { Preferences } from '@capacitor/preferences'
 import api, { ApiError } from '@/shared/lib/api'
-
-/**
- * Convert image File to base64 data URL
- */
-const fileToDataUrl = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onloadend = () => resolve(reader.result as string)
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
-}
+import { makeAiDataUrl } from '@/shared/utils/imageUtils'
 
 /**
  * Rate limit configuration
@@ -115,7 +104,7 @@ export async function generateAndAutofillFields (
   )
 
   try {
-    const base64 = await fileToDataUrl(imageFile)
+    const base64 = await makeAiDataUrl(imageFile)
 
     const aiPromise = api.ai.createPostAutofill(
       {

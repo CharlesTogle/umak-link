@@ -63,7 +63,6 @@ export default function PostList ({
   hasMore,
   loadMorePosts,
   ionFabButton,
-  fetchNewPosts,
   onClick,
   variant = 'user',
   handleRefresh: customHandleRefresh,
@@ -164,7 +163,6 @@ export default function PostList ({
     const loadInitialPosts = async () => {
       setLoading(true)
       await fetchPosts()
-      await fetchNewPosts?.()
       setLoading(false)
     }
     loadInitialPosts()

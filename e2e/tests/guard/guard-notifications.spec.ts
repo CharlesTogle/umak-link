@@ -70,6 +70,63 @@ test.describe('Guard notifications', () => {
       .toContain(`/notifications/${notificationId}/read`)
   })
 
+  test('guard can expand truncated linked notifications before opening the route', async ({
+    page
+  }) => {
+    const notificationId = '66666666-7777-4888-8999-000000000000'
+    const longDescription =
+      'Review the accepted custody handover, confirm the student identity, coordinate the handoff timing with Security Office, document the delivery notes, and verify the receiving checklist before closing the notification and marking the transfer complete for audit review.'
+
+    await page.setViewportSize({ width: 390, height: 844 })
+
+    await page.route('**/notifications', async route => {
+      if (route.request().resourceType() === 'document') {
+        await route.continue()
+        return
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          notifications: [
+            {
+              notification_id: notificationId,
+              user_id: 'guard-001',
+              title: 'Expanded Custody Follow-up Needed',
+              body: longDescription,
+              description: longDescription,
+              sent_to: 'guard-001',
+              sent_by: 'staff-001',
+              type: 'custody_guard_follow_up',
+              data: {
+                url: '/guard/settings'
+              },
+              is_read: false,
+              created_at: '2026-05-14T08:00:00.000Z',
+              image_url: null
+            }
+          ]
+        })
+      })
+    })
+
+    await page.goto('/guard/notifications')
+
+    await expect(
+      page.getByText('Expanded Custody Follow-up Needed')
+    ).toBeVisible()
+
+    await page.getByText('Expanded Custody Follow-up Needed').click()
+
+    await expect(page).toHaveURL('/guard/notifications')
+    await expect(page.getByText(longDescription)).toBeVisible()
+
+    await page.getByRole('button', { name: 'View details' }).click()
+
+    await expect(page).toHaveURL('/guard/settings')
+  })
+
   test('guard can revisit settings and notifications after opening home and scan', async ({
     page
   }) => {
