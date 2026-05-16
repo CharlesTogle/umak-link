@@ -24,20 +24,30 @@ interface usePostFetchingConfig {
 }
 
 export function usePostFetching (config: usePostFetchingConfig) {
+  const {
+    fetchFunction,
+    refreshPostFunction,
+    cacheKeys,
+    filterPosts,
+    postComparator,
+    pageSize = 5,
+    sortDirection = 'desc',
+    onError,
+    onOffline
+  } = config
   const [posts, setPosts] = useState<PublicPost[]>([])
   const [hasMore, setHasMore] = useState(true)
   const [isFetching, setIsFetching] = useState(false)
 
   const isFetchingRef = useRef(false)
   const loadedIdsRef = useRef<Set<string>>(new Set())
-  const cacheRef = useRef(createPostCache(config.cacheKeys))
-  const hasRefreshedCacheRef = useRef(false) // Track if we've refreshed cache on initial load
+  const cacheRef = useRef(createPostCache(cacheKeys))
 
   // Reusable sort function
   const sortPosts = useCallback(
     (arr: PublicPost[]) => {
       // Use optional custom comparator if provided
-      if (config.postComparator) return arr.sort(config.postComparator)
+      if (postComparator) return arr.sort(postComparator)
 
       return arr.sort((a, b) => {
         const A = a.submission_date ?? ''
@@ -45,11 +55,30 @@ export function usePostFetching (config: usePostFetchingConfig) {
         if (!A && !B) return 0
         if (!A) return 1
         if (!B) return -1
-        const dir = config.sortDirection ?? 'desc'
+        const dir = sortDirection
         return dir === 'desc' ? B.localeCompare(A) : A.localeCompare(B)
       })
     },
-    [config.sortDirection, config.postComparator]
+    [postComparator, sortDirection]
+  )
+
+  const applyFilter = useCallback(
+    (incomingPosts: PublicPost[]) =>
+      filterPosts ? filterPosts(incomingPosts) : incomingPosts,
+    [filterPosts]
+  )
+
+  const mergeUniquePosts = useCallback(
+    (incomingPosts: PublicPost[], existingPosts: PublicPost[]) => {
+      const byId = new Map<string, PublicPost>()
+
+      for (const post of [...incomingPosts, ...existingPosts]) {
+        byId.set(post.post_id, post)
+      }
+
+      return sortPosts(Array.from(byId.values()))
+    },
+    [sortPosts]
   )
 
   // Fetch newest posts (not loaded yet) and prepend them to the list
@@ -61,27 +90,17 @@ export function usePostFetching (config: usePostFetchingConfig) {
     try {
       const status = await Network.getStatus()
       if (!status.connected) {
-        config.onOffline?.()
+        onOffline?.()
         isFetchingRef.current = false
         setIsFetching(false)
         return
       }
 
       const exclude = Array.from(loadedIdsRef.current)
-      let newPosts = await config.fetchFunction(exclude, config.pageSize ?? 5)
-
-      if (config.filterPosts) newPosts = config.filterPosts(newPosts)
+      const newPosts = applyFilter(await fetchFunction(exclude, pageSize))
 
       if (newPosts.length > 0) {
-        let merged: PublicPost[]
-        if ((config.sortDirection ?? 'desc') === 'desc') {
-          // Prepend new posts for newest-first
-          merged = sortPosts([...newPosts, ...posts])
-        } else {
-          // Append new posts for oldest-first
-          merged = sortPosts([...posts, ...newPosts])
-        }
-        setPosts(merged)
+        setPosts(prevPosts => mergeUniquePosts(newPosts, prevPosts))
 
         // Add new post IDs to loaded set
         newPosts.forEach(p => loadedIdsRef.current.add(p.post_id))
@@ -92,14 +111,14 @@ export function usePostFetching (config: usePostFetchingConfig) {
       }
     } catch (error) {
       console.error('Error fetching new posts:', error)
-      config.onError?.(error as Error)
+      onError?.(error as Error)
     } finally {
       isFetchingRef.current = false
       setIsFetching(false)
     }
-  }, [posts, config, sortPosts])
+  }, [applyFilter, fetchFunction, mergeUniquePosts, onError, onOffline, pageSize])
 
-  // Initial load: Load cache + refresh cached posts from Supabase
+  // Initial load / reload: paint cache immediately, then replace it with the latest server window
   const fetchPosts = useCallback(async (): Promise<void> => {
     if (isFetchingRef.current) return
     isFetchingRef.current = true
@@ -111,101 +130,57 @@ export function usePostFetching (config: usePostFetchingConfig) {
       const cachedLoadedIds = await cacheRef.current.loadLoadedPostIds()
 
       if (cachedPosts.length > 0) {
-        // Apply filter to cached posts if provided
-        const filteredCache = config.filterPosts
-          ? config.filterPosts(cachedPosts)
-          : cachedPosts
-
-        setPosts(sortPosts(filteredCache))
+        setPosts(sortPosts(applyFilter(cachedPosts)))
         loadedIdsRef.current = cachedLoadedIds
       }
 
-      // 2. Check network status
       const status = await Network.getStatus()
       if (!status.connected) {
-        // Use cache if offline
         setHasMore(false)
-        config.onOffline?.()
+        onOffline?.()
         isFetchingRef.current = false
         setIsFetching(false)
         return
       }
 
-      // 3. If we have cached posts and haven't refreshed them yet, refresh them
-      if (cachedPosts.length > 0 && !hasRefreshedCacheRef.current) {
-        const cachedIds = Array.from(cachedLoadedIds)
+      const latestLimit = Math.max(cachedLoadedIds.size, pageSize)
+      const latestPosts = applyFilter(await fetchFunction([], latestLimit))
 
-        // Fetch fresh versions of cached posts using .in()
-        let refreshedPosts = await config.refreshPostFunction(cachedIds)
+      if (latestPosts.length > 0) {
+        const sortedLatestPosts = sortPosts(latestPosts)
 
-        // Apply filter if provided
-        if (config.filterPosts) {
-          refreshedPosts = config.filterPosts(refreshedPosts)
-        }
+        setPosts(sortedLatestPosts)
 
-        if (refreshedPosts.length > 0) {
-          // Update state with refreshed data
-          setPosts(sortPosts(refreshedPosts))
+        loadedIdsRef.current.clear()
+        sortedLatestPosts.forEach(p => loadedIdsRef.current.add(p.post_id))
 
-          // Update loadedIds with refreshed posts
-          loadedIdsRef.current.clear()
-          refreshedPosts.forEach(p => loadedIdsRef.current.add(p.post_id))
+        await cacheRef.current.clearPostsCache()
+        await cacheRef.current.saveCachedPublicPosts(sortedLatestPosts)
+        await cacheRef.current.saveLoadedPostIds(loadedIdsRef.current)
 
-          // Clear and save updated cache
-          await cacheRef.current.clearPostsCache()
-          await cacheRef.current.saveCachedPublicPosts(refreshedPosts)
-          await cacheRef.current.saveLoadedPostIds(loadedIdsRef.current)
-
-          hasRefreshedCacheRef.current = true
-        }
-      }
-
-      // 4. If no cached posts, fetch initial batch
-      if (cachedPosts.length === 0) {
-        let initialPosts = await config.fetchFunction([], config.pageSize ?? 5)
-        console.log('Fetched initial posts:', initialPosts)
-        // Apply filter if provided
-        if (config.filterPosts) {
-          initialPosts = config.filterPosts(initialPosts)
-        }
-
-        if (initialPosts.length > 0) {
-          setPosts(sortPosts(initialPosts))
-
-          // Track loaded IDs
-          initialPosts.forEach(p => loadedIdsRef.current.add(p.post_id))
-
-          // Save to cache
-          await cacheRef.current.saveCachedPublicPosts(initialPosts)
-          await cacheRef.current.saveLoadedPostIds(loadedIdsRef.current)
-
-          // Check if more posts available
-          if (initialPosts.length < (config.pageSize ?? 5)) {
-            setHasMore(false)
-          }
-        } else {
-          setHasMore(false)
-        }
+        setHasMore(sortedLatestPosts.length >= latestLimit)
+      } else {
+        await cacheRef.current.clearPostsCache()
+        loadedIdsRef.current.clear()
+        setPosts(sortPosts([]))
+        setHasMore(false)
       }
     } catch (error) {
       console.error('Error fetching posts:', error)
-      config.onError?.(error as Error)
+      onError?.(error as Error)
 
       // On error, use cache if available
       if (posts.length === 0) {
         const cachedPosts = await cacheRef.current.loadCachedPublicPosts()
         if (cachedPosts.length > 0) {
-          const filteredCache = config.filterPosts
-            ? config.filterPosts(cachedPosts)
-            : cachedPosts
-          setPosts(sortPosts(filteredCache))
+          setPosts(sortPosts(applyFilter(cachedPosts)))
         }
       }
     } finally {
       isFetchingRef.current = false
       setIsFetching(false)
     }
-  }, [posts, config, sortPosts])
+  }, [applyFilter, fetchFunction, onError, onOffline, pageSize, posts.length, sortPosts])
 
   // Load more posts - ONLY called by infinite scroll handler
   const loadMorePosts = useCallback(async (): Promise<void> => {
@@ -217,7 +192,7 @@ export function usePostFetching (config: usePostFetchingConfig) {
       // Check network status
       const status = await Network.getStatus()
       if (!status.connected) {
-        config.onOffline?.()
+        onOffline?.()
         isFetchingRef.current = false
         setIsFetching(false)
         return
@@ -225,28 +200,15 @@ export function usePostFetching (config: usePostFetchingConfig) {
 
       // Fetch NEW posts excluding already loaded ones
       const exclude = Array.from(loadedIdsRef.current)
-      let newPosts = await config.fetchFunction(exclude, config.pageSize ?? 5)
-
-      // Apply filter if provided
-      if (config.filterPosts) {
-        newPosts = config.filterPosts(newPosts)
-      }
+      const newPosts = applyFilter(await fetchFunction(exclude, pageSize))
 
       if (newPosts.length > 0) {
         // Check if more posts available
-        if (newPosts.length < (config.pageSize ?? 5)) {
+        if (newPosts.length < pageSize) {
           setHasMore(false)
         }
 
-        let merged: PublicPost[]
-        if ((config.sortDirection ?? 'desc') === 'desc') {
-          // Append new posts for newest-first
-          merged = sortPosts([...posts, ...newPosts])
-        } else {
-          // Prepend new posts for oldest-first
-          merged = sortPosts([...newPosts, ...posts])
-        }
-        setPosts(merged)
+        setPosts(prevPosts => mergeUniquePosts(newPosts, prevPosts))
 
         // Add new post IDs to loaded set
         newPosts.forEach(p => loadedIdsRef.current.add(p.post_id))
@@ -260,12 +222,12 @@ export function usePostFetching (config: usePostFetchingConfig) {
       }
     } catch (error) {
       console.error('Error loading more posts:', error)
-      config.onError?.(error as Error)
+      onError?.(error as Error)
     } finally {
       isFetchingRef.current = false
       setIsFetching(false)
     }
-  }, [posts, hasMore, config, sortPosts])
+  }, [applyFilter, fetchFunction, hasMore, mergeUniquePosts, onError, onOffline, pageSize])
 
   // Refresh function - only updates currently loaded posts
   const refreshPosts = useCallback(async (): Promise<void> => {
@@ -277,7 +239,7 @@ export function usePostFetching (config: usePostFetchingConfig) {
       // Check network status
       const status = await Network.getStatus()
       if (!status.connected) {
-        config.onOffline?.()
+        onOffline?.()
         isFetchingRef.current = false
         setIsFetching(false)
         return
@@ -293,12 +255,7 @@ export function usePostFetching (config: usePostFetchingConfig) {
       }
 
       // Fetch fresh versions of loaded posts using .in()
-      let refreshedPosts = await config.refreshPostFunction(loadedIds)
-
-      // Apply filter if provided
-      if (config.filterPosts) {
-        refreshedPosts = config.filterPosts(refreshedPosts)
-      }
+      const refreshedPosts = applyFilter(await refreshPostFunction(loadedIds))
 
       if (refreshedPosts.length > 0) {
         // Replace state with refreshed data
@@ -321,12 +278,12 @@ export function usePostFetching (config: usePostFetchingConfig) {
       }
     } catch (error) {
       console.error('Error refreshing posts:', error)
-      config.onError?.(error as Error)
+      onError?.(error as Error)
     } finally {
       isFetchingRef.current = false
       setIsFetching(false)
     }
-  }, [config, sortPosts])
+  }, [applyFilter, onError, onOffline, refreshPostFunction, sortPosts])
 
   // Calculate loading: true if fetching and no posts loaded yet
   const isLoading = posts.length === 0 && isFetching

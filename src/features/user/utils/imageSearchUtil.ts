@@ -1,16 +1,5 @@
 import { searchApiService } from '@/shared/services'
-
-/**
- * Convert image File to base64 data URL
- */
-const fileToDataUrl = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onloadend = () => resolve(reader.result as string)
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
-}
+import { makeAiDataUrl } from '@/shared/utils/imageUtils'
 
 interface GenerateImageSearchQueryParams {
   image: File
@@ -34,7 +23,7 @@ export async function generateImageSearchQuery (
   const { image, searchValue = '' } = params
 
   try {
-    const base64ImageData = await fileToDataUrl(image)
+    const base64ImageData = await makeAiDataUrl(image)
     const finalQuery = await searchApiService.generateImageQuery({
       imageDataUrl: base64ImageData,
       searchValue

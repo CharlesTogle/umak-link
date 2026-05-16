@@ -29,6 +29,22 @@ async function canvasToBlobWebP (
   })
 }
 
+async function blobToDataUrl (blob: Blob): Promise<string> {
+  return await new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result)
+        return
+      }
+
+      reject(new Error('Failed to encode image'))
+    }
+    reader.onerror = () => reject(reader.error ?? new Error('Failed to encode image'))
+    reader.readAsDataURL(blob)
+  })
+}
+
 export async function makeDisplay (file: File) {
   const bmp = await loadBitmap(file)
   const displayCanvas = drawToCanvas(bmp, 1600) // long edge 1600px
@@ -55,4 +71,39 @@ export async function makeDisplayAndThumb (file: File) {
   const thumbBlob = await canvasToBlobWebP(thumbCanvas, 0.8) // ~25–45 KB
 
   return { displayBlob, thumbBlob }
+}
+
+const AI_DATA_URL_TARGET_BYTES = 700 * 1024
+const AI_DATA_URL_VARIANTS = [
+  { maxEdge: 1600, quality: 0.82 },
+  { maxEdge: 1280, quality: 0.76 },
+  { maxEdge: 1024, quality: 0.7 },
+  { maxEdge: 896, quality: 0.64 }
+]
+
+export async function makeAiDataUrl (file: File): Promise<string> {
+  const bmp = await loadBitmap(file)
+
+  try {
+    let fallbackBlob: Blob | null = null
+
+    // AI routes send JSON bodies through Fastify, so keep the encoded image well under 1 MiB.
+    for (const variant of AI_DATA_URL_VARIANTS) {
+      const canvas = drawToCanvas(bmp, variant.maxEdge)
+      const blob = await canvasToBlobWebP(canvas, variant.quality)
+      fallbackBlob = blob
+
+      if (blob.size <= AI_DATA_URL_TARGET_BYTES) {
+        return await blobToDataUrl(blob)
+      }
+    }
+
+    if (!fallbackBlob) {
+      throw new Error('Failed to prepare image for AI upload')
+    }
+
+    return await blobToDataUrl(fallbackBlob)
+  } finally {
+    bmp.close?.()
+  }
 }
