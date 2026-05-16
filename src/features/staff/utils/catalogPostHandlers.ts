@@ -1,9 +1,7 @@
 import { searchApiService, notificationApiService, postApiService, pendingMatchApiService } from '@/shared/services'
-import api from '@/shared/lib/api'
 import { generateImageSearchQuery } from '@/features/user/utils/imageSearchUtil'
 import type { PublicPost } from '@/features/posts/types/post'
 import type { PostRecord } from '@/shared/lib/api-types'
-import { useAuditLogs } from '@/shared/hooks/useAuditLogs'
 
 // Rate limiting for Gemini API
 const RATE_LIMIT_WINDOW = 60000 // 1 minute in milliseconds
@@ -60,6 +58,10 @@ interface HandlerResult {
   error?: string
 }
 
+function getErrorMessage (error: unknown): string {
+  return error instanceof Error ? error.message : 'Unknown error occurred'
+}
+
 function mapPostRecordToPublicPost (record: PostRecord): PublicPost {
   return {
     post_id: String(record.post_id),
@@ -94,7 +96,6 @@ function mapPostRecordToPublicPost (record: PostRecord): PublicPost {
  * Handle matching a missing item with found items using AI-powered search
  */
 export async function handleMatch (
-  userId: string,
   postId: string,
   itemName: string,
   itemDescription: string,
@@ -118,30 +119,7 @@ export async function handleMatch (
       }
     }
 
-    // Fetch staff data for audit log
-    let staffData = null
-    try {
-      const userData = await api.users.get(userId)
-      staffData = { user_name: userData.user_name }
-    } catch (error) {
-      console.error('Failed to fetch staff data for audit log:', error)
-    }
-    // Step 2: Create audit log
-    const { insertAuditLog } = useAuditLogs()
-    await insertAuditLog({
-      user_id: userId,
-      action_type: 'match_attempt',
-      details: {
-        message: `${
-          staffData?.user_name || 'Staff'
-        } initiated match generation for post ${itemName}`,
-        post_id: postId,
-        item_name: itemName,
-        timestamp: new Date().toISOString()
-      }
-    })
-
-    // Step 3: Start non-blocking match generation in background
+    // Step 2: Start non-blocking match generation in background
     generateMatchesInBackground(
       postId,
       itemName,
@@ -156,13 +134,13 @@ export async function handleMatch (
       matches: [],
       total_matches: 0
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Match error:', error)
     return {
       success: false,
       matches: [],
       total_matches: 0,
-      error: error.message || 'Unknown error occurred'
+      error: getErrorMessage(error)
     }
   }
 }
@@ -212,11 +190,13 @@ async function generateMatchesInBackground (
             failureReason =
               imageSearchResult.error || 'Image search query generation failed'
           }
-        } catch (imageError: any) {
+        } catch (imageError: unknown) {
           console.error('Image search query generation failed:', imageError)
           shouldAddToPending = true
           failureReason =
-            imageError.message || 'Unknown error during image processing'
+            imageError instanceof Error
+              ? imageError.message
+              : 'Unknown error during image processing'
         }
       }
     }
@@ -280,7 +260,7 @@ async function generateMatchesInBackground (
         console.error('Failed to send notification:', notificationError)
       }
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Background match generation error:', error)
   }
 }
@@ -292,35 +272,10 @@ export async function handleDeleteSubmit (
   postId: string,
   posterId: string,
   itemName: string,
-  reason: string,
-  staffId: string
+  reason: string
 ): Promise<HandlerResult> {
   try {
-    // Fetch staff data for audit log
-    let staffData = null
-    try {
-      const userData = await api.users.get(staffId)
-      staffData = { user_name: userData.user_name }
-    } catch (error) {
-      console.error('Failed to fetch staff data for audit log:', error)
-    }
-
-    // Step 1: Create audit log
-    const { insertAuditLog } = useAuditLogs()
-    await insertAuditLog({
-      user_id: staffId,
-      action_type: 'post_deleted',
-      details: {
-        message: `${
-          staffData?.user_name || 'Staff'
-        } deleted the post ${itemName}`,
-        post_id: postId,
-        reason,
-        deleted_at: new Date().toISOString()
-      }
-    })
-
-    // Step 2: Hard delete the post
+    // Step 1: Hard delete the post
     const deleteResult = await postApiService.deletePost(parseInt(postId))
 
     if (!deleteResult.success) {
@@ -331,7 +286,7 @@ export async function handleDeleteSubmit (
       }
     }
 
-    // Step 3: Send notification to poster
+    // Step 2: Send notification to poster
     try {
       await notificationApiService.sendNotification({
         user_id: posterId,
@@ -349,11 +304,11 @@ export async function handleDeleteSubmit (
     }
 
     return { success: true }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Delete submit error:', error)
     return {
       success: false,
-      error: error.message || 'Unknown error occurred'
+      error: getErrorMessage(error)
     }
   }
 }
@@ -365,8 +320,7 @@ export async function handleRejectSubmit (
   postId: string,
   posterId: string,
   itemName: string,
-  reason: string,
-  staffId: string
+  reason: string
 ): Promise<HandlerResult> {
   try {
     // Step 1: Update post status to rejected
@@ -384,31 +338,7 @@ export async function handleRejectSubmit (
       }
     }
 
-    // Fetch staff data for audit log
-    let staffData = null
-    try {
-      const userData = await api.users.get(staffId)
-      staffData = { user_name: userData.user_name }
-    } catch (error) {
-      console.error('Failed to fetch staff data for audit log:', error)
-    }
-
-    // Step 2: Create audit log
-    const { insertAuditLog } = useAuditLogs()
-    await insertAuditLog({
-      user_id: staffId,
-      action_type: 'post_rejected',
-      details: {
-        message: `${
-          staffData?.user_name || 'Staff'
-        } rejected the post ${itemName}`,
-        post_id: postId,
-        reason,
-        rejected_at: new Date().toISOString()
-      }
-    })
-
-    // Step 3: Send notification to poster
+    // Step 2: Send notification to poster
     try {
       await notificationApiService.sendNotification({
         user_id: posterId,
@@ -426,11 +356,11 @@ export async function handleRejectSubmit (
     }
 
     return { success: true }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Reject submit error:', error)
     return {
       success: false,
-      error: error.message || 'Unknown error occurred'
+      error: getErrorMessage(error)
     }
   }
 }
@@ -471,30 +401,6 @@ export async function handleAccept (
       console.error('Failed to update staff assignment')
     }
 
-    // Fetch staff data for audit log
-    let staffData = null
-    try {
-      const userData = await api.users.get(staffId)
-      staffData = { user_name: userData.user_name }
-    } catch (error) {
-      console.error('Failed to fetch staff data for audit log:', error)
-    }
-
-    // Step 2: Create audit log
-    const { insertAuditLog } = useAuditLogs()
-    await insertAuditLog({
-      user_id: staffId,
-      action_type: 'post_accepted',
-      details: {
-        message: `${
-          staffData?.user_name || 'Staff'
-        } accepted the post ${itemName}`,
-        postTitle: itemName,
-        post_id: postId,
-        accepted_at: new Date().toISOString()
-      }
-    })
-
     // Step 3: Send notification to poster
     try {
       await notificationApiService.sendNotification({
@@ -517,11 +423,11 @@ export async function handleAccept (
     )
 
     return { success: true }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Accept error:', error)
     return {
       success: false,
-      error: error.message || 'Unknown error occurred'
+      error: getErrorMessage(error)
     }
   }
 }

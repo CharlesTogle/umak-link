@@ -142,8 +142,7 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
         postId,
         user_id,
         itemName,
-        choice,
-        currentUserId
+        choice
       )
 
       setIsProcessing(false)
@@ -212,7 +211,6 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
     matchTimeoutRef.current = setTimeout(async () => {
       setIsProcessing(true)
       const result = await performMatch(
-        currentUserId || '',
         postId,
         itemName,
         description,
