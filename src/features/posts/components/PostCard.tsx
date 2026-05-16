@@ -35,6 +35,7 @@ export default function PostCard ({
           {owner_profile_picture_url ? (
             <img
               src={owner_profile_picture_url}
+              alt={owner ? `${owner} profile` : 'Profile picture'}
               className='w-8 h-8 rounded-full'
             />
           ) : (

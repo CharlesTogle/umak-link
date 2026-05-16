@@ -2,7 +2,8 @@ import { IonIcon } from '@ionic/react'
 import {
   chevronForward,
   cubeOutline,
-  locationOutline
+  locationOutline,
+  personCircle
 } from 'ionicons/icons'
 import LazyImage from '@/shared/components/LazyImage'
 import type { GuardActiveClaimReviewRecord } from '@/shared/lib/api-types'
@@ -109,6 +110,27 @@ export default function GuardActiveClaimReviewList ({
                     icon={chevronForward}
                     className='mt-0.5 shrink-0 text-lg text-slate-400'
                   />
+                </div>
+
+                <div className='mt-3 flex items-center gap-3'>
+                  {post.poster_profile_picture_url ? (
+                    <img
+                      src={post.poster_profile_picture_url}
+                      alt={`${post.poster_name ?? 'Poster'} profile`}
+                      className='h-9 w-9 shrink-0 rounded-full border border-slate-200 object-cover'
+                    />
+                  ) : (
+                    <div className='grid h-9 w-9 shrink-0 place-items-center rounded-full border border-slate-200 bg-white text-slate-400'>
+                      <IonIcon icon={personCircle} className='text-2xl' />
+                    </div>
+                  )}
+
+                  <div className='min-w-0'>
+                    <p className='truncate text-sm font-semibold text-slate-900'>
+                      {post.poster_name ?? 'Unknown poster'}
+                    </p>
+                    <p className='text-xs text-slate-500'>Poster</p>
+                  </div>
                 </div>
 
                 <div className='mt-3 flex flex-wrap gap-2 text-xs text-slate-600'>

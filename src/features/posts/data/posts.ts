@@ -11,17 +11,27 @@ type PostRecordWithClaimDetails = ApiPostRecord & {
   claimed_by_contact?: string | null
   claimed_at?: string | null
   profile_picture_url?: string | null
+  poster_profile_picture_url?: string | null
 }
 
 type PostRecordDetailsWithClaimDetails = ApiPostRecordDetails & {
   claimed_by_contact?: string | null
   claimed_at?: string | null
+  profile_picture_url?: string | null
+  poster_profile_picture_url?: string | null
   claim_processed_by_name?: string | null
   claim_processed_by_email?: string | null
   claim_processed_by_profile_picture_url?: string | null
   claim_processed_by_user_type?: 'User' | 'Staff' | 'Admin' | 'Guard' | null
   accepted_by_guard_name?: string | null
   accepted_by_guard_email?: string | null
+}
+
+function getPosterProfilePictureUrl (record: {
+  profile_picture_url?: string | null
+  poster_profile_picture_url?: string | null
+}): string | null {
+  return record.poster_profile_picture_url ?? record.profile_picture_url ?? null
 }
 
 export interface PostRecordDetails {
@@ -144,7 +154,7 @@ function mapApiPostRecordDetailsToFeaturePostRecordDetails (
     custody_status: record.custody_status ?? null,
     poster_name: record.poster_name,
     poster_email: '',
-    poster_profile_picture_url: null,
+    poster_profile_picture_url: getPosterProfilePictureUrl(detailedRecord),
     claim_id: record.claim_id,
     claimer_name: record.claimed_by_name,
     claimer_school_email: record.claimed_by_email,
@@ -190,7 +200,7 @@ function mapPostRecordToFeaturePostRecordDetails (
     custody_status: record.custody_status ?? null,
     poster_name: record.poster_name,
     poster_email: '',
-    poster_profile_picture_url: null,
+    poster_profile_picture_url: getPosterProfilePictureUrl(postRecord),
     claim_id: record.claim_id,
     claimer_name: record.claimed_by_name,
     claimer_school_email: record.claimed_by_email,

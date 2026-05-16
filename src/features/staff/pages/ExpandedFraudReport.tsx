@@ -19,7 +19,6 @@ import {
 import { personCircle, arrowBack } from 'ionicons/icons'
 import { useFraudReports } from '@/features/staff/hooks/useFraudReports'
 import type { FraudReportPublic } from '@/features/staff/hooks/useFraudReports'
-import LazyImage from '@/shared/components/LazyImage'
 import ExpandableImage from '@/shared/components/ExpandableImage'
 import { HeaderWithButtons } from '@/shared/components/HeaderVariants'
 import { ChoiceModal } from '@/shared/components/ChoiceModal'
@@ -480,12 +479,12 @@ export default memo(function ExpandedFraudReport () {
               <IonCardContent className='p-7!'>
                 <div className='pb-2'>
                   <div className=' flex items-center flex-row p-0 -ml-1'>
-                    <IonAvatar slot='start' className='w-10 h-10'>
+                    <IonAvatar slot='start' className='w-10 h-10 overflow-hidden'>
                       {report.reporter_profile_picture_url ? (
-                        <LazyImage
+                        <img
                           src={report.reporter_profile_picture_url}
                           alt={`${report.reporter_name} profile`}
-                          className='w-full h-full object-cover rounded-full'
+                          className='w-full h-full object-cover'
                         />
                       ) : (
                         <div className='w-full h-full grid place-items-center bg-slate-100 text-slate-500 rounded-full'>
