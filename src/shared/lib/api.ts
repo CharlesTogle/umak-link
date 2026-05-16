@@ -15,6 +15,8 @@ import {
 import { supabase } from './supabase';
 import type {
   AuthMeResponse,
+  CreatePostAutofillRequest,
+  CreatePostAutofillResponse,
   CreatePostRequest,
   EditPostRequest,
   PostListResponse,
@@ -29,6 +31,8 @@ import type {
   FraudReportListResponse,
   FraudReportResolveRequest,
   SearchItemsRequest,
+  SearchImageQueryRequest,
+  SearchImageQueryResponse,
   SearchItemsStaffRequest,
   SendNotificationRequest,
   NotificationRecord,
@@ -256,6 +260,23 @@ class ApiClient {
       profile_picture_url?: string | null;
     }): Promise<{ user: UserProfile }> =>
       this.request<{ user: UserProfile }>('PATCH', '/auth/profile', updates),
+  };
+
+  // ============================================================================
+  // AI
+  // ============================================================================
+
+  ai = {
+    createPostAutofill: (
+      data: CreatePostAutofillRequest,
+      options?: RequestInit & { timeout?: number }
+    ): Promise<CreatePostAutofillResponse> =>
+      this.request<CreatePostAutofillResponse>(
+        'POST',
+        '/ai/create-post-autofill',
+        data,
+        options
+      ),
   };
 
   // ============================================================================
@@ -645,6 +666,17 @@ class ApiClient {
 
     itemsStaff: (data: SearchItemsStaffRequest): Promise<{ results: PostRecord[] }> =>
       this.request<{ results: PostRecord[] }>('POST', '/search/items/staff', data),
+
+    imageQuery: (
+      data: SearchImageQueryRequest,
+      options?: RequestInit & { timeout?: number }
+    ): Promise<SearchImageQueryResponse> =>
+      this.request<SearchImageQueryResponse>(
+        'POST',
+        '/search/image-query',
+        data,
+        options
+      ),
 
     matchMissingItem: (postId: string): Promise<{
       success: boolean;

@@ -100,6 +100,26 @@ export interface UserClaimCodeResponse {
 }
 
 // ============================================================================
+// AI Types
+// ============================================================================
+
+export interface CreatePostAutofillRequest {
+  image_data_url: string;
+  current_title?: string;
+  current_description?: string;
+  current_category?: string;
+}
+
+export interface CreatePostAutofillResponse {
+  success: boolean;
+  content: {
+    itemName?: string;
+    itemDescription?: string;
+    itemCategory?: string;
+  };
+}
+
+// ============================================================================
 // Student Custody Types
 // ============================================================================
 
@@ -719,6 +739,16 @@ export interface SearchItemsRequest {
 
 export interface SearchItemsStaffRequest extends Omit<SearchItemsRequest, 'sort'> {
   sort?: 'accepted_on_date' | 'submission_date';
+}
+
+export interface SearchImageQueryRequest {
+  image_data_url: string;
+  search_value?: string;
+}
+
+export interface SearchImageQueryResponse {
+  success: boolean;
+  search_query: string;
 }
 
 // ============================================================================
