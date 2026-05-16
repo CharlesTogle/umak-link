@@ -7,6 +7,22 @@ import api from '@/shared/lib/api';
 import type { SearchItemsRequest, SearchItemsStaffRequest, PostRecord } from '@/shared/lib/api-types';
 
 export const searchApiService = {
+  async generateImageQuery(params: {
+    imageDataUrl: string;
+    searchValue?: string;
+  }): Promise<string> {
+    try {
+      const response = await api.search.imageQuery({
+        image_data_url: params.imageDataUrl,
+        search_value: params.searchValue,
+      });
+      return response.search_query;
+    } catch (error) {
+      console.error('[searchApiService] Generate image query error:', error);
+      throw error;
+    }
+  },
+
   /**
    * User search
    */
