@@ -22,6 +22,7 @@ type GuardFixtures = {
   mockGuardActiveClaimReviews: () => Promise<void>
   mockGuardPostRecordFallback: () => Promise<void>
   mockGuardClaimVerificationSession: () => Promise<void>
+  mockGuardClaimCodeResolution: () => Promise<void>
 }
 
 export const test = base.extend<GuardFixtures>({
@@ -168,7 +169,7 @@ export const test = base.extend<GuardFixtures>({
                 last_seen_at: '2026-05-15T11:23:00.000Z',
                 last_seen_location: 'Main Gate',
                 poster_name: 'Charles Nathaniel Togle',
-                poster_profile_picture_url: null,
+                poster_profile_picture_url: 'https://example.com/poster-2410.jpg',
                 submitted_on_date_local: '2026-05-15T11:25:00.000Z',
                 custody_status: 'with_guard',
                 post_status: 'pending',
@@ -221,7 +222,8 @@ export const test = base.extend<GuardFixtures>({
             claimed_by_email: null,
             claim_processed_by_staff_id: null,
             accepted_on_date: '2026-05-15T11:25:00.000Z',
-            is_anonymous: false
+            is_anonymous: false,
+            profile_picture_url: 'https://example.com/poster-2410.jpg'
           })
         })
       })
@@ -282,6 +284,25 @@ export const test = base.extend<GuardFixtures>({
           })
         }
       )
+    })
+  },
+
+  mockGuardClaimCodeResolution: async ({ page }, applyFixture) => {
+    await applyFixture(async () => {
+      await page.route('**/users/claim-code/*', async route => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            user_id: 'student-001',
+            user_name: 'Student Claimer',
+            email: 'student.claimer@umak.edu.ph',
+            profile_picture_url: 'https://example.com/student-claimer.jpg',
+            user_type: 'User',
+            notification_token: null
+          })
+        })
+      })
     })
   }
 })

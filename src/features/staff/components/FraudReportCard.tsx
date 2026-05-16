@@ -1,12 +1,10 @@
-import React, { lazy, memo } from 'react'
+import React, { memo } from 'react'
 import { useNavigation } from '@/shared/hooks/useNavigation'
-const LazyImage = lazy(() => import('@/shared/components/LazyImage'))
+import LazyImage from '@/shared/components/LazyImage'
 import {
   IonCard,
   IonCardContent,
-  IonAvatar,
-  IonIcon,
-  IonText
+  IonIcon
 } from '@ionic/react'
 import { personCircle } from 'ionicons/icons'
 import { parseReasonForReporting } from '@/features/staff/utils/parseReasonForReporting'
@@ -41,6 +39,7 @@ const FraudReportCard: React.FC<FraudReportCardProps> = ({
   itemName = 'Item Name',
   itemDescription = 'No description',
   itemImageUrl = null,
+  lastSeenAt = null,
   reasonForReporting = 'No reason provided',
   dateReported,
   reportStatus = 'under_review',
@@ -84,6 +83,33 @@ const FraudReportCard: React.FC<FraudReportCardProps> = ({
     })
   }
 
+  const formattedDateReported = formatDateTime(dateReported) || 'Unknown'
+
+  const renderProfileImage = (
+    imageUrl: string | null | undefined,
+    name: string,
+    sizeClassName: string,
+    iconClassName: string
+  ) => {
+    if (imageUrl) {
+      return (
+        <img
+          src={imageUrl}
+          alt={`${name} profile`}
+          className={`${sizeClassName} shrink-0 rounded-full object-cover`}
+        />
+      )
+    }
+
+    return (
+      <div
+        className={`${sizeClassName} grid shrink-0 place-items-center rounded-full bg-slate-100 text-slate-500`}
+      >
+        <IonIcon icon={personCircle} className={iconClassName} />
+      </div>
+    )
+  }
+
   return (
     <IonCard
       className={`mb-4 py-2 px-4 ${className}`}
@@ -91,40 +117,33 @@ const FraudReportCard: React.FC<FraudReportCardProps> = ({
       onClick={handleCardClick}
     >
       <IonCardContent className='p-0'>
-        {/* Header: Reporter avatar + name + status badge. Header text is the concern/reason */}
         <div className='pb-2'>
-          <div className=' flex items-center flex-row p-0 -ml-1'>
-            <IonAvatar slot='start' className='w-10 h-10'>
-              {reporterProfilePictureUrl ? (
-                <LazyImage
-                  src={reporterProfilePictureUrl}
-                  alt={`${reporterName} profile`}
-                  className='w-full h-full object-cover rounded-full'
-                />
-              ) : (
-                <div className='w-full h-full grid place-items-center bg-slate-100 text-slate-500 rounded-full'>
-                  <IonIcon icon={personCircle} className='text-3xl' />
-                </div>
+          <div className='flex items-start justify-between gap-3'>
+            <div className='flex min-w-0 items-center gap-3'>
+              {renderProfileImage(
+                reporterProfilePictureUrl,
+                reporterName,
+                'h-10 w-10',
+                'text-3xl'
               )}
-            </IonAvatar>
-            <div className='ml-2 text-umak-blue font-medium truncate'>
-              {reporterName}
+              <div className='min-w-0 text-sm text-slate-500'>
+                <span className='truncate font-medium text-slate-700'>
+                  {reporterName}
+                </span>
+                <span className='px-2 text-slate-300'>&bull;</span>
+                <span>{formattedDateReported}</span>
+              </div>
             </div>
-          </div>
-          <div className='h-px w-full my-2 bg-black'></div>
-
-          {/* Concern / Reason as the header */}
-          <div className='flex justify-between items-start flex-row'>
-            <div className='w-[75%] text-lg font-semibold text-slate-900'>
-              <span>{reason}</span>
-            </div>
-            <div className={`flex items-center gap-1 text-${getStatusColor()}`}>
+            <div className={`shrink-0 text-${getStatusColor()}`}>
               <span className='font-semibold capitalize'>
                 {(reportStatus || 'under_review').replaceAll('_', ' ')}
               </span>
             </div>
           </div>
-          <div className='h-px w-full my-1 bg-gray-200'></div>
+
+          <div className='mt-4 text-lg font-semibold text-slate-900'>
+            <span>{reason}</span>
+          </div>
 
           {details && (
             <div className='mt-2 text-sm text-slate-900'>
@@ -132,28 +151,9 @@ const FraudReportCard: React.FC<FraudReportCardProps> = ({
             </div>
           )}
         </div>
-        {/* Item preview card with poster info */}
+
         <IonCard className='rounded-2xl mt-1'>
           <IonCardContent>
-            <div className='flex flex-row items-center gap-2'>
-              <IonAvatar slot='start' className='w-8 h-8'>
-                {posterProfilePictureUrl ? (
-                  <LazyImage
-                    src={posterProfilePictureUrl}
-                    alt={`${posterName} profile`}
-                    className='w-full h-full object-cover rounded-full'
-                  />
-                ) : (
-                  <div className='w-full h-full grid place-items-center bg-slate-100 text-slate-500 rounded-full'>
-                    <IonIcon icon={personCircle} className='text-2xl' />
-                  </div>
-                )}
-              </IonAvatar>
-              <div className='font-medium font-default-font text-umak-blue truncate'>
-                {posterName}
-              </div>
-            </div>
-            <div className='h-px w-full my-2 bg-black'></div>
             <div className='flex justify-start items-center mt-3'>
               <div className='aspect-[16/13] overflow-hidden rounded-xl min-w-30 max-w-30 border-2 border-slate-900'>
                 <LazyImage
@@ -169,17 +169,24 @@ const FraudReportCard: React.FC<FraudReportCardProps> = ({
                 <p className='text-slate-900 pb-2 truncate!'>
                   {itemDescription}
                 </p>
+                <div className='mt-2 flex items-center gap-2 text-sm font-normal text-slate-500'>
+                  {renderProfileImage(
+                    posterProfilePictureUrl,
+                    posterName,
+                    'h-6 w-6',
+                    'text-xl'
+                  )}
+                  <span className='truncate'>Poster: {posterName}</span>
+                </div>
+                {lastSeenAt ? (
+                  <p className='text-sm font-normal text-slate-500'>
+                    Last seen: {formatDateTime(lastSeenAt)}
+                  </p>
+                ) : null}
               </div>
             </div>
           </IonCardContent>
         </IonCard>
-        {/* Footer: Date reported only */}
-        <div className='mt-3'>
-          <IonText className='text-xs text-slate-500'>
-            <span className='font-medium text-slate-600'>Date reported: </span>
-            {formatDateTime(dateReported) || 'Unknown'}
-          </IonText>
-        </div>
       </IonCardContent>
     </IonCard>
   )

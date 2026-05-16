@@ -5,6 +5,8 @@ import api from '@/shared/lib/api';
 import { getE2EAuthUser } from '@/shared/lib/e2eAuth';
 import { supabase } from '@/shared/lib/supabase';
 import type { UserProfile } from '@/shared/lib/api-types';
+import { makeDisplay } from '@/shared/utils/imageUtils';
+import { saveCachedBlob } from '@/shared/utils/fileUtils';
 
 // User type enum
 export type UserType = 'User' | 'Staff' | 'Admin' | 'Guard';
@@ -30,6 +32,7 @@ interface UserContextType {
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
+const PROFILE_PICTURE_CACHE_FILE_NAME = 'profilePicture.webp';
 
 function hasStatusCode(error: unknown, statusCode: number): boolean {
   if (typeof error !== 'object' || error === null || !('statusCode' in error)) {
@@ -48,6 +51,155 @@ function mapUserProfileToUser(profile: UserProfile): User {
     user_type: profile.user_type,
     notification_token: profile.notification_token,
   };
+}
+
+function getNonEmptyString (value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function getSessionProfileFallbacks (metadata: unknown): {
+  userName: string | null;
+  profilePictureUrl: string | null;
+} {
+  if (typeof metadata !== 'object' || metadata === null) {
+    return {
+      userName: null,
+      profilePictureUrl: null,
+    };
+  }
+
+  const record = metadata as Record<string, unknown>;
+
+  return {
+    userName:
+      getNonEmptyString(record.full_name) ??
+      getNonEmptyString(record.name),
+    profilePictureUrl:
+      getNonEmptyString(record.avatar_url) ??
+      getNonEmptyString(record.picture),
+  };
+}
+
+function isManagedProfilePictureUrl (value: string | null): boolean {
+  if (!value) {
+    return false;
+  }
+
+  return value.includes('/profilePictures/') || value.includes('profilePictures');
+}
+
+async function uploadProfilePictureFromRemoteUrl (
+  userId: string,
+  imageUrl: string
+): Promise<string> {
+  const response = await fetch(imageUrl);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch remote profile image: ${response.status}`);
+  }
+
+  const sourceBlob = await response.blob();
+  const sourceType = sourceBlob.type || 'image/jpeg';
+  const sourceExtension = sourceType.split('/')[1]?.split(';')[0] || 'jpg';
+  const sourceFile = new File(
+    [sourceBlob],
+    `profile.${sourceExtension}`,
+    { type: sourceType }
+  );
+
+  const displayBlob = await makeDisplay(sourceFile);
+  const objectPath = `users/${userId}/${Date.now()}_profile.webp`;
+  const uploadData = await api.storage.getUploadUrl(
+    'profilePictures',
+    objectPath,
+    'image/webp'
+  );
+
+  const uploadRes = await fetch(uploadData.uploadUrl, {
+    method: 'PUT',
+    body: displayBlob,
+    headers: {
+      'Content-Type': 'image/webp',
+    },
+  });
+
+  if (!uploadRes.ok) {
+    throw new Error(`Failed to upload profile image: ${uploadRes.status}`);
+  }
+
+  await api.storage.confirmUpload('profilePictures', uploadData.objectPath);
+  await saveCachedBlob(displayBlob, PROFILE_PICTURE_CACHE_FILE_NAME, 'cache/images');
+
+  return uploadData.publicUrl;
+}
+
+async function syncMissingProfileFieldsFromSession (
+  profile: UserProfile,
+  metadata: unknown
+): Promise<UserProfile> {
+  const fallbacks = getSessionProfileFallbacks(metadata);
+  const currentUserName = getNonEmptyString(profile.user_name);
+  const currentProfilePictureUrl = getNonEmptyString(profile.profile_picture_url);
+  const updates: {
+    user_name?: string | null;
+    profile_picture_url?: string | null;
+  } = {};
+
+  if (!currentUserName && fallbacks.userName) {
+    updates.user_name = fallbacks.userName;
+  }
+
+  let resolvedProfilePictureUrl = currentProfilePictureUrl;
+
+  if (fallbacks.profilePictureUrl) {
+    const shouldUploadManagedProfilePicture =
+      !currentProfilePictureUrl ||
+      !isManagedProfilePictureUrl(currentProfilePictureUrl);
+
+    if (shouldUploadManagedProfilePicture) {
+      try {
+        resolvedProfilePictureUrl = await uploadProfilePictureFromRemoteUrl(
+          profile.user_id,
+          fallbacks.profilePictureUrl
+        );
+      } catch (error) {
+        console.warn('[UserContext] Failed to upload Google profile picture to storage:', error);
+        resolvedProfilePictureUrl = currentProfilePictureUrl ?? fallbacks.profilePictureUrl;
+      }
+    }
+  }
+
+  if (resolvedProfilePictureUrl && resolvedProfilePictureUrl !== currentProfilePictureUrl) {
+    updates.profile_picture_url = resolvedProfilePictureUrl;
+  }
+
+  if (!updates.user_name && !updates.profile_picture_url) {
+    return {
+      ...profile,
+      user_name: currentUserName ?? fallbacks.userName,
+      profile_picture_url:
+        resolvedProfilePictureUrl ??
+        fallbacks.profilePictureUrl,
+    };
+  }
+
+  try {
+    const response = await api.auth.updateProfile(updates);
+    return response.user;
+  } catch (error) {
+    console.warn('[UserContext] Failed to sync profile fields from session metadata:', error);
+    return {
+      ...profile,
+      user_name: currentUserName ?? fallbacks.userName,
+      profile_picture_url:
+        resolvedProfilePictureUrl ??
+        fallbacks.profilePictureUrl,
+    };
+  }
 }
 
 export function UserProvider({ children }: { children: ReactNode }) {
@@ -74,7 +226,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
       // Fetch user from backend API
       const response = await api.auth.getMe();
-      return mapUserProfileToUser(response.user);
+      const syncedProfile = await syncMissingProfileFieldsFromSession(
+        response.user,
+        data.session.user.user_metadata
+      );
+      return mapUserProfileToUser(syncedProfile);
     } catch (error) {
       console.error('[UserContext] Error fetching user:', error);
       if (hasStatusCode(error, 401)) {

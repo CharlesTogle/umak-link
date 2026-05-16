@@ -40,13 +40,18 @@ test.describe('Guard custody flow', () => {
 
     await expect(custodyPost).toBeVisible()
     await expect(custodyPost).toContainText('Black Wallet')
+    await expect(
+      custodyPost.getByAltText('Charles Nathaniel Togle profile')
+    ).toBeVisible()
 
     await custodyPost.click()
 
     await expect(page).toHaveURL(/\/guard\/post-record\/view\/2410$/)
-    await expect(page.getByTestId('guard-post-record-page')).toBeVisible()
+    const postRecordPage = page.getByTestId('guard-post-record-page')
+    await expect(postRecordPage).toBeVisible()
     await expect(page.getByText('Post Details')).toBeVisible()
     await expect(page.getByText('Poster Details')).toBeVisible()
+    await expect(postRecordPage.getByAltText('Charles Nathaniel Togle')).toBeVisible()
     await expect(page.getByText('No record found')).toHaveCount(0)
   })
 
@@ -54,11 +59,13 @@ test.describe('Guard custody flow', () => {
     page,
     mockGuardActiveClaimReviews,
     mockGuardPostRecordFallback,
-    mockGuardClaimVerificationSession
+    mockGuardClaimVerificationSession,
+    mockGuardClaimCodeResolution
   }) => {
     await mockGuardActiveClaimReviews()
     await mockGuardPostRecordFallback()
     await mockGuardClaimVerificationSession()
+    await mockGuardClaimCodeResolution()
     await page.goto('/guard/home')
 
     await page.getByTestId('guard-custody-post-2410').click()
@@ -72,8 +79,17 @@ test.describe('Guard custody flow', () => {
     await page.getByText('Claim Item').click()
 
     await expect(page).toHaveURL(/\/guard\/post\/claim\/2410$/)
-    await expect(page.getByTestId('guard-claim-item-page')).toBeVisible()
+    const claimItemPage = page.getByTestId('guard-claim-item-page')
+    await expect(claimItemPage).toBeVisible()
     await expect(page.getByText('Process Guard Claim')).toBeVisible()
+    await expect(
+      claimItemPage.getByAltText('Charles Nathaniel Togle profile')
+    ).toBeVisible()
+
+    await claimItemPage.locator('ion-input#claim-manual-code input').fill('ABC123')
+    await page.getByRole('button', { name: 'Use Claim Code' }).click()
+
+    await expect(claimItemPage.getByAltText('Student Claimer')).toBeVisible()
   })
 
   test('guard can load a handover review from manual QR session entry', async ({
