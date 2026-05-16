@@ -760,7 +760,6 @@ export interface NotificationRecord {
 }
 
 export interface SendGlobalAnnouncementRequest {
-  user_id: string;
   message: string;
   description?: string | null;
   image_url?: string | null;
@@ -784,10 +783,6 @@ export interface GlobalAnnouncementFailedUser {
 
 export interface SendGlobalAnnouncementResponse {
   success: boolean;
-  global_notification_id: number;
-  push_status: 'complete' | 'partial' | 'failed' | 'not_attempted';
-  stats: GlobalAnnouncementSendStats;
-  failed_users?: GlobalAnnouncementFailedUser[];
 }
 
 export interface AnnouncementRecord {
