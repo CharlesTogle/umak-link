@@ -15,7 +15,7 @@ export const notificationApiService = {
   /**
    * Send a notification (staff only)
    */
-  async sendNotification(params: SendNotificationRequest): Promise<{ success: boolean; notification_id: number }> {
+  async sendNotification(params: SendNotificationRequest): Promise<{ success: boolean; notification_id: string | number }> {
     try {
       return await api.notifications.send(params);
     } catch (error) {
@@ -53,7 +53,7 @@ export const notificationApiService = {
   /**
    * Mark notification as read
    */
-  async markAsRead(notificationId: number): Promise<{ success: boolean }> {
+  async markAsRead(notificationId: string | number): Promise<{ success: boolean }> {
     try {
       return await api.notifications.markAsRead(notificationId);
     } catch (error) {
@@ -65,7 +65,7 @@ export const notificationApiService = {
   /**
    * Delete a notification
    */
-  async deleteNotification(notificationId: number): Promise<{ success: boolean }> {
+  async deleteNotification(notificationId: string | number): Promise<{ success: boolean }> {
     try {
       return await api.notifications.delete(notificationId);
     } catch (error) {
@@ -78,14 +78,12 @@ export const notificationApiService = {
    * Send global announcement (staff only)
    */
   async sendAnnouncement(params: {
-    userId: string;
     message: string;
     description?: string | null;
     imageUrl?: string | null;
   }): Promise<SendGlobalAnnouncementResponse> {
     try {
       return await api.announcements.send({
-        user_id: params.userId,
         message: params.message,
         description: params.description,
         image_url: params.imageUrl,

@@ -4,22 +4,27 @@
  */
 
 import api, { ApiError } from '@/shared/lib/api';
-import type { ProcessClaimRequest, ClaimDetails } from '@/shared/lib/api-types';
+import type {
+  ProcessClaimRequest,
+  ClaimDetails
+} from '@/shared/lib/api-types';
 
 export const claimApiService = {
   /**
-   * Process a claim (staff only)
+   * Process a claim from a staff or guard client
    */
   async processClaim(params: {
     foundPostId: number;
     missingPostId?: number | null;
     claimDetails: ClaimDetails;
+    claimVerification?: ProcessClaimRequest['claim_verification'];
   }): Promise<{ success: boolean; claim_id: string }> {
     try {
       const request: ProcessClaimRequest = {
         found_post_id: params.foundPostId,
         missing_post_id: params.missingPostId,
         claim_details: params.claimDetails,
+        claim_verification: params.claimVerification,
       };
 
       return await api.claims.process(request);
@@ -51,7 +56,7 @@ export const claimApiService = {
     claimer_school_email: string;
     claimer_contact_num: string;
     processed_by_staff_id: string;
-    claimed_at: string;
+    claimed_at: string | null;
     staff_name?: string;
   } | null> {
     try {

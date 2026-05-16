@@ -17,6 +17,10 @@ import Notifications from '@/features/user/pages/Notifications'
 import ExpandedHistoryPost from '@/features/user/pages/ExpandedHistoryPost'
 import Matches from '@/features/user/pages/Matches'
 import EditPost from '@/features/user/pages/EditPost'
+import UserCustodyHandover from '@/features/user/custody/pages/UserCustodyHandover'
+import UserClaimIdentityQr from '@/features/user/claim-verification/pages/UserClaimIdentityQr'
+import UserClaimJoinSession from '@/features/user/claim-verification/pages/UserClaimJoinSession'
+import UserClaimQrSession from '@/features/user/claim-verification/pages/UserClaimQrSession'
 
 const HistoryFallback = () => <div className='p-4'>Loading History…</div>
 const NewPostFallback = () => <div className='p-4'>Preparing form…</div>
@@ -48,6 +52,43 @@ export default function UserRoutes () {
           )}
         />
         <Route
+          exact
+          path='/user/claim/qr'
+          render={() => (
+            <Suspense fallback={<DefaultFallback />}>
+              <UserClaimIdentityQr />
+            </Suspense>
+          )}
+        />
+        <Route
+          exact
+          path='/user/claim/join'
+          render={() => (
+            <Suspense fallback={<DefaultFallback />}>
+              <UserClaimJoinSession />
+            </Suspense>
+          )}
+        />
+        <Route
+          exact
+          path='/user/claim/session/:claimVerificationSessionId'
+          render={() => (
+            <Suspense fallback={<DefaultFallback />}>
+              <UserClaimQrSession />
+            </Suspense>
+          )}
+        />
+        <Route
+          exact
+          path='/user/post/history/view/:postId/handover'
+          render={() => (
+            <Suspense fallback={<DefaultFallback />}>
+              <UserCustodyHandover />
+            </Suspense>
+          )}
+        />
+        <Route
+          exact
           path='/user/post/history/view/:postId'
           render={() => (
             <Suspense fallback={<DefaultFallback />}>

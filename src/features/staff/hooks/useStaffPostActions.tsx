@@ -1,20 +1,18 @@
 import { useState } from 'react'
-import { useAuditLogs } from '@/shared/hooks/useAuditLogs'
 import { useUser } from '@/features/auth/contexts/UserContext'
 import { usePostActionsStaffServices } from './usePostStaffServices'
 import { postApiService, searchApiService } from '@/shared/services'
 
 interface MatchResult {
   success: boolean
-  matches: any[]
-  missing_post?: any
+  matches: unknown[]
+  missing_post?: unknown
   total_matches?: number
 }
 
 export function useStaffPostActions () {
   const { changePostStatus } = usePostActionsStaffServices()
-  const { insertAuditLog } = useAuditLogs()
-  const { user, getUser, setUser } = useUser()
+  const { user } = useUser()
   const [isProcessing, setIsProcessing] = useState(false)
 
   /**
@@ -84,32 +82,6 @@ export function useStaffPostActions () {
   const deletePost = async (postId: string): Promise<boolean> => {
     setIsProcessing(true)
     try {
-      let currentUser = user
-
-      if (!user) {
-        currentUser = await getUser()
-        setUser(currentUser)
-      }
-
-      // Get post details before deletion for audit log
-      let postData: any = null
-      try {
-        postData = await postApiService.getFullPost(parseInt(postId))
-      } catch (error) {
-        console.error('Error fetching post details:', error)
-      }
-
-      // Log the action before deletion
-      await insertAuditLog({
-        user_id: currentUser?.user_id || 'unknown',
-        action_type: 'Delete Post',
-        details: {
-          action: 'Delete Post',
-          post_id: postId,
-          item_id: postData?.item_id
-        }
-      })
-
       // Hard delete the post
       await postApiService.deletePost(parseInt(postId))
 

@@ -13,6 +13,7 @@ import {
 } from '@ionic/react'
 import { ellipsisVertical, personCircle } from 'ionicons/icons'
 import ExpandableImage from '@/shared/components/ExpandableImage'
+import { formatTimestamp } from '@/shared/utils/formatTimeStamp'
 
 import { IonActionSheet } from '@ionic/react'
 
@@ -32,6 +33,7 @@ export type CatalogPostProps = {
   // Claimer details
   claimedByName?: string | null
   claimedAt?: string | null
+  submittedOn?: string | null
   // Returned details for missing items
   returnedAt?: string | null
   showSecurityQuestionDetails?: boolean
@@ -39,7 +41,7 @@ export type CatalogPostProps = {
   // New props for external action sheet control
   actionSheetOpen?: boolean
   onActionSheetDismiss?: () => void
-  actionSheetButtons?: any[]
+  actionSheetButtons?: React.ComponentProps<typeof IonActionSheet>['buttons']
 }
 
 const Post: React.FC<CatalogPostProps> = ({
@@ -57,6 +59,7 @@ const Post: React.FC<CatalogPostProps> = ({
   showAnonIndicator = false,
   claimedByName = null,
   claimedAt = null,
+  submittedOn = null,
   returnedAt = null,
   showSecurityQuestionDetails = true,
   showClaimDetails = false,
@@ -172,11 +175,19 @@ const Post: React.FC<CatalogPostProps> = ({
         {category && (
           <div className='flex flex-col my-3 text-xl text-slate-900'>
             <IonText class='font-extrabold'>
-              <strong>Categories:</strong>
+              <strong>Category:</strong>
             </IonText>
             <IonChip className='w-fit bg-umak-blue text-white px-10 mt-1'>
               {category}
             </IonChip>
+          </div>
+        )}
+        {submittedOn && (
+          <div className='flex flex-col my-3 text-xl text-slate-900'>
+            <IonText class='font-extrabold'>
+              <strong>Submission Date:</strong>
+            </IonText>
+            <IonText className='text-base'>{formatTimestamp(submittedOn)}</IonText>
           </div>
         )}
         {showSecurityQuestionDetails && (
@@ -210,6 +221,14 @@ const Post: React.FC<CatalogPostProps> = ({
                 </IonText>
               )}
             </div>
+          </div>
+        )}
+        {!showClaimDetails && normalizedStatus === 'claimed' && claimedAt && (
+          <div className='flex flex-col mt-4 text-xl text-slate-900'>
+            <IonText class='font-extrabold'>
+              <strong>Claim Date:</strong>
+            </IonText>
+            <IonText className='text-base'>{formatTimestamp(claimedAt)}</IonText>
           </div>
         )}
         {normalizedStatus === 'returned' && returnedAt && (

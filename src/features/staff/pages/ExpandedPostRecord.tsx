@@ -2,6 +2,7 @@ import { memo, useEffect, useState, useCallback, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { useNavigation } from '@/shared/hooks/useNavigation'
 import {
+  IonPage,
   IonContent,
   IonCard,
   IonCardContent,
@@ -12,10 +13,12 @@ import {
   IonModal,
   IonButton,
   IonChip,
-  IonLabel
+  IonLabel,
+  IonTextarea
 } from '@ionic/react'
 import { personCircle, arrowBack } from 'ionicons/icons'
 import LazyImage from '@/shared/components/LazyImage'
+import CustodyTimelineCard from '@/shared/components/CustodyTimelineCard'
 import { HeaderWithBackButton } from '@/shared/components/HeaderVariants'
 import Post from '@/features/posts/components/Post'
 import { sharePost } from '@/shared/utils/shareUtils'
@@ -37,19 +40,38 @@ import { isConnected } from '@/shared/utils/networkCheck'
 import { useUser } from '@/features/auth/contexts/UserContext'
 import { useAuditLogs } from '@/shared/hooks/useAuditLogs'
 import PostSkeleton from '@/features/posts/components/PostSkeleton'
+import { staffCustodyApiService } from '@/shared/services'
+import type { StudentCustodyHistoryResponse } from '@/shared/lib/api-types'
 import {
   formatDateTime,
+  formatClaimProcessedByName,
   getStatusColor,
   getStatusOptions,
   getItemStatusOptions,
+  getClaimedCustodyStatusOptions,
   isItemStatusAllowed,
   isPostStatusAllowed,
   performStatusChangeOperation
 } from './ExpandedPostRecord.helpers'
 
-export default memo(function ExpandedPostRecord () {
+interface ExpandedPostRecordProps {
+  mode?: 'staff' | 'guard'
+}
+
+export default memo(function ExpandedPostRecord ({
+  mode = 'staff'
+}: ExpandedPostRecordProps) {
   const { postId } = useParams<{ postId: string }>()
   const { navigate } = useNavigation()
+  const isGuardMode = mode === 'guard'
+  const pageTestId = isGuardMode
+    ? 'guard-post-record-page'
+    : 'staff-post-record-page'
+  const backPath = isGuardMode ? '/guard/home' : '/staff/post-records'
+  const recordViewPath = isGuardMode
+    ? '/guard/post-record/view'
+    : '/staff/post-record/view'
+  const claimPath = isGuardMode ? '/guard/post/claim' : '/staff/post/claim'
   const { updatePostStatusWithNotification, updateItemStatus } =
     usePostActionsStaffServices()
   const { sendNotification } = useNotifications()
@@ -57,6 +79,12 @@ export default memo(function ExpandedPostRecord () {
   const { insertAuditLog } = useAuditLogs()
 
   const [record, setRecord] = useState<PostRecordDetails | null>(null)
+  const [custodyHistory, setCustodyHistory] =
+    useState<StudentCustodyHistoryResponse | null>(null)
+  const [custodyHistoryError, setCustodyHistoryError] = useState<string | null>(
+    null
+  )
+  const [loadingCustodyHistory, setLoadingCustodyHistory] = useState(false)
   const [linkedPost, setLinkedPost] = useState<
     PublicPost | PostRecordDetails | null
   >(null)
@@ -72,13 +100,48 @@ export default memo(function ExpandedPostRecord () {
   const [selectedItemStatus, setSelectedItemStatus] = useState<string | null>(
     null
   )
+  const [selectedCustodyStatus, setSelectedCustodyStatus] = useState<string | null>(
+    null
+  )
+  const [discardReason, setDiscardReason] = useState('')
   const [showRejectionModal, setShowRejectionModal] = useState(false)
   const [showUnclaimConfirmModal, setShowUnclaimConfirmModal] = useState(false)
   const [showNotifyOwnerModal, setShowNotifyOwnerModal] = useState(false)
+  const [showNotifyGuardModal, setShowNotifyGuardModal] = useState(false)
+  const [showReceiveInSecurityOfficeModal, setShowReceiveInSecurityOfficeModal] =
+    useState(false)
+  const [showOpenInvestigationModal, setShowOpenInvestigationModal] =
+    useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const statusChangeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   )
+
+  const resetCustodyHistory = useCallback(() => {
+    setCustodyHistory(null)
+    setCustodyHistoryError(null)
+    setLoadingCustodyHistory(false)
+  }, [])
+
+  const loadCustodyHistory = useCallback(async (targetPostId: string) => {
+    setLoadingCustodyHistory(true)
+    setCustodyHistoryError(null)
+
+    try {
+      const history = await staffCustodyApiService.getPostHistory(
+        Number(targetPostId)
+      )
+      setCustodyHistory(history)
+    } catch (error) {
+      console.error('Error loading custody history', error)
+      setCustodyHistory(null)
+      setCustodyHistoryError(
+        error instanceof Error ? error.message : 'Failed to load custody history'
+      )
+    } finally {
+      setLoadingCustodyHistory(false)
+    }
+  }, [])
 
   const loadPost = useCallback(async () => {
     if (!postId) return
@@ -87,6 +150,7 @@ export default memo(function ExpandedPostRecord () {
     try {
       const connected = await isConnected()
       if (!connected) {
+        resetCustodyHistory()
         setToast({
           show: true,
           message: 'Failed to load Post - No Internet Connection'
@@ -98,6 +162,7 @@ export default memo(function ExpandedPostRecord () {
       const data = await getPostFull(postId)
 
       if (!data) {
+        resetCustodyHistory()
         setToast({ show: true, message: 'Post record not found' })
         setLoading(false)
         return
@@ -106,6 +171,12 @@ export default memo(function ExpandedPostRecord () {
       setRecord(data)
       setSelectedStatus(data.post_status)
       setSelectedItemStatus(data.item_status)
+
+      if (data.item_type === 'found') {
+        void loadCustodyHistory(data.post_id)
+      } else {
+        resetCustodyHistory()
+      }
 
       // Fetch linked post if available
       setLoadingLinkedPost(true)
@@ -143,11 +214,12 @@ export default memo(function ExpandedPostRecord () {
       }
     } catch (err) {
       console.error('Error loading post record', err)
+      resetCustodyHistory()
       setToast({ show: true, message: 'Failed to load post record' })
     } finally {
       setLoading(false)
     }
-  }, [postId])
+  }, [loadCustodyHistory, postId, resetCustodyHistory])
 
   useEffect(() => {
     loadPost()
@@ -158,7 +230,7 @@ export default memo(function ExpandedPostRecord () {
     if (!record) return
 
     switch (action) {
-      case 'share':
+      case 'share': {
         const result = await sharePost(record.post_id, 'user')
         if (result.success) {
           if (result.method === 'clipboard') {
@@ -174,13 +246,27 @@ export default memo(function ExpandedPostRecord () {
           })
         }
         break
+      }
       case 'notify':
         setShowNotifyOwnerModal(true)
         break
       case 'claim':
-        navigate(`/staff/post/claim/${record.post_id}`)
+        navigate(`${claimPath}/${record.post_id}`)
+        break
+      case 'notifyGuard':
+        setShowNotifyGuardModal(true)
+        break
+      case 'receiveInSecurityOffice':
+        setShowReceiveInSecurityOfficeModal(true)
+        break
+      case 'openInvestigation':
+        setShowOpenInvestigationModal(true)
         break
       case 'changeStatus':
+        setSelectedStatus(record.post_status)
+        setSelectedItemStatus(record.item_status)
+        setSelectedCustodyStatus(record.custody_status)
+        setDiscardReason('')
         setShowStatusModal(true)
         break
     }
@@ -194,8 +280,21 @@ export default memo(function ExpandedPostRecord () {
     return selectedItemStatus === status
   }
 
+  const isCustodyStatusActive = (status: string) => {
+    return selectedCustodyStatus === status
+  }
+
+  const isDiscardTransitionSelected =
+    selectedItemStatus === 'discarded' && record?.item_status !== 'discarded'
+  const normalizedDiscardReason = discardReason.trim()
+
   const handleApplyStatusChange = async () => {
     if (!record) return
+    const canClaimFoundItem =
+      record.item_type === 'found' &&
+      record.item_status === 'unclaimed' &&
+      record.post_status === 'accepted' &&
+      record.custody_status === 'in_security_office'
 
     // If a status change is already queued, inform the user and bail out
     if (statusChangeTimeoutRef.current) {
@@ -208,7 +307,7 @@ export default memo(function ExpandedPostRecord () {
     }
 
     // Validate that at least one status is selected
-    if (!selectedStatus && !selectedItemStatus) {
+    if (!selectedStatus && !selectedItemStatus && !selectedCustodyStatus) {
       setToast({
         show: true,
         message: 'Please select at least one status to change'
@@ -220,12 +319,44 @@ export default memo(function ExpandedPostRecord () {
     if (selectedItemStatus === 'claimed') {
       // Check if item was previously claimed
       if (record.item_status !== 'claimed') {
+        if (!canClaimFoundItem) {
+          setToast({
+            show: true,
+            message:
+              'Found items can be claimed only after Security Office receipt.'
+          })
+          return
+        }
         setShowStatusModal(false)
         setSelectedStatus(null)
         setSelectedItemStatus(null)
-        navigate(`/staff/post/claim/${record.post_id}`)
+        setSelectedCustodyStatus(null)
+        setDiscardReason('')
+        navigate(`${claimPath}/${record.post_id}`)
         return
       }
+    }
+
+    if (
+      record.item_type === 'found' &&
+      record.post_status === 'pending' &&
+      (selectedStatus === 'accepted' || selectedStatus === 'rejected') &&
+      record.custody_status !== 'in_security_office'
+    ) {
+      setToast({
+        show: true,
+        message:
+          'Pending found posts can be accepted or rejected only after Security Office receipt.'
+      })
+      return
+    }
+
+    if (isDiscardTransitionSelected && normalizedDiscardReason.length === 0) {
+      setToast({
+        show: true,
+        message: 'Please record what will happen to the discarded item'
+      })
+      return
     }
 
     // If rejected is selected, show rejection reason modal
@@ -259,8 +390,13 @@ export default memo(function ExpandedPostRecord () {
         record,
         selectedStatus,
         selectedItemStatus,
+        selectedCustodyStatus,
+        discardReason: isDiscardTransitionSelected
+          ? normalizedDiscardReason
+          : undefined,
         updatePostStatusWithNotification,
-        updateItemStatus
+        updateItemStatus,
+        updateClaimedCustodyStatus: staffCustodyApiService.updateClaimedCustodyStatus
       })
 
       if (!result.success) {
@@ -279,12 +415,19 @@ export default memo(function ExpandedPostRecord () {
 
       if (result.updatedRecord) {
         setRecord(result.updatedRecord)
+        if (result.updatedRecord.item_type === 'found') {
+          await loadCustodyHistory(result.updatedRecord.post_id)
+        } else {
+          resetCustodyHistory()
+        }
       }
 
       setIsSubmitting(false)
       setShowStatusModal(false)
       setSelectedStatus(null)
       setSelectedItemStatus(null)
+      setSelectedCustodyStatus(null)
+      setDiscardReason('')
 
       if (statusChangeTimeoutRef.current) {
         clearTimeout(statusChangeTimeoutRef.current)
@@ -311,6 +454,28 @@ export default memo(function ExpandedPostRecord () {
       return
     }
 
+    if (
+      record.item_type === 'found' &&
+      record.post_status === 'pending' &&
+      record.custody_status !== 'in_security_office'
+    ) {
+      setShowRejectionModal(false)
+      setToast({
+        show: true,
+        message:
+          'Pending found posts can be accepted or rejected only after Security Office receipt.'
+      })
+      return
+    }
+
+    if (isDiscardTransitionSelected && normalizedDiscardReason.length === 0) {
+      setToast({
+        show: true,
+        message: 'Please record what will happen to the discarded item'
+      })
+      return
+    }
+
     setShowRejectionModal(false)
     setIsSubmitting(true)
     const result = await updatePostStatusWithNotification(
@@ -320,6 +485,46 @@ export default memo(function ExpandedPostRecord () {
     )
 
     if (result.success) {
+      if (
+        selectedItemStatus &&
+        selectedItemStatus !== record.item_status
+      ) {
+        const itemStatusResult = await updateItemStatus(
+          record.post_id,
+          selectedItemStatus as
+            | 'claimed'
+            | 'unclaimed'
+            | 'discarded'
+            | 'returned'
+            | 'lost',
+          isDiscardTransitionSelected ? normalizedDiscardReason : undefined
+        )
+
+        if (!itemStatusResult.success) {
+          setToast({
+            show: true,
+            message: itemStatusResult.error || 'Failed to update item status'
+          })
+          setIsSubmitting(false)
+          return
+        }
+      }
+
+      if (
+        selectedCustodyStatus &&
+        selectedCustodyStatus !== record.custody_status &&
+        record.item_type === 'found' &&
+        record.item_status === 'claimed'
+      ) {
+        await staffCustodyApiService.updateClaimedCustodyStatus(
+          Number(record.post_id),
+          selectedCustodyStatus as
+            | 'in_security_office'
+            | 'under_investigation'
+            | 'claimed_by_student'
+        )
+      }
+
       setToast({
         show: true,
         message: 'Post rejected successfully'
@@ -329,6 +534,11 @@ export default memo(function ExpandedPostRecord () {
       const updatedData = await getPostFull(record.post_id)
       if (updatedData) {
         setRecord(updatedData)
+        if (updatedData.item_type === 'found') {
+          await loadCustodyHistory(updatedData.post_id)
+        } else {
+          resetCustodyHistory()
+        }
       }
     } else {
       setToast({
@@ -339,6 +549,9 @@ export default memo(function ExpandedPostRecord () {
 
     setIsSubmitting(false)
     setSelectedStatus(null)
+    setSelectedItemStatus(null)
+    setSelectedCustodyStatus(null)
+    setDiscardReason('')
   }
 
   const handleUnclaimConfirm = async () => {
@@ -398,11 +611,94 @@ export default memo(function ExpandedPostRecord () {
     }
   }
 
+  const handleNotifyGuardConfirm = async () => {
+    setShowNotifyGuardModal(false)
+    if (!record) return
+
+    try {
+      setIsSubmitting(true)
+      await staffCustodyApiService.notifyGuard(Number(record.post_id))
+      if (record.item_type === 'found') {
+        await loadCustodyHistory(record.post_id)
+      }
+      setToast({
+        show: true,
+        message: 'Guard notified successfully'
+      })
+    } catch (error) {
+      console.error('Error notifying guard:', error)
+      setToast({
+        show: true,
+        message:
+          error instanceof Error ? error.message : 'Failed to notify guard'
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleReceiveInSecurityOfficeConfirm = async () => {
+    setShowReceiveInSecurityOfficeModal(false)
+    if (!record) return
+
+    try {
+      setIsSubmitting(true)
+      await staffCustodyApiService.receiveInSecurityOffice(Number(record.post_id))
+      await loadPost()
+      setToast({
+        show: true,
+        message: 'Item marked as received in the Security Office'
+      })
+    } catch (error) {
+      console.error('Error marking item as received:', error)
+      setToast({
+        show: true,
+        message:
+          error instanceof Error
+            ? error.message
+            : 'Failed to mark item as received'
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleOpenInvestigationConfirm = async () => {
+    setShowOpenInvestigationModal(false)
+    if (!record) return
+
+    try {
+      setIsSubmitting(true)
+      await staffCustodyApiService.openInvestigation(Number(record.post_id))
+      await loadPost()
+      setToast({
+        show: true,
+        message: 'Custody investigation opened'
+      })
+    } catch (error) {
+      console.error('Error opening investigation:', error)
+      setToast({
+        show: true,
+        message:
+          error instanceof Error
+            ? error.message
+            : 'Failed to open investigation'
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const showCustodyStatusSection =
+    record?.item_type === 'found' && record?.item_status === 'claimed'
+  const showItemStatusSection = !showCustodyStatusSection
+
   return (
-    <IonContent>
-      <div className='fixed top-0 w-full z-10 max-h-screen'>
-        <HeaderWithBackButton onBack={() => window.history.back()} />
-      </div>
+    <IonPage data-testid={pageTestId}>
+      <IonContent>
+        <div className='fixed top-0 w-full z-10 max-h-screen'>
+          <HeaderWithBackButton onBack={() => navigate(backPath, 'back')} />
+        </div>
 
       {loading && (
         <div>
@@ -418,7 +714,7 @@ export default memo(function ExpandedPostRecord () {
             </p>
           </div>
           <IonButton
-            onClick={() => navigate('/staff/post-records', 'back')}
+            onClick={() => navigate(backPath, 'back')}
             fill='solid'
             style={{
               '--background': 'var(--color-umak-blue)',
@@ -446,6 +742,9 @@ export default memo(function ExpandedPostRecord () {
                   </div>
                   <div className='text-base font-medium text-gray-600'>
                     This post has been {record.post_status.replaceAll('_', ' ')}
+                  </div>
+                  <div className='mt-2 text-sm font-medium text-gray-500 capitalize'>
+                    Custody: {(record.custody_status || 'untracked').replaceAll('_', ' ')}
                   </div>
                 </div>
               </IonCardContent>
@@ -506,7 +805,7 @@ export default memo(function ExpandedPostRecord () {
                         : linkedPost.poster_profile_picture_url
                     }
                     onClick={() =>
-                      navigate(`/staff/post-record/view/${linkedPost.post_id}`)
+                      navigate(`${recordViewPath}/${linkedPost.post_id}`)
                     }
                   />
                 )}
@@ -525,6 +824,15 @@ export default memo(function ExpandedPostRecord () {
                     <p className='text-sm text-gray-600'>
                       <span className='font-medium'>Item Type: </span>
                       <span className='capitalize'>{record.item_type}</span>
+                    </p>
+                    <p className='text-sm text-gray-600'>
+                      <span className='font-medium'>Custody Status: </span>
+                      <span className='capitalize'>
+                        {(record.custody_status || 'untracked').replaceAll(
+                          '_',
+                          ' '
+                        )}
+                      </span>
                     </p>
                     <p className='text-sm text-gray-600'>
                       <span className='font-medium'>Submitted: </span>
@@ -623,7 +931,11 @@ export default memo(function ExpandedPostRecord () {
                           </IonAvatar>
                           <div>
                             <p className='text-sm! font-medium! text-gray-900'>
-                              {record.claim_processed_by_name}
+                              {formatClaimProcessedByName({
+                                name: record.claim_processed_by_name,
+                                userType:
+                                  record.claim_processed_by_user_type ?? null
+                              })}
                             </p>
                             <p className='text-sm! text-gray-600'>
                               {record.claim_processed_by_email}
@@ -636,6 +948,35 @@ export default memo(function ExpandedPostRecord () {
                 )}
               </IonCardContent>
             </IonCard>
+
+            {record.item_type === 'found' &&
+              (custodyHistoryError ? (
+                <IonCard className='mb-4 border border-rose-200 bg-rose-50 shadow-sm'>
+                  <IonCardContent className='p-5'>
+                    <p className='text-sm font-semibold text-rose-700'>
+                      Failed to load custody history
+                    </p>
+                    <p className='mt-1 text-sm text-rose-600'>
+                      {custodyHistoryError}
+                    </p>
+                  </IonCardContent>
+                </IonCard>
+              ) : (
+                <CustodyTimelineCard
+                  history={
+                    custodyHistory ?? {
+                      post_id: Number(record.post_id),
+                      item_id: record.item_id,
+                      post_status: record.post_status,
+                      custody_status:
+                        (record.custody_status ??
+                          'untracked') as StudentCustodyHistoryResponse['custody_status'],
+                      history: []
+                    }
+                  }
+                  isLoading={loadingCustodyHistory}
+                />
+              ))}
           </div>
         )}
       </div>
@@ -653,15 +994,30 @@ export default memo(function ExpandedPostRecord () {
         onDidDismiss={() => setShowActions(false)}
         buttons={(() => {
           const buttons = []
+          const canGuardClaim =
+            isGuardMode &&
+            record &&
+            record.item_type === 'found' &&
+            record.item_status === 'unclaimed' &&
+            record.custody_status === 'with_guard'
+          const canStaffClaim =
+            !isGuardMode &&
+            record &&
+            record.item_type === 'found' &&
+            record.item_status === 'unclaimed' &&
+            record.post_status === 'accepted' &&
+            record.custody_status === 'in_security_office'
 
-          // Share: always available
-          buttons.push({
-            text: 'Share',
-            handler: () => handleActionSheetClick('share')
-          })
+          if (!isGuardMode) {
+            buttons.push({
+              text: 'Share',
+              handler: () => handleActionSheetClick('share')
+            })
+          }
 
           // Notify the owner: only for missing items with status 'lost'
           if (
+            !isGuardMode &&
             record &&
             record.item_type === 'missing' &&
             record.item_status === 'lost'
@@ -672,22 +1028,55 @@ export default memo(function ExpandedPostRecord () {
             })
           }
 
-          if (
-            record &&
-            record.item_type === 'found' &&
-            record.item_status === 'unclaimed' &&
-            record.post_status === 'accepted'
-          )
+          if (canGuardClaim || canStaffClaim)
             buttons.push({
               text: 'Claim Item',
               handler: () => handleActionSheetClick('claim')
             })
 
-          // Change Status: always available
-          buttons.push({
-            text: 'Change Status',
-            handler: () => handleActionSheetClick('changeStatus')
-          })
+          if (
+            !isGuardMode &&
+            record &&
+            record.item_type === 'found' &&
+            (record.custody_status === 'with_guard' ||
+              record.custody_status === 'under_investigation')
+          ) {
+            buttons.push({
+              text: 'Mark Received in Security Office',
+              handler: () => handleActionSheetClick('receiveInSecurityOffice')
+            })
+          }
+
+          if (
+            !isGuardMode &&
+            record &&
+            record.item_type === 'found' &&
+            record.custody_status === 'with_guard'
+          ) {
+            buttons.push({
+              text: 'Open Investigation',
+              handler: () => handleActionSheetClick('openInvestigation')
+            })
+          }
+
+          if (
+            !isGuardMode &&
+            record &&
+            record.item_type === 'found' &&
+            record.custody_status === 'under_investigation'
+          ) {
+            buttons.push({
+              text: 'Notify Guard',
+              handler: () => handleActionSheetClick('notifyGuard')
+            })
+          }
+
+          if (!isGuardMode) {
+            buttons.push({
+              text: 'Change Status',
+              handler: () => handleActionSheetClick('changeStatus')
+            })
+          }
 
           // Cancel: always available
           buttons.push({
@@ -706,6 +1095,8 @@ export default memo(function ExpandedPostRecord () {
           setShowStatusModal(false)
           setSelectedStatus(null)
           setSelectedItemStatus(null)
+          setSelectedCustodyStatus(null)
+          setDiscardReason('')
         }}
         backdropDismiss={true}
         initialBreakpoint={0.4}
@@ -717,8 +1108,16 @@ export default memo(function ExpandedPostRecord () {
           <div className='text-center'>
             <p className='text-base! font-medium! mt-5'>Update Post Status</p>
             <p className='mt-1 mb-2 text-sm text-gray-500'>
-              Select a status to change the post status.
+              Select the available post, item, and custody statuses to apply.
             </p>
+            {record?.item_type === 'found' &&
+            record?.post_status === 'pending' &&
+            record?.custody_status !== 'in_security_office' ? (
+              <p className='mt-2 text-sm text-amber-700'>
+                Pending found posts can be accepted or rejected only after the
+                item is marked as received in the Security Office.
+              </p>
+            ) : null}
           </div>
 
           <div className='w-full pt-4 px-4'>
@@ -728,10 +1127,12 @@ export default memo(function ExpandedPostRecord () {
             </h3>
             <div className='flex flex-wrap gap-2 mb-4'>
               {getStatusOptions().map(status => {
-                const isAllowed = isPostStatusAllowed(
-                  status,
-                  selectedItemStatus
-                )
+                const isAllowed =
+                  isPostStatusAllowed(status, selectedItemStatus) &&
+                  ((status !== 'accepted' && status !== 'rejected') ||
+                    record?.item_type !== 'found' ||
+                    record?.post_status !== 'pending' ||
+                    record?.custody_status === 'in_security_office')
                 const isActive = isStatusActive(status)
                 return (
                   <IonChip
@@ -760,40 +1161,99 @@ export default memo(function ExpandedPostRecord () {
               })}
             </div>
 
-            <div className='w-full bg-black h-px mt-4' />
-            <h3 className='text-xs! font-semibold! text-black! uppercase! tracking-wide! mb-3!'>
-              Item Status
-            </h3>
-            <div className='flex flex-wrap gap-2'>
-              {getItemStatusOptions(record?.item_type).map(status => {
-                const isAllowed = isItemStatusAllowed(status, selectedStatus)
-                const isActive = isItemStatusActive(status)
-                return (
-                  <IonChip
-                    key={status}
-                    onClick={() => {
-                      if (isAllowed) {
-                        setSelectedItemStatus(status)
+            {showItemStatusSection && (
+              <>
+                <div className='w-full bg-black h-px mt-4' />
+                <h3 className='text-xs! font-semibold! text-black! uppercase! tracking-wide! mb-3!'>
+                  Item Status
+                </h3>
+                <div className='flex flex-wrap gap-2'>
+                  {getItemStatusOptions(record?.item_type).map(status => {
+                    const isAllowed = isItemStatusAllowed(status, selectedStatus)
+                    const isActive = isItemStatusActive(status)
+                    return (
+                      <IonChip
+                        key={status}
+                        onClick={() => {
+                          if (isAllowed) {
+                            setSelectedItemStatus(status)
+                          }
+                        }}
+                        outline={!isActive}
+                        className='px-4'
+                        disabled={!isAllowed}
+                        style={{
+                          '--background': isActive
+                            ? getStatusColor(status)
+                            : 'transparent',
+                          '--color': isActive ? 'white' : getStatusColor(status),
+                          border: `2px solid ${getStatusColor(status)}`,
+                          opacity: isAllowed ? 1 : 0.4,
+                          cursor: isAllowed ? 'pointer' : 'not-allowed'
+                        }}
+                      >
+                        <IonLabel className='capitalize'>{status}</IonLabel>
+                      </IonChip>
+                    )
+                  })}
+                </div>
+                {isDiscardTransitionSelected && (
+                  <div className='mt-4'>
+                    <p className='text-xs! font-semibold! text-black! uppercase! tracking-wide! mb-2!'>
+                      Discarded Reason
+                    </p>
+                    <p className='mb-2 text-sm text-gray-500'>
+                      Record what will happen to the item after it is discarded.
+                    </p>
+                    <IonTextarea
+                      value={discardReason}
+                      onIonInput={event =>
+                        setDiscardReason(event.detail.value ?? '')
                       }
-                    }}
-                    outline={!isActive}
-                    className='px-4'
-                    disabled={!isAllowed}
-                    style={{
-                      '--background': isActive
-                        ? getStatusColor(status)
-                        : 'transparent',
-                      '--color': isActive ? 'white' : getStatusColor(status),
-                      border: `2px solid ${getStatusColor(status)}`,
-                      opacity: isAllowed ? 1 : 0.4,
-                      cursor: isAllowed ? 'pointer' : 'not-allowed'
-                    }}
-                  >
-                    <IonLabel className='capitalize'>{status}</IonLabel>
-                  </IonChip>
-                )
-              })}
-            </div>
+                      autoGrow
+                      fill='outline'
+                      rows={4}
+                      placeholder='Example: Turned over to campus recycling after the storage retention period.'
+                    />
+                  </div>
+                )}
+              </>
+            )}
+
+            {showCustodyStatusSection && (
+              <>
+                <div className='w-full bg-black h-px mt-4' />
+                <h3 className='text-xs! font-semibold! text-black! uppercase! tracking-wide! mb-3!'>
+                  Custody Status
+                </h3>
+                <div className='flex flex-wrap gap-2'>
+                  {getClaimedCustodyStatusOptions().map(status => {
+                    const isActive = isCustodyStatusActive(status)
+                    return (
+                      <IonChip
+                        key={status}
+                        onClick={() => {
+                          setSelectedCustodyStatus(status)
+                        }}
+                        outline={!isActive}
+                        className='px-4'
+                        style={{
+                          '--background': isActive
+                            ? getStatusColor(status)
+                            : 'transparent',
+                          '--color': isActive ? 'white' : getStatusColor(status),
+                          border: `2px solid ${getStatusColor(status)}`
+                        }}
+                      >
+                        <IonLabel className='capitalize'>
+                          {status.replaceAll('_', ' ')}
+                        </IonLabel>
+                      </IonChip>
+                    )
+                  })}
+                </div>
+              </>
+            )}
           </div>
 
           <div className='flex justify-end gap-3 mt-6 px-4 w-full'>
@@ -803,6 +1263,8 @@ export default memo(function ExpandedPostRecord () {
                 setShowStatusModal(false)
                 setSelectedStatus(null)
                 setSelectedItemStatus(null)
+                setSelectedCustodyStatus(null)
+                setDiscardReason('')
               }}
               className='flex text-umak-blue'
             >
@@ -812,7 +1274,7 @@ export default memo(function ExpandedPostRecord () {
               expand='block'
               onClick={handleApplyStatusChange}
               disabled={
-                (!selectedStatus && !selectedItemStatus) || isSubmitting
+                (!selectedStatus && !selectedItemStatus && !selectedCustodyStatus) || isSubmitting
               }
               style={{
                 '--background': 'var(--color-umak-blue)'
@@ -836,6 +1298,8 @@ export default memo(function ExpandedPostRecord () {
           setShowRejectionModal(false)
           setSelectedStatus(null)
           setSelectedItemStatus(null)
+          setSelectedCustodyStatus(null)
+          setDiscardReason('')
         }}
       />
 
@@ -849,6 +1313,8 @@ export default memo(function ExpandedPostRecord () {
           setShowUnclaimConfirmModal(false)
           setSelectedStatus(null)
           setSelectedItemStatus(null)
+          setSelectedCustodyStatus(null)
+          setDiscardReason('')
         }}
         submitLabel={isSubmitting ? 'Processing...' : 'Confirm'}
         cancelLabel='Cancel'
@@ -864,6 +1330,34 @@ export default memo(function ExpandedPostRecord () {
         submitLabel='Confirm'
         cancelLabel='Cancel'
       />
-    </IonContent>
+      <ConfirmationModal
+        isOpen={showNotifyGuardModal}
+        heading='Notify Guard'
+        subheading='Are you sure you want to notify the guard assigned to follow up on this under-investigation item?'
+        onSubmit={handleNotifyGuardConfirm}
+        onCancel={() => setShowNotifyGuardModal(false)}
+        submitLabel='Confirm'
+        cancelLabel='Cancel'
+      />
+      <ConfirmationModal
+        isOpen={showReceiveInSecurityOfficeModal}
+        heading='Mark Received in Security Office'
+        subheading='Confirm that this item has physically arrived in the Security Office.'
+        onSubmit={handleReceiveInSecurityOfficeConfirm}
+        onCancel={() => setShowReceiveInSecurityOfficeModal(false)}
+        submitLabel='Confirm'
+        cancelLabel='Cancel'
+      />
+      <ConfirmationModal
+        isOpen={showOpenInvestigationModal}
+        heading='Open Investigation'
+        subheading='Move this found item into the under-investigation state for staff follow-up.'
+        onSubmit={handleOpenInvestigationConfirm}
+        onCancel={() => setShowOpenInvestigationModal(false)}
+        submitLabel='Confirm'
+        cancelLabel='Cancel'
+      />
+      </IonContent>
+    </IonPage>
   )
 })

@@ -1,5 +1,7 @@
 import { postApiService, fraudReportApiService } from '@/shared/services'
 import api from '@/shared/lib/api'
+import { ApiError } from '@/shared/lib/api'
+import { isDuplicateResourceError } from '@/shared/lib/errorHandling'
 import { makeDisplay } from '@/shared/utils/imageUtils'
 import { uploadAndGetPublicUrl } from '@/shared/utils/supabaseStorageUtils'
 
@@ -125,7 +127,10 @@ export const postServices = {
       console.error('[postServices] Exception creating post:', error)
 
       // Check for duplicate post error
-      if (error.message?.includes('duplicate') || error.message?.includes('already exists')) {
+      if (
+        error instanceof ApiError &&
+        (error.code === 'DUPLICATE_RESOURCE' || isDuplicateResourceError(error))
+      ) {
         return {
           post: null,
           error: 'A post with the same details (item, location, and time) already exists. Please check your recent posts or modify the details.'

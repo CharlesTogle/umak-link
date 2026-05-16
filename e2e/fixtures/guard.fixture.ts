@@ -1,0 +1,310 @@
+import { test as base } from '../playwright'
+
+const E2E_AUTH_USER_STORAGE_KEY = 'umak-link:e2e-auth-user'
+const E2E_AUTH_TOKEN_STORAGE_KEY = 'umak-link:e2e-auth-token'
+
+export const guardUser = {
+  user_id: 'guard-001',
+  user_name: 'Guard One',
+  email: 'guard.one@umak.edu.ph',
+  profile_picture_url: null,
+  user_type: 'Guard' as const,
+  notification_token: null
+}
+
+type GuardFixtures = {
+  authenticateGuard: () => Promise<void>
+  mockNotificationCount: (count?: number) => Promise<void>
+  mockGuardScanSuccess: () => Promise<void>
+  mockGuardCameraScanSuccess: () => Promise<void>
+  mockGuardDecisionSuccess: (decision: 'accepted' | 'rejected') => Promise<void>
+  mockGuardEmptyActiveClaimReviews: () => Promise<void>
+  mockGuardActiveClaimReviews: () => Promise<void>
+  mockGuardPostRecordFallback: () => Promise<void>
+  mockGuardClaimVerificationSession: () => Promise<void>
+  mockGuardClaimCodeResolution: () => Promise<void>
+}
+
+export const test = base.extend<GuardFixtures>({
+  authenticateGuard: async ({ page }, applyFixture) => {
+    await applyFixture(async () => {
+      await page.addInitScript(
+        ({ user, token, userKey, tokenKey }) => {
+          window.localStorage.setItem(userKey, JSON.stringify(user))
+          window.localStorage.setItem(tokenKey, token)
+        },
+        {
+          user: guardUser,
+          token: 'e2e-guard-token',
+          userKey: E2E_AUTH_USER_STORAGE_KEY,
+          tokenKey: E2E_AUTH_TOKEN_STORAGE_KEY
+        }
+      )
+    })
+  },
+
+  mockNotificationCount: async ({ page }, applyFixture) => {
+    await applyFixture(async (count = 0) => {
+      await page.route('**/notifications/count', async route => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ unread_count: count })
+        })
+      })
+    })
+  },
+
+  mockGuardScanSuccess: async ({ page }, applyFixture) => {
+    await applyFixture(async () => {
+      await page.route('**/guard/custody/scan', async route => {
+        const body = route.request().postDataJSON() as
+          | {
+            manual_entry_code: string
+          }
+          | {
+            qr_code_session_id: string
+            session_token: string
+          }
+
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            qr_code_session_id:
+              'qr_code_session_id' in body ? body.qr_code_session_id : 'qr-session-001',
+            custody_attempt_id: 'attempt-001',
+            post_id: 123,
+            item_id: 'item-001',
+            item_name: 'Black Wallet',
+            item_description: 'A black leather wallet with school ID and folded receipts.',
+            item_image_url: 'https://example.com/item.jpg',
+            handover_image_url: 'https://example.com/handover.jpg',
+            category: 'Accessories',
+            last_seen_at: '2026-05-14T06:00:00.000Z',
+            last_seen_location: 'Main Gate',
+            submission_date: '2026-05-14T07:30:00.000Z',
+            guard_post_id: 'guard-post-001',
+            guard_post_name: 'Main Gate',
+            attempt_number: 1,
+            custody_status: 'handover_in_progress',
+            qr_status: 'active',
+            attempt_status: 'open'
+          })
+        })
+      })
+    })
+  },
+
+  mockGuardCameraScanSuccess: async ({ page }, applyFixture) => {
+    await applyFixture(async () => {
+      await page.addInitScript(
+        ({ payload }) => {
+          window.__UMAK_LINK_E2E_GUARD_QR_PAYLOAD = payload
+        },
+        {
+          payload: {
+            qr_code_session_id: 'qr-session-001',
+            session_token: 'plain-session-token'
+          }
+        }
+      )
+    })
+  },
+
+  mockGuardDecisionSuccess: async ({ page }, applyFixture) => {
+    await applyFixture(async decision => {
+      await page.route('**/guard/custody/attempts/*/decision', async route => {
+        const body = route.request().postDataJSON() as {
+          qr_code_session_id: string
+          decision: 'accepted' | 'rejected'
+        }
+
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            custody_attempt_id: 'attempt-001',
+            qr_code_session_id: body.qr_code_session_id,
+            attempt_status: decision,
+            qr_status: decision,
+            custody_status: decision === 'accepted' ? 'with_guard' : 'with_reporter',
+            decision_at: '2026-05-14T08:10:00.000Z'
+          })
+        })
+      })
+    })
+  },
+
+  mockGuardEmptyActiveClaimReviews: async ({ page }, applyFixture) => {
+    await applyFixture(async () => {
+      await page.route('**/guard/reviews/active', async route => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            posts: []
+          })
+        })
+      })
+    })
+  },
+
+  mockGuardActiveClaimReviews: async ({ page }, applyFixture) => {
+    await applyFixture(async () => {
+      await page.route('**/guard/reviews/active', async route => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            posts: [
+              {
+                post_id: 2410,
+                item_id: 'item-2410',
+                item_name: 'Black Wallet',
+                item_description:
+                  'A black leather wallet with school ID and folded receipts.',
+                item_image_url: 'https://example.com/item-2410.jpg',
+                category: 'Accessories',
+                last_seen_at: '2026-05-15T11:23:00.000Z',
+                last_seen_location: 'Main Gate',
+                poster_name: 'Charles Nathaniel Togle',
+                poster_profile_picture_url: 'https://example.com/poster-2410.jpg',
+                submitted_on_date_local: '2026-05-15T11:25:00.000Z',
+                custody_status: 'with_guard',
+                post_status: 'pending',
+                item_status: 'unclaimed'
+              }
+            ]
+          })
+        })
+      })
+    })
+  },
+
+  mockGuardPostRecordFallback: async ({ page }, applyFixture) => {
+    await applyFixture(async () => {
+      await page.route('**/posts/2410/full', async route => {
+        await route.fulfill({
+          status: 403,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            message: 'Forbidden'
+          })
+        })
+      })
+
+      await page.route('**/posts/2410', async route => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            post_id: 2410,
+            item_id: 'item-2410',
+            poster_name: 'Charles Nathaniel Togle',
+            poster_id: 'user-2410',
+            item_name: 'Black Wallet',
+            item_description:
+              'A black leather wallet with school ID and folded receipts.',
+            item_type: 'found',
+            item_image_url: 'https://example.com/item-2410.jpg',
+            category: 'Accessories',
+            last_seen_at: '2026-05-15T11:23:00.000Z',
+            last_seen_location: 'Main Gate',
+            submission_date: '2026-05-15T11:25:00.000Z',
+            post_status: 'pending',
+            item_status: 'unclaimed',
+            custody_status: 'with_guard',
+            accepted_by_staff_name: 'Staff One',
+            accepted_by_staff_email: 'staff.one@umak.edu.ph',
+            claim_id: null,
+            claimed_by_name: null,
+            claimed_by_email: null,
+            claim_processed_by_staff_id: null,
+            accepted_on_date: '2026-05-15T11:25:00.000Z',
+            is_anonymous: false,
+            profile_picture_url: 'https://example.com/poster-2410.jpg'
+          })
+        })
+      })
+    })
+  },
+
+  mockGuardClaimVerificationSession: async ({ page }, applyFixture) => {
+    await applyFixture(async () => {
+      await page.route('**/claims/verification-sessions', async route => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            claim_verification_session_id: 'verification-2410',
+            found_post_id: 2410,
+            item_id: 'item-2410',
+            join_code: 'ABC123',
+            status: 'open',
+            qr_status: 'active',
+            expires_at: '2026-05-15T12:05:00.000Z',
+            scanned_at: null,
+            completed_at: null,
+            closed_at: null,
+            current_window_expired: false,
+            can_retry: false,
+            verified_claimer: null,
+            number_of_attempts: 1,
+            max_number_of_attempts: 5,
+            retries_remaining: 4
+          })
+        })
+      })
+
+      await page.route(
+        '**/claims/verification-sessions/verification-2410/status',
+        async route => {
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              claim_verification_session_id: 'verification-2410',
+              found_post_id: 2410,
+              item_id: 'item-2410',
+              join_code: 'ABC123',
+              status: 'open',
+              qr_status: 'active',
+              expires_at: '2026-05-15T12:05:00.000Z',
+              scanned_at: null,
+              completed_at: null,
+              closed_at: null,
+              current_window_expired: false,
+              can_retry: false,
+              verified_claimer: null,
+              number_of_attempts: 1,
+              max_number_of_attempts: 5,
+              retries_remaining: 4
+            })
+          })
+        }
+      )
+    })
+  },
+
+  mockGuardClaimCodeResolution: async ({ page }, applyFixture) => {
+    await applyFixture(async () => {
+      await page.route('**/users/claim-code/*', async route => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            user_id: 'student-001',
+            user_name: 'Student Claimer',
+            email: 'student.claimer@umak.edu.ph',
+            profile_picture_url: 'https://example.com/student-claimer.jpg',
+            user_type: 'User',
+            notification_token: null
+          })
+        })
+      })
+    })
+  }
+})
+
+export { expect } from '../playwright'

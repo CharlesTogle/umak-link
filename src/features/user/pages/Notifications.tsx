@@ -13,6 +13,7 @@ import NotificationItem from '@/features/user/components/notifications/Notificat
 import type { ActionItem } from '@/features/posts/types/notifications'
 import useNotifications from '@/features/user/hooks/useNotifications'
 import { useUser } from '@/features/auth/contexts/UserContext'
+import type { NotificationPayloadData } from '@/shared/lib/api-types'
 import {
   trashOutline,
   checkmarkOutline,
@@ -22,6 +23,17 @@ import NotificationItemSkeleton from '../components/notifications/NotificationIt
 
 // Extend to include id & read status for local state
 // Local shim type was removed — notifications are provided by the hook
+
+function getNotificationHref (
+  data: NotificationPayloadData | null | undefined
+): string | undefined {
+  if (!data) return undefined
+
+  const directTarget = data.url ?? data.href ?? data.link
+  return typeof directTarget === 'string' && directTarget.length > 0
+    ? directTarget
+    : undefined
+}
 
 export default function Notifications () {
   const { getUser } = useUser()
@@ -223,11 +235,8 @@ export default function Notifications () {
             .map(n => {
               // Construct title/description from available fields
               const title = n.title ?? 'Notification'
-              const data = n.data ?? {}
-              let link
-              if (n.type !== 'match' && data['link'] && data['postId']) {
-                link = data['link']
-              }
+              const data = n.data ?? null
+              const link = getNotificationHref(data)
 
               const description = n.description ?? JSON.stringify(n.data ?? '')
 
@@ -259,6 +268,7 @@ export default function Notifications () {
                   notificationId={n.notification_id}
                   handleMarkAsRead={handleMarkAsRead}
                   imageUrl={n.image_url ?? undefined}
+                  notificationData={data}
                 />
               )
             })

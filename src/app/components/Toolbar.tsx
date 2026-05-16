@@ -4,7 +4,7 @@ import { useNavigation } from '@/shared/hooks/useNavigation'
 import { IonTabBar, IonTabButton, IonIcon, IonLabel } from '@ionic/react'
 
 interface ToolbarItem {
-  icon: any
+  icon: string
   route: string
   text: string
   active?: boolean
@@ -22,6 +22,7 @@ export default function Toolbar ({ toolbarItems }: ToolbarProps) {
     '/user/new-post',
     '/user/post/report',
     '/staff/fraud-report/view',
+    '/guard/scan/review',
     '/user/post/history/view',
     '/user/post/view',
     '/admin/staff/add',

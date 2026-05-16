@@ -15,6 +15,8 @@ import {
   informationCircleOutline
 } from 'ionicons/icons'
 import { useNavigation } from '@/shared/hooks/useNavigation'
+import { useNotificationContext } from '@/shared/contexts/NotificationContext'
+import type { NotificationPayloadData } from '@/shared/lib/api-types'
 
 export type NotificationType =
   | 'match'
@@ -47,6 +49,36 @@ interface NotificationItemProps {
   handleMarkAsRead?: (notificationId: string) => void
   href?: string
   imageUrl?: string
+  notificationData?: NotificationPayloadData | null
+}
+
+function normalizeMatchedPostIds (
+  matchedPostIds: string | string[] | number | boolean | null | undefined
+): string[] | null {
+  if (Array.isArray(matchedPostIds)) {
+    return matchedPostIds.map(String)
+  }
+
+  if (typeof matchedPostIds !== 'string' || matchedPostIds.length === 0) {
+    return null
+  }
+
+  try {
+    const parsed = JSON.parse(matchedPostIds)
+    return Array.isArray(parsed) ? parsed.map(String) : null
+  } catch (error) {
+    console.error('Failed to parse matched_post_ids:', error)
+    return null
+  }
+}
+
+function elementHasOverflow (element: HTMLElement | null): boolean {
+  if (!element) return false
+
+  return (
+    element.scrollHeight > element.clientHeight ||
+    element.scrollWidth > element.clientWidth
+  )
 }
 
 const iconForType = (type: NotificationType | string) => {
@@ -88,11 +120,16 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
   notificationId,
   handleMarkAsRead,
   href,
-  imageUrl
+  imageUrl,
+  notificationData
 }) => {
   const [open, setOpen] = useState(false)
   const { icon, colorClass } = iconForType(type)
   const [expanded, setExpanded] = useState(false)
+  const [isTruncated, setIsTruncated] = useState(false)
+  const { setMatchedPostIds, setLostItemPostId } = useNotificationContext()
+  const titleRef = useRef<HTMLDivElement | null>(null)
+  const descriptionRef = useRef<HTMLDivElement | null>(null)
 
   // Long-press handling
   const longPressTimeout = useRef<number | null>(null)
@@ -109,6 +146,24 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
     }
   }, [])
 
+  useEffect(() => {
+    if (expanded) return
+
+    const updateTruncationState = () => {
+      setIsTruncated(
+        elementHasOverflow(titleRef.current) ||
+          elementHasOverflow(descriptionRef.current)
+      )
+    }
+
+    updateTruncationState()
+    window.addEventListener('resize', updateTruncationState)
+
+    return () => {
+      window.removeEventListener('resize', updateTruncationState)
+    }
+  }, [description, expanded, title])
+
   const startPress = () => {
     longPressTriggered.current = false
     // indicate the user started pressing
@@ -116,7 +171,7 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
     longPressTimeout.current = window.setTimeout(() => {
       longPressTriggered.current = true
       setOpen(true)
-    }, 500) as unknown as number
+    }, 500)
   }
 
   const clearPress = () => {
@@ -131,12 +186,52 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
   const handlePointerDown = () => startPress()
   const handlePointerUp = () => clearPress()
   const handlePointerLeave = () => clearPress()
+  const openLinkedNotification = () => {
+    if (!href) return
+
+    if (handleMarkAsRead && notificationId) {
+      handleMarkAsRead(notificationId)
+    }
+
+    const matchedPostIds = normalizeMatchedPostIds(
+      notificationData?.matched_post_ids
+    )
+    if (matchedPostIds) {
+      setMatchedPostIds(matchedPostIds)
+    }
+
+    const notificationPostId =
+      notificationData?.postId ?? notificationData?.post_id
+    if (
+      typeof notificationPostId === 'string' ||
+      typeof notificationPostId === 'number'
+    ) {
+      setLostItemPostId(String(notificationPostId))
+    }
+
+    navigate(href)
+  }
+
   const handleClick = () => {
     if (longPressTriggered.current) {
       longPressTriggered.current = false
       return
     }
-    setExpanded(prev => !prev)
+
+    if (href && !expanded) {
+      if (isTruncated) {
+        setExpanded(true)
+      } else {
+        openLinkedNotification()
+        return
+      }
+    } else {
+      setExpanded(prev => !prev)
+    }
+
+    if (handleMarkAsRead && notificationId) {
+      handleMarkAsRead(notificationId)
+    }
   }
 
   const sheetButtons = useMemo(
@@ -170,22 +265,7 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
             longPressTriggered.current = false
             return
           }
-
-          // If href is provided, navigate to it
-          if (href && type !== 'match') {
-            if (handleMarkAsRead) {
-              handleMarkAsRead(notificationId!)
-            }
-
-            navigate(href)
-            return
-          }
-
-          // default toggle expand
           handleClick()
-          if (handleMarkAsRead) {
-            handleMarkAsRead(notificationId!)
-          }
         }}
         // Use background opacity so children (like the image) aren't made translucent
         // When read && not expanded -> translucent background
@@ -206,6 +286,7 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
         {/* text */}
         <div className='flex-1 min-w-0'>
           <div
+            ref={titleRef}
             className={`font-default-font text-[15px] ${
               read ? 'font-default' : 'font-semibold'
             } text-slate-900 ${expandedClassName}`}
@@ -213,10 +294,36 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
             {title}
           </div>
           <div
+            ref={descriptionRef}
             className={`font-default-font text-[13px] text-slate-600 ${expandedClassName}`}
           >
             {description}
           </div>
+          {expanded && href && (
+            <div className='mt-2'>
+              <IonButton
+                onClick={event => {
+                  event.stopPropagation()
+                  openLinkedNotification()
+                }}
+                fill='clear'
+                size='small'
+                className='min-h-0 text-left'
+                style={{
+                  '--background': 'transparent',
+                  '--background-hover': 'transparent',
+                  '--background-activated': 'transparent',
+                  '--background-focused': 'transparent',
+                  '--box-shadow': 'none',
+                  '--padding-start': '0px',
+                  '--padding-end': '0px',
+                  '--ripple-color': 'transparent'
+                }}
+              >
+                View details
+              </IonButton>
+            </div>
+          )}
           {/* Expanded image (if provided) */}
           {expanded && imageUrl && (
             <div className='mt-3'>

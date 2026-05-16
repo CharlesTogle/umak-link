@@ -1,12 +1,13 @@
 import { add } from 'ionicons/icons'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   IonIcon,
   IonFab,
   IonFabButton,
   IonToast,
   IonSpinner,
-  IonPopover
+  IonPopover,
+  useIonViewWillEnter
 } from '@ionic/react'
 import { Keyboard } from '@capacitor/keyboard'
 import { useNavigation } from '@/shared/hooks/useNavigation'
@@ -25,7 +26,13 @@ export default function Home () {
   const [toastMessage, setToastMessage] = useState('')
   const [showLoadingModal, setShowLoadingModal] = useState(false)
   const contentRef = useRef<HTMLIonContentElement | null>(null)
+  const hasEnteredViewRef = useRef(false)
   const { navigate } = useNavigation()
+
+  const shouldShowOnUserFeed = (post: PublicPost): boolean =>
+    post.item_type === 'found' &&
+    ['accepted', 'reported'].includes(post.post_status ?? '') &&
+    post.item_status === 'claimed'
 
   const postComparator = (a: PublicPost, b: PublicPost): number => {
     const aAccepted = a.accepted_on_date
@@ -43,8 +50,6 @@ export default function Home () {
     hasMore,
     fetchPosts,
     loadMorePosts,
-    fetchNewPosts,
-    refreshPosts,
     loadedIdsRef
   } = usePostFetching({
     fetchFunction: listPublicPosts,
@@ -53,13 +58,7 @@ export default function Home () {
       loadedKey: 'LoadedPosts',
       cacheKey: 'CachedPublicPosts'
     },
-    filterPosts: posts =>
-      posts.filter(
-        p =>
-          p.post_status &&
-          ['accepted', 'reported'].includes(p.post_status) &&
-          p.item_type === 'found'
-      ),
+    filterPosts: posts => posts.filter(shouldShowOnUserFeed),
     postComparator,
     pageSize: 5,
     onOffline: () => {
@@ -70,26 +69,36 @@ export default function Home () {
     }
   })
 
+  const reloadHomeFeed = useCallback(async (): Promise<void> => {
+    setShowLoadingModal(true)
+    try {
+      await fetchPosts()
+    } finally {
+      setShowLoadingModal(false)
+    }
+  }, [fetchPosts])
+
   useEffect(() => {
-    const handler = (_ev?: Event) => {
+    const handler = () => {
       // Scroll to top immediately (don't wait for fetch)
       contentRef.current?.scrollToTop?.(300)
 
-      // Fetch newest posts in background with loading modal
-      setShowLoadingModal(true)
-      fetchNewPosts()
-        .then(() => {
-          setShowLoadingModal(false)
-        })
-        .catch(() => {
-          setShowLoadingModal(false)
-        })
+      void reloadHomeFeed()
     }
 
     window.addEventListener('app:scrollToTop', handler as EventListener)
     return () =>
       window.removeEventListener('app:scrollToTop', handler as EventListener)
-  }, [fetchNewPosts])
+  }, [reloadHomeFeed])
+
+  useIonViewWillEnter(() => {
+    if (!hasEnteredViewRef.current) {
+      hasEnteredViewRef.current = true
+      return
+    }
+
+    void reloadHomeFeed()
+  })
 
   const handleLoadMore = async (event: CustomEvent<void>) => {
     const target = event.target as HTMLIonInfiniteScrollElement | null
@@ -100,12 +109,9 @@ export default function Home () {
 
   // Pull-to-refresh: refresh currently loaded posts with fresh data from server
   const handleRefresh = async (event: CustomEvent) => {
-    setShowLoadingModal(true)
     try {
-      await fetchNewPosts()
-      await refreshPosts()
+      await reloadHomeFeed()
     } finally {
-      setShowLoadingModal(false)
       event.detail.complete()
     }
   }
@@ -151,7 +157,6 @@ export default function Home () {
         loadMorePosts={handleLoadMore}
         handleRefresh={handleRefresh}
         ref={contentRef}
-        fetchNewPosts={fetchNewPosts}
         sortDirection={'desc'}
         cacheKeys={{
           loadedKey: 'LoadedPosts',
@@ -161,6 +166,7 @@ export default function Home () {
         pageSize={5}
         marginBottom='0'
         enableReportForClaimed={true}
+        emptyStateMessage={"You're all caught up"}
         ionFabButton={
           <IonFab
             slot='fixed'

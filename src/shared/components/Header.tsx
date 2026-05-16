@@ -16,7 +16,6 @@ import { useUser } from '@/features/auth/contexts/UserContext'
 import { useUnreadNotificationCount } from '@/features/user/hooks/useUnreadNotificationCount'
 import type { User } from '@/features/auth/contexts/UserContext'
 
-
 const toolbarStyle = {
   ['--background']: 'var(--color-umak-blue, #1D2981)'
 } as React.CSSProperties
@@ -45,8 +44,7 @@ function Header ({
         setUser(currentUser)
       })
     }
-  }, [])
-
+  }, [getUser, user])
 
   const { unreadCount, error } = useUnreadNotificationCount(user?.user_id)
   useEffect(() => {
@@ -76,12 +74,10 @@ function Header ({
     }
 
     const userType = user.user_type.toLowerCase()
-    if (userType === 'staff') {
-      navigate('/staff/notifications')
-    } else if (userType === 'admin') {
+    if (userType === 'admin') {
       navigate('/admin/notifications')
     } else {
-      navigate('/user/notifications')
+      navigate(`/${userType}/notifications`)
     }
   }, [navigate, user?.user_type])
   const handleProfileClick = useCallback(() => {
@@ -103,6 +99,8 @@ function Header ({
   const notificationIconClass = isNotificationPage
     ? 'text-amber-500 '
     : 'text-white'
+  const profileImageSrc = profilePicUrl || user?.profile_picture_url || null
+
   return (
     <IonHeader className='ion-no-border'>
       <IonToolbar style={toolbarStyle}>
@@ -143,9 +141,9 @@ function Header ({
             {/* Profile Icon */}
             <IonButtons slot='end'>
               <IonButton onClick={handleProfileClick}>
-                {profilePicUrl ? (
+                {profileImageSrc ? (
                   <img
-                    src={profilePicUrl}
+                    src={profileImageSrc}
                     alt='Profile'
                     className='w-8 h-8 rounded-full object-cover'
                   />

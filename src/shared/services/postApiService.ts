@@ -4,7 +4,14 @@
  */
 
 import api from '@/shared/lib/api';
-import type { PostRecord, CreatePostRequest, EditPostRequest } from '@/shared/lib/api-types';
+import type {
+  PostRecord,
+  PostRecordDetails,
+  CreatePostRequest,
+  EditPostRequest,
+  UpdatePostStatusRequest,
+  UpdateItemStatusRequest
+} from '@/shared/lib/api-types';
 import { computeBlockHash64 } from '@/shared/utils/hashUtils';
 import { makeDisplay } from '@/shared/utils/imageUtils';
 
@@ -49,6 +56,65 @@ export interface EditPostWithImageInput extends EditPostInput {
   userId: string;
 }
 
+function extractLastSeenParts(lastSeenISO: string): {
+  date: string;
+  day: number;
+  month: number;
+  year: number;
+  hours: number;
+  minutes: number;
+} {
+  const matchedParts = lastSeenISO.match(
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/
+  );
+
+  if (matchedParts) {
+    const [, year, month, day, hours, minutes] = matchedParts;
+    return {
+      date: `${year}-${month}-${day}`,
+      year: Number(year),
+      month: Number(month),
+      day: Number(day),
+      hours: Number(hours),
+      minutes: Number(minutes),
+    };
+  }
+
+  const parsed = new Date(lastSeenISO);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error('Invalid last seen date');
+  }
+
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Manila',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+
+  const parts = formatter.formatToParts(parsed);
+  const readPart = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? '00';
+
+  const year = Number(readPart('year'));
+  const month = Number(readPart('month'));
+  const day = Number(readPart('day'));
+  const hours = Number(readPart('hour'));
+  const minutes = Number(readPart('minute'));
+
+  return {
+    date: `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+    year,
+    month,
+    day,
+    hours,
+    minutes,
+  };
+}
+
 export const postApiService = {
   /**
    * Create a new post
@@ -79,8 +145,7 @@ export const postApiService = {
       // Confirm upload
       await api.storage.confirmUpload('items', uploadData.objectPath);
 
-      // Parse date/time from ISO string
-      const lastSeenDate = new Date(input.lastSeenISO);
+      const lastSeen = extractLastSeenParts(input.lastSeenISO);
       const locationPath = [
         { name: input.locationDetails.level1, type: 'building' },
         { name: input.locationDetails.level2, type: 'floor' },
@@ -94,12 +159,13 @@ export const postApiService = {
         p_item_type: input.item.type,
         p_poster_id: input.userId,
         p_image_hash: imageHash,
+        p_image_link: uploadData.publicUrl,
         p_category: input.category,
-        p_date_day: lastSeenDate.getDate(),
-        p_date_month: lastSeenDate.getMonth() + 1,
-        p_date_year: lastSeenDate.getFullYear(),
-        p_time_hour: lastSeenDate.getHours(),
-        p_time_minute: lastSeenDate.getMinutes(),
+        p_last_seen_date: lastSeen.date,
+        p_last_seen_hours: lastSeen.hours,
+        p_last_seen_minutes: lastSeen.minutes,
+        p_item_status: input.item.type === 'found' ? 'unclaimed' : 'lost',
+        p_post_status: 'pending',
         p_location_path: locationPath,
         p_is_anonymous: input.anonymous,
       };
@@ -116,7 +182,7 @@ export const postApiService = {
    */
   async editPost(input: EditPostInput): Promise<{ success: boolean; post_id: number }> {
     try {
-      const lastSeenDate = new Date(input.lastSeenISO);
+      const lastSeen = extractLastSeenParts(input.lastSeenISO);
       const locationPath = [
         { name: input.locationDetails.level1, type: 'building' },
         { name: input.locationDetails.level2, type: 'floor' },
@@ -129,11 +195,11 @@ export const postApiService = {
         p_item_description: input.item.desc || undefined,
         p_item_type: input.item.type,
         p_category: input.category,
-        p_date_day: lastSeenDate.getDate(),
-        p_date_month: lastSeenDate.getMonth() + 1,
-        p_date_year: lastSeenDate.getFullYear(),
-        p_time_hour: lastSeenDate.getHours(),
-        p_time_minute: lastSeenDate.getMinutes(),
+        p_date_day: lastSeen.day,
+        p_date_month: lastSeen.month,
+        p_date_year: lastSeen.year,
+        p_time_hour: lastSeen.hours,
+        p_time_minute: lastSeen.minutes,
         p_location_path: locationPath,
         p_is_anonymous: input.anonymous,
       };
@@ -176,9 +242,7 @@ export const postApiService = {
       await api.storage.confirmUpload('items', uploadData.objectPath);
 
       // 2) Parse date/time from ISO string
-      const lastSeenDate = new Date(input.lastSeenISO);
-      const lastSeenHours = lastSeenDate.getHours();
-      const lastSeenMinutes = lastSeenDate.getMinutes();
+      const lastSeen = extractLastSeenParts(input.lastSeenISO);
 
       // 3) Build location path array
       const locationPath: Array<{ name: string; type: string }> = [];
@@ -205,9 +269,9 @@ export const postApiService = {
         p_item_type: input.item.type,
         p_image_hash: imageHash,
         p_image_link: uploadData.publicUrl,
-        p_last_seen_date: lastSeenDate.toISOString(),
-        p_last_seen_hours: lastSeenHours,
-        p_last_seen_minutes: lastSeenMinutes,
+        p_last_seen_date: lastSeen.date,
+        p_last_seen_hours: lastSeen.hours,
+        p_last_seen_minutes: lastSeen.minutes,
         p_location_path: locationPath,
         p_item_status: input.item.type === 'found' ? 'unclaimed' : 'lost',
         p_category: input.category,
@@ -260,7 +324,7 @@ export const postApiService = {
   /**
    * Get full post details (staff only)
    */
-  async getFullPost(postId: number): Promise<PostRecord> {
+  async getFullPost(postId: number): Promise<PostRecordDetails> {
     try {
       return await api.posts.getFull(postId);
     } catch (error) {
@@ -299,11 +363,14 @@ export const postApiService = {
    */
   async updatePostStatus(
     postId: number,
-    status: string,
+    status: UpdatePostStatusRequest['status'],
     rejectionReason?: string
   ): Promise<{ success: boolean }> {
     try {
-      return await api.posts.updateStatus(postId, { status: status as any, rejection_reason: rejectionReason });
+      return await api.posts.updateStatus(postId, {
+        status,
+        rejection_reason: rejectionReason
+      });
     } catch (error) {
       console.error('[postApiService] Update post status error:', error);
       throw error;
@@ -313,9 +380,16 @@ export const postApiService = {
   /**
    * Update item status (staff only)
    */
-  async updateItemStatus(itemId: string, status: string): Promise<{ success: boolean }> {
+  async updateItemStatus(
+    itemId: string,
+    status: UpdateItemStatusRequest['status'],
+    discardReason?: string
+  ): Promise<{ success: boolean }> {
     try {
-      return await api.posts.updateItemStatus(itemId, { status: status as any });
+      return await api.posts.updateItemStatus(itemId, {
+        status,
+        discard_reason: discardReason
+      });
     } catch (error) {
       console.error('[postApiService] Update item status error:', error);
       throw error;

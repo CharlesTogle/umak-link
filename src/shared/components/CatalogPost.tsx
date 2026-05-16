@@ -1,5 +1,6 @@
 import React, { lazy, memo, useState, useRef, useEffect } from 'react'
 const LazyImage = lazy(() => import('@/shared/components/LazyImage'))
+import type { PublicPost } from '@/features/posts/types/post'
 import {
   IonCard,
   IonCardContent,
@@ -21,6 +22,7 @@ import {
   handleAccept,
   rejectReasons
 } from '@/features/staff/utils/catalogPostHandlers'
+import { staffCustodyApiService } from '@/shared/services'
 
 export type CatalogPostProps = {
   username?: string
@@ -39,10 +41,12 @@ export type CatalogPostProps = {
   is_anonymous?: boolean
   showAnonIndicator?: boolean
   item_type?: string | null
-  setPosts?: React.Dispatch<React.SetStateAction<any[]>>
+  custody_status?: string | null
+  setPosts?: React.Dispatch<React.SetStateAction<PublicPost[]>>
   user_id?: string
   category?: string
-  submittedOn?: string
+  submittedOn?: string | null
+  claimedAt?: string | null
   currentUserId?: string
   onShowToast?: (message: string, color: 'success' | 'danger') => void
   showSecurityQuestionDetails?: boolean
@@ -65,10 +69,12 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
   is_anonymous = false,
   showAnonIndicator = false,
   item_type = null,
+  custody_status = null,
   setPosts,
   user_id,
   category,
-  submittedOn = 'MM/DD/YYYY 00:00 AM/PM',
+  submittedOn = null,
+  claimedAt = null,
   currentUserId,
   onShowToast,
   showSecurityQuestionDetails = true
@@ -97,12 +103,20 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
   }
 
   const normalizedStatus = (itemStatus || '').toLowerCase()
+  const normalizedCustodyStatus = (custody_status || '').toLowerCase()
   const statusColorClass = getStatusColorClass(normalizedStatus)
+  const canApproveFoundPending =
+    item_type === 'found' && normalizedCustodyStatus === 'in_security_office'
+  const canMarkReceivedFoundPending =
+    item_type === 'found' &&
+    (normalizedCustodyStatus === 'with_guard' ||
+      normalizedCustodyStatus === 'under_investigation')
 
   const [isProcessing, setIsProcessing] = useState(false)
   const rejectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const acceptTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const matchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const receiveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [showRejectModal, setShowRejectModal] = useState(false)
 
   // Staff action handlers
@@ -128,16 +142,13 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
         postId,
         user_id,
         itemName,
-        choice,
-        currentUserId
+        choice
       )
 
       setIsProcessing(false)
       if (result.success) {
         if (setPosts) {
-          setPosts((prev: any[]) =>
-            prev.filter((p: any) => p.post_id !== postId)
-          )
+          setPosts(prev => prev.filter(p => p.post_id !== postId))
         }
         onShowToast?.('Post rejected successfully', 'success')
       } else {
@@ -174,9 +185,7 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
 
       if (result.success) {
         if (setPosts) {
-          setPosts((prev: any[]) =>
-            prev.filter((p: any) => p.post_id !== postId)
-          )
+          setPosts(prev => prev.filter(p => p.post_id !== postId))
         }
         onShowToast?.('Post accepted successfully', 'success')
       } else {
@@ -202,7 +211,6 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
     matchTimeoutRef.current = setTimeout(async () => {
       setIsProcessing(true)
       const result = await performMatch(
-        currentUserId || '',
         postId,
         itemName,
         description,
@@ -214,9 +222,7 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
       if (result.success) {
         // Remove post from home page immediately
         if (setPosts) {
-          setPosts((prev: any[]) =>
-            prev.filter((p: any) => p.post_id !== postId)
-          )
+          setPosts(prev => prev.filter(p => p.post_id !== postId))
         }
         onShowToast?.(
           "Finding Similar Items in progress, we'll notify the owner once it has found similar items",
@@ -229,6 +235,52 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
       if (matchTimeoutRef.current) {
         clearTimeout(matchTimeoutRef.current)
         matchTimeoutRef.current = null
+      }
+    }, 500)
+  }
+
+  const handleReceiveClick = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!postId || isProcessing || item_type !== 'found') return
+
+    if (receiveTimeoutRef.current) {
+      clearTimeout(receiveTimeoutRef.current)
+    }
+
+    receiveTimeoutRef.current = setTimeout(async () => {
+      setIsProcessing(true)
+
+      try {
+        await staffCustodyApiService.receiveInSecurityOffice(Number(postId))
+
+        if (setPosts) {
+          setPosts(prev =>
+            prev.map(post =>
+              post.post_id === postId
+                ? { ...post, custody_status: 'in_security_office' }
+                : post
+            )
+          )
+        }
+
+        onShowToast?.(
+          'Item marked as received in the Security Office',
+          'success'
+        )
+      } catch (error) {
+        onShowToast?.(
+          error instanceof Error && error.message.trim().length > 0
+            ? error.message
+            : 'Failed to mark item as received in the Security Office',
+          'danger'
+        )
+      } finally {
+        setIsProcessing(false)
+
+        if (receiveTimeoutRef.current) {
+          clearTimeout(receiveTimeoutRef.current)
+          receiveTimeoutRef.current = null
+        }
       }
     }, 500)
   }
@@ -246,6 +298,10 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
       if (matchTimeoutRef.current) {
         clearTimeout(matchTimeoutRef.current)
         matchTimeoutRef.current = null
+      }
+      if (receiveTimeoutRef.current) {
+        clearTimeout(receiveTimeoutRef.current)
+        receiveTimeoutRef.current = null
       }
     }
   }, [])
@@ -310,7 +366,7 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
                 : null}
             </span>
           </div>
-          <p className='text-gray-700 pb-2 leading-snug line-clamp-2'>
+          <p className='text-gray-700 mb-2 leading-snug line-clamp-2'>
             {description}
           </p>
           <React.Suspense
@@ -332,6 +388,24 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
             <IonText>{category}</IonText>
           </div>
 
+          {submittedOn && (
+            <div className='flex items-center gap-2 mt-3 text-xs text-gray-500'>
+              <IonText>
+                <strong>Submission Date:</strong>
+              </IonText>
+              <IonText>{formatTimestamp(submittedOn)}</IonText>
+            </div>
+          )}
+
+          {normalizedStatus === 'claimed' && claimedAt && (
+            <div className='flex items-center gap-2 mt-3 text-xs text-gray-500'>
+              <IonText>
+                <strong>Claim Date:</strong>
+              </IonText>
+              <IonText>{formatTimestamp(claimedAt)}</IonText>
+            </div>
+          )}
+
           {showSecurityQuestionDetails && (
             <>
               <div className='flex items-center gap-2 mt-3 text-xs text-gray-500'>
@@ -349,15 +423,6 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
               </div>
             </>
           )}
-          {variant !== 'user' && (
-            <div className='flex items-center gap-2 mt-3 text-xs text-gray-500'>
-              <IonText>
-                <strong>Submitted On:</strong>
-              </IonText>
-              <IonText>{formatTimestamp(submittedOn)}</IonText>
-            </div>
-          )}
-
           {/* Staff Action Buttons */}
           {variant === 'staff' && (
             <div className='flex justify-between h-7 w-full gap-4 mt-4 font-default-font'>
@@ -390,31 +455,44 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
           {variant === 'staff-pending' && (
             <div className='flex justify-between h-7 w-full gap-4 mt-4 font-default-font'>
               {item_type === 'found' ? (
-                // Found items: Accept and Reject
-                <>
+                canApproveFoundPending ? (
+                  <>
+                    <button
+                      onClick={handleRejectClick}
+                      disabled={isProcessing}
+                      className='h-full flex-1 bg-[var(--color-umak-red)] text-white py-4 px-4 rounded-sm! hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center'
+                    >
+                      {isProcessing ? (
+                        <IonSpinner name='crescent' className='w-5 h-5' />
+                      ) : (
+                        'REJECT'
+                      )}
+                    </button>
+                    <button
+                      onClick={handleAcceptClick}
+                      disabled={isProcessing}
+                      className='flex-1 bg-green-500 text-white py-4 px-4 rounded-sm! hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center'
+                    >
+                      {isProcessing ? (
+                        <IonSpinner name='crescent' className='w-5 h-5' />
+                      ) : (
+                        'ACCEPT'
+                      )}
+                    </button>
+                  </>
+                ) : canMarkReceivedFoundPending ? (
                   <button
-                    onClick={handleRejectClick}
+                    onClick={handleReceiveClick}
                     disabled={isProcessing}
-                    className='h-full flex-1 bg-[var(--color-umak-red)] text-white py-4 px-4 rounded-sm! hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center'
+                    className='h-full flex-1 bg-sky-600 text-white py-4 px-4 rounded-sm! hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center'
                   >
                     {isProcessing ? (
                       <IonSpinner name='crescent' className='w-5 h-5' />
                     ) : (
-                      'REJECT'
+                      'MARK RECEIVED'
                     )}
                   </button>
-                  <button
-                    onClick={handleAcceptClick}
-                    disabled={isProcessing}
-                    className='flex-1 bg-green-500 text-white py-4 px-4 rounded-sm! hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center'
-                  >
-                    {isProcessing ? (
-                      <IonSpinner name='crescent' className='w-5 h-5' />
-                    ) : (
-                      'ACCEPT'
-                    )}
-                  </button>
-                </>
+                ) : null
               ) : (
                 // Missing items: Reject and Match
                 <>

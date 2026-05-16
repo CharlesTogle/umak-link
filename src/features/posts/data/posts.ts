@@ -7,6 +7,33 @@ import type { PublicPost } from '@/features/posts/types/post'
 import { createPostCache } from '@/features/posts/data/postsCache'
 import { formatTimestamp } from '@/shared/utils/formatTimeStamp'
 
+type PostRecordWithClaimDetails = ApiPostRecord & {
+  claimed_by_contact?: string | null
+  claimed_at?: string | null
+  profile_picture_url?: string | null
+  poster_profile_picture_url?: string | null
+}
+
+type PostRecordDetailsWithClaimDetails = ApiPostRecordDetails & {
+  claimed_by_contact?: string | null
+  claimed_at?: string | null
+  profile_picture_url?: string | null
+  poster_profile_picture_url?: string | null
+  claim_processed_by_name?: string | null
+  claim_processed_by_email?: string | null
+  claim_processed_by_profile_picture_url?: string | null
+  claim_processed_by_user_type?: 'User' | 'Staff' | 'Admin' | 'Guard' | null
+  accepted_by_guard_name?: string | null
+  accepted_by_guard_email?: string | null
+}
+
+function getPosterProfilePictureUrl (record: {
+  profile_picture_url?: string | null
+  poster_profile_picture_url?: string | null
+}): string | null {
+  return record.poster_profile_picture_url ?? record.profile_picture_url ?? null
+}
+
 export interface PostRecordDetails {
   // Post details
   post_id: string
@@ -30,6 +57,7 @@ export interface PostRecordDetails {
   item_status: string
   item_type: string
   category: string | null
+  custody_status: string | null
 
   // Poster details
   poster_name: string
@@ -45,17 +73,21 @@ export interface PostRecordDetails {
   claim_processed_by_name: string | null
   claim_processed_by_email: string | null
   claim_processed_by_profile_picture_url: string | null
+  claim_processed_by_user_type: 'User' | 'Staff' | 'Admin' | 'Guard' | null
   linked_lost_item_id: string | null
   returned_at: string | null
+  accepted_by_guard_name: string | null
+  accepted_by_guard_email: string | null
 }
 
 function mapPostRecordToPublicPost (record: ApiPostRecord): PublicPost {
+  const postRecord = record as PostRecordWithClaimDetails
   return {
     user_id: record.poster_id,
     username: record.poster_name,
     item_name: record.item_name,
     item_id: record.item_id,
-    profilepicture_url: null,
+    profilepicture_url: postRecord.profile_picture_url ?? null,
     item_image_url: record.item_image_url,
     item_description: record.item_description,
     item_status: record.item_status,
@@ -67,16 +99,23 @@ function mapPostRecordToPublicPost (record: ApiPostRecord): PublicPost {
     submission_date: record.submission_date,
     item_type: record.item_type,
     post_status: record.post_status,
+    custody_status: record.custody_status ?? null,
     accepted_by_staff_name: record.accepted_by_staff_name,
     accepted_by_staff_email: record.accepted_by_staff_email,
     claimed_by_name: record.claimed_by_name,
     claimed_by_email: record.claimed_by_email,
-    claimed_by_contact: null,
-    claimed_at: null,
+    claimed_by_contact: postRecord.claimed_by_contact ?? null,
+    claimed_at: postRecord.claimed_at ?? null,
     claim_processed_by_staff_id: record.claim_processed_by_staff_id,
     claim_id: record.claim_id,
     accepted_on_date: record.accepted_on_date
   }
+}
+
+function mapPostRecordWithClaimDetailsToPublicPost (
+  record: PostRecordWithClaimDetails
+): PublicPost {
+  return mapPostRecordToPublicPost(record)
 }
 
 function mapPostRecordDetailsToPublicPost (
@@ -91,6 +130,7 @@ function mapPostRecordDetailsToPublicPost (
 function mapApiPostRecordDetailsToFeaturePostRecordDetails (
   record: ApiPostRecordDetails
 ): PostRecordDetails {
+  const detailedRecord = record as PostRecordDetailsWithClaimDetails
   return {
     post_id: String(record.post_id),
     poster_id: record.poster_id,
@@ -111,25 +151,32 @@ function mapApiPostRecordDetailsToFeaturePostRecordDetails (
     item_status: record.item_status,
     item_type: record.item_type,
     category: record.category,
+    custody_status: record.custody_status ?? null,
     poster_name: record.poster_name,
     poster_email: '',
-    poster_profile_picture_url: null,
+    poster_profile_picture_url: getPosterProfilePictureUrl(detailedRecord),
     claim_id: record.claim_id,
     claimer_name: record.claimed_by_name,
     claimer_school_email: record.claimed_by_email,
-    claimer_contact_num: null,
-    claimed_at: null,
-    claim_processed_by_name: null,
-    claim_processed_by_email: null,
-    claim_processed_by_profile_picture_url: null,
+    claimer_contact_num: detailedRecord.claimed_by_contact ?? null,
+    claimed_at: detailedRecord.claimed_at ?? null,
+    claim_processed_by_name: detailedRecord.claim_processed_by_name ?? null,
+    claim_processed_by_email: detailedRecord.claim_processed_by_email ?? null,
+    claim_processed_by_profile_picture_url:
+      detailedRecord.claim_processed_by_profile_picture_url ?? null,
+    claim_processed_by_user_type:
+      detailedRecord.claim_processed_by_user_type ?? null,
     linked_lost_item_id: record.linked_lost_item_id,
-    returned_at: record.returned_at_local
+    returned_at: record.returned_at_local,
+    accepted_by_guard_name: detailedRecord.accepted_by_guard_name ?? null,
+    accepted_by_guard_email: detailedRecord.accepted_by_guard_email ?? null
   }
 }
 
 function mapPostRecordToFeaturePostRecordDetails (
   record: ApiPostRecord
 ): PostRecordDetails {
+  const postRecord = record as PostRecordWithClaimDetails
   return {
     post_id: String(record.post_id),
     poster_id: record.poster_id,
@@ -150,19 +197,23 @@ function mapPostRecordToFeaturePostRecordDetails (
     item_status: record.item_status,
     item_type: record.item_type,
     category: record.category,
+    custody_status: record.custody_status ?? null,
     poster_name: record.poster_name,
     poster_email: '',
-    poster_profile_picture_url: null,
+    poster_profile_picture_url: getPosterProfilePictureUrl(postRecord),
     claim_id: record.claim_id,
     claimer_name: record.claimed_by_name,
     claimer_school_email: record.claimed_by_email,
-    claimer_contact_num: null,
-    claimed_at: null,
+    claimer_contact_num: postRecord.claimed_by_contact ?? null,
+    claimed_at: postRecord.claimed_at ?? null,
     claim_processed_by_name: null,
     claim_processed_by_email: null,
     claim_processed_by_profile_picture_url: null,
+    claim_processed_by_user_type: null,
     linked_lost_item_id: null,
-    returned_at: null
+    returned_at: null,
+    accepted_by_guard_name: null,
+    accepted_by_guard_email: null
   }
 }
 
@@ -201,35 +252,9 @@ export async function getMissingItem (
 
     if (!result.posts || result.posts.length === 0) return null
 
-    const r: any = result.posts[0]
-    console.log(r)
-    return {
-      user_id: r.poster_id,
-      username: r.poster_name,
-      item_name: r.item_name,
-      item_id: r.item_id,
-      profilepicture_url: r.profile_picture_url,
-      accepted_on_date: r.accepted_on_date,
-      item_image_url: r.item_image_url,
-      item_description: r.item_description,
-      item_status: r.item_status,
-      category: r.category,
-      last_seen_at: formatTimestamp(r.last_seen_at),
-      last_seen_location: r.last_seen_location,
-      is_anonymous: r.is_anonymous,
-      post_id: r.post_id,
-      submission_date: r.submission_date,
-      item_type: r.item_type,
-      post_status: r.post_status,
-      accepted_by_staff_name: r.accepted_by_staff_name,
-      accepted_by_staff_email: r.accepted_by_staff_email,
-      claimed_by_name: r.claimed_by_name,
-      claimed_by_email: r.claimed_by_email,
-      claimed_by_contact: r.claimed_by_contact,
-      claimed_at: r.claimed_at,
-      claim_processed_by_staff_id: r.claim_processed_by_staff_id,
-      claim_id: r.claim_id
-    }
+    const record = result.posts[0] as PostRecordWithClaimDetails
+    console.log(record)
+    return mapPostRecordWithClaimDetailsToPublicPost(record)
   } catch (error) {
     console.error('Error fetching post:', error)
     return null
@@ -250,34 +275,10 @@ export async function getPost (postId: string): Promise<PublicPost | null> {
   }
 
   try {
-    const r: any = await api.posts.get(Number(postId))
-    return {
-      user_id: r.poster_id,
-      username: r.poster_name,
-      item_name: r.item_name,
-      item_id: r.item_id,
-      profilepicture_url: r.profile_picture_url,
-      accepted_on_date: r.accepted_on_date,
-      item_image_url: r.item_image_url,
-      item_description: r.item_description,
-      item_status: r.item_status,
-      category: r.category,
-      last_seen_at: formatTimestamp(r.last_seen_at),
-      last_seen_location: r.last_seen_location,
-      is_anonymous: r.is_anonymous,
-      post_id: r.post_id,
-      submission_date: r.submission_date,
-      item_type: r.item_type,
-      post_status: r.post_status,
-      accepted_by_staff_name: r.accepted_by_staff_name,
-      accepted_by_staff_email: r.accepted_by_staff_email,
-      claimed_by_name: r.claimed_by_name,
-      claimed_by_email: r.claimed_by_email,
-      claimed_by_contact: r.claimed_by_contact,
-      claimed_at: r.claimed_at,
-      claim_processed_by_staff_id: r.claim_processed_by_staff_id,
-      claim_id: r.claim_id
-    }
+    const record = await api.posts.get(Number(postId))
+    return mapPostRecordWithClaimDetailsToPublicPost(
+      record as PostRecordWithClaimDetails
+    )
   } catch (error) {
     console.error('Error fetching post:', error)
     return null
@@ -293,8 +294,15 @@ export async function getPostFull (
     const data = await api.posts.getFull(Number(postId))
     return mapApiPostRecordDetailsToFeaturePostRecordDetails(data)
   } catch (error) {
-    console.error('Exception in getPostFull:', error)
-    return null
+    console.error('Exception in getPostFull, falling back to public post view:', error)
+
+    try {
+      const fallbackData = await api.posts.get(Number(postId))
+      return mapPostRecordToFeaturePostRecordDetails(fallbackData)
+    } catch (fallbackError) {
+      console.error('Exception in getPostFull fallback:', fallbackError)
+      return null
+    }
   }
 }
 
@@ -366,33 +374,11 @@ export async function listOwnPosts ({
     })
 
     return {
-      posts: (result.posts ?? []).map((r: any) => ({
-        user_id: r.poster_id,
-        username: r.poster_name,
-        item_name: r.item_name,
-        item_id: r.item_id,
-        profilepicture_url: r.profile_picture_url,
-        item_image_url: r.item_image_url,
-        item_description: r.item_description,
-        item_status: r.item_status,
-        accepted_on_date: r.accepted_on_date,
-        category: r.category,
-        last_seen_at: formatTimestamp(r.last_seen_at),
-        last_seen_location: r.last_seen_location,
-        is_anonymous: r.is_anonymous,
-        post_id: r.post_id,
-        submission_date: r.submission_date,
-        item_type: r.item_type,
-        post_status: r.post_status,
-        accepted_by_staff_name: r.accepted_by_staff_name,
-        accepted_by_staff_email: r.accepted_by_staff_email,
-        claimed_by_name: r.claimed_by_name,
-        claimed_by_email: r.claimed_by_email,
-        claimed_by_contact: r.claimed_by_contact,
-        claimed_at: r.claimed_at,
-        claim_processed_by_staff_id: r.claim_processed_by_staff_id,
-        claim_id: r.claim_id
-      })),
+      posts: (result.posts ?? []).map(record =>
+        mapPostRecordWithClaimDetailsToPublicPost(
+          record as PostRecordWithClaimDetails
+        )
+      ),
       count: result.count || 0
     }
   } catch (error) {
@@ -414,33 +400,11 @@ export async function listPublicPosts (
       order_direction: 'desc'
     })
 
-    return (result.posts ?? []).map((r: any) => ({
-      user_id: r.poster_id,
-      username: r.poster_name,
-      item_name: r.item_name,
-      item_id: r.item_id,
-      profilepicture_url: r.profile_picture_url,
-      item_image_url: r.item_image_url,
-      item_description: r.item_description,
-      accepted_on_date: r.accepted_on_date,
-      item_status: r.item_status,
-      category: r.category,
-      last_seen_at: formatTimestamp(r.last_seen_at),
-      last_seen_location: r.last_seen_location,
-      is_anonymous: r.is_anonymous,
-      post_id: r.post_id,
-      submission_date: r.submission_date,
-      item_type: r.item_type,
-      post_status: r.post_status,
-      accepted_by_staff_name: r.accepted_by_staff_name,
-      accepted_by_staff_email: r.accepted_by_staff_email,
-      claimed_by_name: r.claimed_by_name,
-      claimed_by_email: r.claimed_by_email,
-      claimed_by_contact: r.claimed_by_contact,
-      claimed_at: r.claimed_at,
-      claim_processed_by_staff_id: r.claim_processed_by_staff_id,
-      claim_id: r.claim_id
-    }))
+    return (result.posts ?? []).map(record =>
+      mapPostRecordWithClaimDetailsToPublicPost(
+        record as PostRecordWithClaimDetails
+      )
+    )
   } catch (error) {
     console.error('Error fetching public posts:', error)
     throw error
@@ -464,33 +428,11 @@ export async function listPendingPosts (
       order_direction: 'desc'
     })
 
-    return (result.posts ?? []).map((r: any) => ({
-      user_id: r.poster_id,
-      username: r.poster_name,
-      item_name: r.item_name,
-      item_id: r.item_id,
-      profilepicture_url: r.profile_picture_url,
-      item_image_url: r.item_image_url,
-      item_description: r.item_description,
-      item_status: r.item_status,
-      accepted_on_date: r.accepted_on_date,
-      category: r.category,
-      last_seen_at: formatTimestamp(r.last_seen_at),
-      last_seen_location: r.last_seen_location,
-      is_anonymous: r.is_anonymous,
-      post_id: r.post_id,
-      submission_date: r.submission_date,
-      item_type: r.item_type,
-      post_status: r.post_status,
-      accepted_by_staff_name: r.accepted_by_staff_name,
-      accepted_by_staff_email: r.accepted_by_staff_email,
-      claimed_by_name: r.claimed_by_name,
-      claimed_by_email: r.claimed_by_email,
-      claimed_by_contact: r.claimed_by_contact,
-      claimed_at: r.claimed_at,
-      claim_processed_by_staff_id: r.claim_processed_by_staff_id,
-      claim_id: r.claim_id
-    }))
+    return (result.posts ?? []).map(record =>
+      mapPostRecordWithClaimDetailsToPublicPost(
+        record as PostRecordWithClaimDetails
+      )
+    )
   } catch (error) {
     console.error('Error fetching pending posts:', error)
     throw error
@@ -510,33 +452,11 @@ export async function listStaffPosts (
       order_direction: 'desc'
     })
 
-    return (result.posts ?? []).map((r: any) => ({
-      user_id: r.poster_id,
-      username: r.poster_name,
-      item_name: r.item_name,
-      item_id: r.item_id,
-      profilepicture_url: r.profile_picture_url,
-      item_image_url: r.item_image_url,
-      item_description: r.item_description,
-      item_status: r.item_status,
-      accepted_on_date: r.accepted_on_date,
-      category: r.category,
-      last_seen_at: formatTimestamp(r.last_seen_at),
-      last_seen_location: r.last_seen_location,
-      is_anonymous: r.is_anonymous,
-      post_id: r.post_id,
-      submission_date: r.submission_date,
-      item_type: r.item_type,
-      post_status: r.post_status,
-      accepted_by_staff_name: r.accepted_by_staff_name,
-      accepted_by_staff_email: r.accepted_by_staff_email,
-      claimed_by_name: r.claimed_by_name,
-      claimed_by_email: r.claimed_by_email,
-      claimed_by_contact: r.claimed_by_contact,
-      claimed_at: r.claimed_at,
-      claim_processed_by_staff_id: r.claim_processed_by_staff_id,
-      claim_id: r.claim_id
-    }))
+    return (result.posts ?? []).map(record =>
+      mapPostRecordWithClaimDetailsToPublicPost(
+        record as PostRecordWithClaimDetails
+      )
+    )
   } catch (error) {
     console.error('Error fetching staff posts:', error)
     throw error
@@ -564,39 +484,17 @@ export function listPostsByIds (getPostIds: () => string[]) {
       })
 
       // Order results to match idsToFetch order
-      const mapById: Record<string, any> = {}
-      ;(result.posts ?? []).forEach((r: any) => (mapById[r.post_id] = r))
+      const mapById: Record<string, PostRecordWithClaimDetails> = {}
+      ;(result.posts ?? []).forEach(record => {
+        mapById[String(record.post_id)] = record as PostRecordWithClaimDetails
+      })
 
       const ordered = idsToFetch
         .map(id => mapById[id])
-        .filter(Boolean)
-        .map((r: any) => ({
-          user_id: r.poster_id,
-          username: r.poster_name,
-          item_name: r.item_name,
-          item_id: r.item_id,
-          profilepicture_url: r.profile_picture_url,
-          item_image_url: r.item_image_url,
-          item_description: r.item_description,
-          accepted_on_date: r.accepted_on_date,
-          item_status: r.item_status,
-          category: r.category,
-          last_seen_at: formatTimestamp(r.last_seen_at),
-          last_seen_location: r.last_seen_location,
-          is_anonymous: r.is_anonymous,
-          post_id: r.post_id,
-          submission_date: r.submission_date,
-          item_type: r.item_type,
-          post_status: r.post_status,
-          accepted_by_staff_name: r.accepted_by_staff_name,
-          accepted_by_staff_email: r.accepted_by_staff_email,
-          claimed_by_name: r.claimed_by_name,
-          claimed_by_email: r.claimed_by_email,
-          claimed_by_contact: r.claimed_by_contact,
-          claimed_at: r.claimed_at,
-          claim_processed_by_staff_id: r.claim_processed_by_staff_id,
-          claim_id: r.claim_id
-        }))
+        .filter(
+          (record): record is PostRecordWithClaimDetails => record !== undefined
+        )
+        .map(record => mapPostRecordWithClaimDetailsToPublicPost(record))
       return ordered
     } catch (error) {
       console.error('Error fetching search result posts:', error)

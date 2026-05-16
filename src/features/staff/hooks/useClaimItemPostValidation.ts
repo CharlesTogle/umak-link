@@ -52,9 +52,20 @@ export function useClaimItemPostValidation () {
         return
       }
 
-      if (fetchedItem.post_status !== 'accepted') {
+      if (fetchedItem.item_status === 'discarded') {
         setError(
-          'This post is not accepted yet. Only accepted posts can be claimed.'
+          'This item cannot be linked because it was discarded.'
+        )
+        setLostItemPost(null)
+        return
+      }
+
+      if (
+        fetchedItem.post_status !== 'accepted' &&
+        fetchedItem.post_status !== 'pending'
+      ) {
+        setError(
+          'This post cannot be linked unless it is pending or accepted.'
         )
         setLostItemPost(null)
         return

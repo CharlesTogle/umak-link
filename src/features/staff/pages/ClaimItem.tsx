@@ -1,13 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import {
+  IonPage,
   IonContent,
   IonButton,
   IonText,
   IonToast,
   IonSpinner
 } from '@ionic/react'
-import { alertCircle, checkmarkCircle } from 'ionicons/icons'
+import { checkmarkCircle } from 'ionicons/icons'
 import { useNavigation } from '@/shared/hooks/useNavigation'
 import { useUser } from '@/features/auth/contexts/UserContext'
 import CardHeader from '@/shared/components/CardHeader'
@@ -25,6 +26,7 @@ import ClaimerEmailSearch from '@/features/staff/components/claim-item/ClaimerEm
 import SelectedUserCard from '@/features/staff/components/claim-item/SelectedUserCard'
 import ClaimFormFields from '@/features/staff/components/claim-item/ClaimFormFields'
 import ClaimItemLoadingSkeleton from '@/features/staff/components/claim-item/ClaimItemLoadingSkeleton'
+import ClaimVerificationPanel from '@/features/staff/components/claim-item/ClaimVerificationPanel'
 import {
   initializeDateTimeState,
   toISODate,
@@ -33,6 +35,10 @@ import {
 import { useClaimItemPostValidation } from '@/features/staff/hooks/useClaimItemPostValidation'
 import { useClaimItemSubmit } from '@/features/staff/hooks/useClaimItemSubmit'
 import { useExistingClaimCheck } from '@/features/staff/hooks/useExistingClaimCheck'
+import { useClaimQrScanner } from '@/features/staff/hooks/useClaimQrScanner'
+import { api } from '@/shared/lib/api'
+import type { ClaimQrScanPayload } from '@/shared/lib/api-types'
+import { normalizeClaimCodeInput } from '@/shared/utils/claimCode'
 
 interface SelectedUser {
   id: string
@@ -46,19 +52,117 @@ interface ClaimFormData {
   itemId: string
 }
 
-export default function ClaimItem () {
+interface ClaimItemProps {
+  mode?: 'staff' | 'guard'
+}
+
+function getClaimBlockingMessage (
+  post: PostRecordDetails,
+  mode: 'staff' | 'guard'
+): string | null {
+  if (post.item_type !== 'found') {
+    return 'Only found items can be claimed.'
+  }
+
+  if (mode !== 'guard' && post.post_status !== 'accepted') {
+    return 'This found post must be accepted before it can be claimed.'
+  }
+
+  if (post.item_status !== 'unclaimed') {
+    return 'This found post is no longer available for claim.'
+  }
+
+  if (mode === 'guard') {
+    if (post.custody_status !== 'with_guard') {
+      return 'This found post cannot be claimed until the guard still has custody of the item.'
+    }
+
+    return null
+  }
+
+  if (post.custody_status !== 'in_security_office') {
+    return 'This found post cannot be claimed until the item is received in the Security Office.'
+  }
+
+  return null
+}
+
+function normalizeToLocal (input: string): string | null {
+  const digits = (input || '').replace(/[^0-9]/g, '')
+
+  if (/^63\d{10}$/.test(digits)) {
+    return '0' + digits.slice(2)
+  }
+
+  if (/^0?9\d{9}$/.test(digits)) {
+    if (digits.length === 10) return '0' + digits
+    return digits
+  }
+
+  return null
+}
+
+function formatLocalPhoneNumber (local: string): string {
+  if (local.length === 11) {
+    return `${local.slice(0, 4)} ${local.slice(4, 7)} ${local.slice(7)}`
+  }
+
+  return local
+}
+
+function mapStaffClaimQrToSelectedUser (
+  payload: Extract<ClaimQrScanPayload, { kind: 'staff_claim_user_identity' }>
+): SelectedUser {
+  return {
+    id: payload.userId,
+    name: payload.userName,
+    email: payload.email,
+    image: payload.profilePictureUrl
+  }
+}
+
+function mapResolvedClaimUserToSelectedUser (
+  user: {
+    user_id: string
+    user_name: string | null
+    email: string | null
+    profile_picture_url: string | null
+  }
+): SelectedUser {
+  return {
+    id: user.user_id,
+    name: user.user_name?.trim() || user.email?.trim() || 'Unknown User',
+    email: user.email?.trim() || '',
+    image: user.profile_picture_url
+  }
+}
+
+function getLegacyClaimSessionMessage (): string {
+  return 'Scan the student claim QR directly. The live claim-session QR is no longer required on this screen.'
+}
+
+export default function ClaimItem ({
+  mode = 'staff'
+}: ClaimItemProps) {
   const { postId } = useParams<{ postId: string }>()
   const { navigate } = useNavigation()
   const { getUser } = useUser()
+  const isGuardMode = mode === 'guard'
+  const pageTestId = isGuardMode
+    ? 'guard-claim-item-page'
+    : 'staff-claim-item-page'
+  const backPath =
+    isGuardMode && postId
+      ? `/guard/post-record/view/${postId}`
+      : '/staff/post-records'
+  const redirectPath = isGuardMode ? '/guard/home' : '/staff/post-records'
 
-  // Initialize Philippine time
   const initialDateTime = initializeDateTimeState()
 
-  // Post state
   const [post, setPost] = useState<PostRecordDetails | null>(null)
+  const [blockingMessage, setBlockingMessage] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
-  // Lost item post validation hook
   const {
     lostItemPost,
     loading: lostItemPostLoading,
@@ -67,7 +171,6 @@ export default function ClaimItem () {
     clearPost
   } = useClaimItemPostValidation()
 
-  // Email search state
   const [searchText, setSearchText] = useState<string>('')
   const [selectedUser, setSelectedUser] = useState<SelectedUser | null>(null)
   const {
@@ -78,25 +181,19 @@ export default function ClaimItem () {
     clearResults
   } = useStaffSearch()
 
-  // Date/Time state
   const [date, setDate] = useState(initialDateTime.date)
   const [time, setTime] = useState(initialDateTime.time)
   const [meridian, setMeridian] = useState(initialDateTime.meridian)
-
-  // Form state
   const [formData, setFormData] = useState<ClaimFormData>({
     contactNumber: '',
     itemId: ''
   })
+  const [manualClaimCode, setManualClaimCode] = useState('')
 
-  // Submit hook
   const { submit, isProcessing } = useClaimItemSubmit()
-
-  // Existing claim check hook
   const { existingClaim, checkForExistingClaim, clearExistingClaim } =
     useExistingClaimCheck()
 
-  // Toast/Modal state
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [showOverwriteModal, setShowOverwriteModal] = useState(false)
   const [showCancelModal, setShowCancelModal] = useState(false)
@@ -109,31 +206,106 @@ export default function ClaimItem () {
     message: '',
     color: 'success'
   })
-
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isResolvingClaimCode, setIsResolvingClaimCode] = useState(false)
   const submitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Helpers for phone normalization/validation
-  const normalizeToLocal = (input: string): string | null => {
-    const digits = (input || '').replace(/[^0-9]/g, '')
-    // +63XXXXXXXXXX (digits: 63 + 10) -> convert to 0 + 10 digits
-    if (/^63\d{10}$/.test(digits)) {
-      return '0' + digits.slice(2)
-    }
-    // 0XXXXXXXXXX (11 digits) or 9XXXXXXXXX (10 digits)
-    if (/^0?9\d{9}$/.test(digits)) {
-      if (digits.length === 10) return '0' + digits
-      return digits
-    }
-    return null
-  }
+  const claimerForSubmission = selectedUser
+  const isVerifyingClaimer = isResolvingClaimCode
+
+  const handleVerifyClaimQr = useCallback(
+    async (payload: ClaimQrScanPayload) => {
+      if (payload.kind === 'staff_claim_manual_code') {
+        const normalizedClaimCode = normalizeClaimCodeInput(payload.manualEntryCode)
+
+        if (normalizedClaimCode.length !== 6) {
+          setToast({
+            show: true,
+            message: 'The scanned claim QR is missing a valid claim code.',
+            color: 'danger'
+          })
+          return
+        }
+
+        try {
+          setIsResolvingClaimCode(true)
+          const resolvedUser = await api.users.resolveClaimCode(
+            normalizedClaimCode,
+            isGuardMode && post
+              ? { foundPostId: Number(post.post_id) }
+              : undefined
+          )
+          setManualClaimCode(normalizedClaimCode)
+          setSelectedUser(mapResolvedClaimUserToSelectedUser(resolvedUser))
+          setSearchText('')
+          clearResults()
+          setToast({
+            show: true,
+            message: 'Student claim QR scanned successfully.',
+            color: 'success'
+          })
+        } catch (error) {
+          setToast({
+            show: true,
+            message:
+              error instanceof Error
+                ? error.message
+                : 'Failed to resolve the student claim QR.',
+            color: 'danger'
+          })
+        } finally {
+          setIsResolvingClaimCode(false)
+        }
+
+        return
+      }
+
+      if (payload.kind === 'staff_claim_user_identity') {
+        setManualClaimCode('')
+        setSelectedUser(mapStaffClaimQrToSelectedUser(payload))
+        setSearchText('')
+        clearResults()
+        setToast({
+          show: true,
+          message: 'Student claim QR scanned successfully.',
+          color: 'success'
+        })
+        return
+      }
+
+      setToast({
+        show: true,
+        message: getLegacyClaimSessionMessage(),
+        color: 'danger'
+      })
+    },
+    [clearResults, isGuardMode, post]
+  )
+
+  const claimQrScanner = useClaimQrScanner({
+    onDetected: handleVerifyClaimQr
+  })
 
   useEffect(() => {
     if (!hasUnsavedChanges) {
-      setHasUnsavedChanges(true)
+      const userChanged =
+        selectedUser !== null ||
+        formData.contactNumber.trim() !== '' ||
+        formData.itemId.trim() !== '' ||
+        manualClaimCode.trim() !== ''
+
+      if (userChanged) {
+        setHasUnsavedChanges(true)
+      }
     }
-  }, [selectedUser, formData])
+  }, [
+    formData.contactNumber,
+    formData.itemId,
+    hasUnsavedChanges,
+    manualClaimCode,
+    selectedUser
+  ])
 
   const loadPost = useCallback(async () => {
     if (!postId) {
@@ -142,13 +314,13 @@ export default function ClaimItem () {
         message: 'Invalid post ID',
         color: 'danger'
       })
+      setLoading(false)
       return
     }
 
     try {
       setLoading(true)
 
-      // Check network connectivity with 8-second timeout
       const connected = await isConnected(8000)
       if (!connected) {
         setToast({
@@ -171,17 +343,14 @@ export default function ClaimItem () {
         return
       }
 
-      // Only allow 'found' item types to be claimed
-      if (fetchedPost.item_type !== 'found') {
-        setToast({
-          show: true,
-          message: 'Only found items can be claimed',
-          color: 'danger'
-        })
+      const claimBlockingMessage = getClaimBlockingMessage(fetchedPost, mode)
+      if (claimBlockingMessage) {
+        setBlockingMessage(claimBlockingMessage)
         setPost(null)
         return
       }
 
+      setBlockingMessage(null)
       setPost(fetchedPost)
     } catch (error) {
       console.error('Error loading post:', error)
@@ -193,10 +362,10 @@ export default function ClaimItem () {
     } finally {
       setLoading(false)
     }
-  }, [postId])
+  }, [mode, postId])
 
   useEffect(() => {
-    loadPost()
+    void loadPost()
   }, [loadPost])
 
   const handleSearchChange = (e: CustomEvent) => {
@@ -209,52 +378,94 @@ export default function ClaimItem () {
     }
   }
 
-  // Handle user selection from search results
-  const handleUserSelect = (user: any) => {
-    console.log('Selected user:', user)
-    console.log({
-      id: user.user_id,
-      name: user.user_name,
-      email: user.email,
-      image: user.profile_picture_url
-    })
+  const handleUserSelect = (user: {
+    user_id: string
+    user_name: string
+    email: string
+    profile_picture_url?: string | null
+  }) => {
     setSelectedUser({
       id: user.user_id,
       name: user.user_name,
       email: user.email,
       image: user.profile_picture_url
     })
+    setManualClaimCode('')
     setSearchText('')
     clearResults()
   }
 
-  // Handle remove selected user
   const handleRemoveUser = () => {
     setSelectedUser(null)
+    setManualClaimCode('')
     setSearchText('')
     clearResults()
   }
 
-  // Handle date/time change
+  const handleResolveClaimCode = async () => {
+    const normalizedClaimCode = normalizeClaimCodeInput(manualClaimCode)
+
+    if (normalizedClaimCode.length !== 6) {
+      setToast({
+        show: true,
+        message: 'Enter the full 6-character claim code first.',
+        color: 'danger'
+      })
+      return
+    }
+
+    try {
+      setIsResolvingClaimCode(true)
+      const resolvedUser = await api.users.resolveClaimCode(
+        normalizedClaimCode,
+        isGuardMode && post
+          ? { foundPostId: Number(post.post_id) }
+          : undefined
+      )
+      setManualClaimCode(normalizedClaimCode)
+      setSelectedUser(mapResolvedClaimUserToSelectedUser(resolvedUser))
+      setSearchText('')
+      clearResults()
+      setToast({
+        show: true,
+        message: 'Claim code matched successfully.',
+        color: 'success'
+      })
+    } catch (error) {
+      setToast({
+        show: true,
+        message:
+          error instanceof Error
+            ? error.message
+            : 'Failed to resolve the claim code.',
+        color: 'danger'
+      })
+    } finally {
+      setIsResolvingClaimCode(false)
+    }
+  }
+
   const handleDateChange = (iso: string) => {
     if (!iso) return
-    const d = new Date(iso)
-    const formattedDate = d.toLocaleDateString('en-US', {
+
+    const selectedDate = new Date(iso)
+    const formattedDate = selectedDate.toLocaleDateString('en-US', {
       month: '2-digit',
       day: '2-digit',
       year: 'numeric',
       timeZone: 'Asia/Manila'
     })
-    let hours = d.getHours()
-    const mins = d.getMinutes().toString().padStart(2, '0')
-    const mer = hours >= 12 ? 'PM' : 'AM'
+
+    let hours = selectedDate.getHours()
+    const minutes = selectedDate.getMinutes().toString().padStart(2, '0')
+    const nextMeridian = hours >= 12 ? 'PM' : 'AM'
     hours = hours % 12 || 12
+
     setDate(formattedDate)
-    setTime(`${hours}:${mins}`)
-    setMeridian(mer as 'AM' | 'PM')
+    setTime(`${hours}:${minutes}`)
+    setMeridian(nextMeridian as 'AM' | 'PM')
   }
 
-  // Handle form input changes
   const handleFormChange = async (
     field: keyof ClaimFormData,
     value: string
@@ -264,60 +475,36 @@ export default function ClaimItem () {
       [field]: value
     }))
 
-    // If updating itemId, validate and fetch the post
-    if (field === 'itemId' && value.trim()) {
+    if (!isGuardMode && field === 'itemId' && value.trim()) {
       await validateAndFetchPost(value)
-    } else if (field === 'itemId' && !value.trim()) {
-      // Clear the lost item post if item ID is removed
+    } else if (!isGuardMode && field === 'itemId' && !value.trim()) {
       clearPost()
     }
   }
 
-  // Handle submit (debounced)
   const handleSubmit = async () => {
-    // Close modal immediately for user feedback
     setShowConfirmModal(false)
-    // Set submitting state to show spinner on buttons
     setIsSubmitting(true)
 
-    // Clear existing timeout
     if (submitTimeoutRef.current) {
       clearTimeout(submitTimeoutRef.current)
     }
+
     submitTimeoutRef.current = setTimeout(async () => {
       const user = await getUser()
-      console.log('Submitting claim for post ID:', postId)
-      console.log(selectedUser)
-      console.log(post)
-      console.log(user)
-      if (!postId || !selectedUser || !post || !user) return
-      // Validate Philippine contact number (accept multiple common formats)
-      const normalizeToLocal = (input: string): string | null => {
-        const digits = (input || '').replace(/[^0-9]/g, '')
-        // +63XXXXXXXXXX -> 63 + 10 digits => convert to 0 + 10 digits => 11 digits
-        if (/^63\d{10}$/.test(digits)) {
-          return '0' + digits.slice(2)
-        }
-        // 0XXXXXXXXXX (11 digits) already local
-        if (/^0?9\d{9}$/.test(digits)) {
-          // if starts with 9 and length 10, prepend 0
-          if (digits.length === 10) return '0' + digits
-          return digits
-        }
-        return null
+
+      if (!postId || !post || !user) {
+        setToast({
+          show: true,
+          message: 'User not authenticated.',
+          color: 'danger'
+        })
+        setIsSubmitting(false)
+        return
       }
 
-      const formatLocal = (local: string) => {
-        // Expect local like 09123456789 (11 chars). Format as 0912 345 6789 (4-3-4)
-        if (!local) return local
-        if (local.length === 11) {
-          return `${local.slice(0, 4)} ${local.slice(4, 7)} ${local.slice(7)}`
-        }
-        return local
-      }
-
-      const normalized = normalizeToLocal(formData.contactNumber.trim())
-      if (!normalized) {
+      const normalizedContactNumber = normalizeToLocal(formData.contactNumber.trim())
+      if (!normalizedContactNumber) {
         setToast({
           show: true,
           message:
@@ -327,10 +514,19 @@ export default function ClaimItem () {
         setIsSubmitting(false)
         return
       }
-      const formattedNumber = formatLocal(normalized)
 
-      // If an itemId was provided ensure we found a matching lost item before updating its status
-      if (formData.itemId?.trim() && !lostItemPost) {
+      const claimedAt = toISODate(date, time, meridian)
+      if (!claimedAt) {
+        setToast({
+          show: true,
+          message: 'Please enter a valid claimed date and time',
+          color: 'danger'
+        })
+        setIsSubmitting(false)
+        return
+      }
+
+      if (!isGuardMode && formData.itemId.trim() && !lostItemPost) {
         setToast({
           show: true,
           message: 'Referenced lost item not found. Please verify the Item ID.',
@@ -340,20 +536,43 @@ export default function ClaimItem () {
         return
       }
 
-      // Check claim_table for existing claim on this item
+      if (!claimerForSubmission) {
+        setToast({
+          show: true,
+          message:
+            isGuardMode
+              ? 'Scan the student QR or enter the 6-character claim code before submitting the guard claim.'
+              : 'Scan the student QR or use the staff-only manual claimer field before submitting the claim.',
+          color: 'danger'
+        })
+        setIsSubmitting(false)
+        return
+      }
+
       let itemIdToCheck: string | null = null
 
       try {
-        const latestFound = await getPostFull(postId as string)
+        const latestFound = await getPostFull(postId)
         if (!latestFound) {
           setToast({ show: true, message: 'Post not found', color: 'danger' })
           setIsSubmitting(false)
           return
         }
 
+        const claimBlockingMessage = getClaimBlockingMessage(latestFound, mode)
+        if (claimBlockingMessage) {
+          setToast({
+            show: true,
+            message: claimBlockingMessage,
+            color: 'danger'
+          })
+          setIsSubmitting(false)
+          return
+        }
+
         itemIdToCheck = latestFound.item_id
-      } catch (err) {
-        console.error('Error fetching post details:', err)
+      } catch (error) {
+        console.error('Error fetching post details:', error)
         setToast({
           show: true,
           message: 'Failed to verify post status',
@@ -363,18 +582,17 @@ export default function ClaimItem () {
         return
       }
 
-      // Check if item already has a claim in claim_table
       if (itemIdToCheck) {
         const existingClaimData = await checkForExistingClaim(itemIdToCheck)
 
         if (existingClaimData) {
-          // Show overwrite confirmation modal
           setIsSubmitting(false)
           setShowOverwriteModal(true)
           return
         }
       }
-      if (lostItemPost && lostItemPost.post_id) {
+
+      if (!isGuardMode && lostItemPost?.post_id) {
         try {
           const latestMissing = await getPostFull(lostItemPost.post_id)
           if (!latestMissing) {
@@ -397,8 +615,32 @@ export default function ClaimItem () {
             setIsSubmitting(false)
             return
           }
-        } catch (err) {
-          console.error('Error verifying missing post status:', err)
+
+          if (latestMissing.item_status === 'discarded') {
+            setToast({
+              show: true,
+              message: 'This item cannot be linked because it was discarded.',
+              color: 'danger'
+            })
+            setIsSubmitting(false)
+            return
+          }
+
+          if (
+            latestMissing.post_status !== 'accepted' &&
+            latestMissing.post_status !== 'pending'
+          ) {
+            setToast({
+              show: true,
+              message:
+                'This post cannot be linked unless it is pending or accepted.',
+              color: 'danger'
+            })
+            setIsSubmitting(false)
+            return
+          }
+        } catch (error) {
+          console.error('Error verifying missing post status:', error)
           setToast({
             show: true,
             message: 'Failed to verify linked lost item',
@@ -408,7 +650,7 @@ export default function ClaimItem () {
           return
         }
       }
-      // Check network connectivity before submitting
+
       const connected = await isConnected(8000)
       if (!connected) {
         setToast({
@@ -423,14 +665,16 @@ export default function ClaimItem () {
       await submit(
         {
           foundPostId: postId,
-          claimerName: selectedUser.name,
-          claimerEmail: selectedUser.email,
-          claimerContactNumber: formattedNumber,
+          claimerName: claimerForSubmission.name,
+          claimerEmail: claimerForSubmission.email,
+          claimerContactNumber: formatLocalPhoneNumber(normalizedContactNumber),
+          claimedAt,
           posterName: post.is_anonymous ? 'Anonymous' : post.poster_name,
           staffId: user.user_id,
           staffName: user.user_name,
-          missingPostId: lostItemPost ? lostItemPost.post_id : null,
-          existingClaim: existingClaim,
+          missingPostId: isGuardMode ? null : (lostItemPost ? lostItemPost.post_id : null),
+          redirectPath,
+          existingClaim,
           isOverwrite: false
         },
         message => {
@@ -452,7 +696,6 @@ export default function ClaimItem () {
         }
       )
 
-      // clear ref after run
       if (submitTimeoutRef.current) {
         clearTimeout(submitTimeoutRef.current)
         submitTimeoutRef.current = null
@@ -460,18 +703,24 @@ export default function ClaimItem () {
     }, 500)
   }
 
-  // Handle overwrite confirmation
   const handleOverwriteClaim = async () => {
-    // Close modal immediately for user feedback
     setShowOverwriteModal(false)
-    // Set submitting state to show spinner on buttons
     setIsSubmitting(true)
 
     const user = await getUser()
-    if (!postId || !selectedUser || !post || !user) return
 
-    const normalized = normalizeToLocal(formData.contactNumber.trim())
-    if (!normalized) {
+    if (!postId || !post || !user || !claimerForSubmission) {
+      setToast({
+        show: true,
+        message: 'Claim form is incomplete.',
+        color: 'danger'
+      })
+      setIsSubmitting(false)
+      return
+    }
+
+    const normalizedContactNumber = normalizeToLocal(formData.contactNumber.trim())
+    if (!normalizedContactNumber) {
       setToast({
         show: true,
         message: 'Invalid contact number',
@@ -481,16 +730,6 @@ export default function ClaimItem () {
       return
     }
 
-    const formatLocal = (local: string) => {
-      if (!local) return local
-      if (local.length === 11) {
-        return `${local.slice(0, 4)} ${local.slice(4, 7)} ${local.slice(7)}`
-      }
-      return local
-    }
-    const formattedNumber = formatLocal(normalized)
-
-    // Check network connectivity with timeout
     const connected = await isConnected(8000)
     if (!connected) {
       setToast({
@@ -505,14 +744,16 @@ export default function ClaimItem () {
     await submit(
       {
         foundPostId: postId,
-        claimerName: selectedUser.name,
-        claimerEmail: selectedUser.email,
-        claimerContactNumber: formattedNumber,
+        claimerName: claimerForSubmission.name,
+        claimerEmail: claimerForSubmission.email,
+        claimerContactNumber: formatLocalPhoneNumber(normalizedContactNumber),
+        claimedAt: toISODate(date, time, meridian),
         posterName: post.is_anonymous ? 'Anonymous' : post.poster_name,
         staffId: user.user_id,
         staffName: user.user_name,
-        missingPostId: lostItemPost ? lostItemPost.post_id : null,
-        existingClaim: existingClaim,
+        missingPostId: isGuardMode ? null : (lostItemPost ? lostItemPost.post_id : null),
+        redirectPath,
+        existingClaim,
         isOverwrite: true
       },
       message => {
@@ -545,62 +786,71 @@ export default function ClaimItem () {
   }, [])
 
   if (loading) {
-    return <ClaimItemLoadingSkeleton />
+    return (
+      <IonPage data-testid={pageTestId}>
+        <ClaimItemLoadingSkeleton />
+      </IonPage>
+    )
   }
 
   if (!post) {
     return (
-      <IonContent>
-        <div className='fixed w-full top-0 z-10'>
-          <HeaderWithButtons
-            loading={false}
-            onCancel={() => navigate('/staff/post-records', 'back')}
-            onSubmit={() => {}}
-            withSubmit={false}
-          />
-        </div>
-        <div className='ion-padding mt-15'>
-          <div className='w-full grid place-items-center py-16'>
-            <IonText color='danger' className='text-center'>
-              <h2 className='text-xl font-semibold mb-2'>Post not found</h2>
-              <p className='text-sm'>
-                The post you're looking for doesn't exist or cannot be claimed.
-              </p>
-            </IonText>
-            <IonButton
-              className='mt-6'
-              onClick={() => navigate('/staff/post-records', 'back')}
-              style={{ '--background': 'var(--color-umak-blue)' }}
-            >
-              Go Back
-            </IonButton>
+      <IonPage data-testid={pageTestId}>
+        <IonContent>
+          <div className='fixed top-0 z-10 w-full'>
+            <HeaderWithButtons
+              loading={false}
+              onCancel={() => navigate(backPath, 'back')}
+              onSubmit={() => {}}
+              withSubmit={false}
+            />
           </div>
-        </div>
-      </IonContent>
+          <div className='ion-padding mt-15'>
+            <div className='grid w-full place-items-center py-16'>
+              <IonText color='danger' className='text-center'>
+                <h2 className='mb-2 text-xl font-semibold'>
+                  {blockingMessage ? 'Post not ready for claim' : 'Post not found'}
+                </h2>
+                <p className='text-sm'>
+                  {blockingMessage ||
+                    "The post you're looking for doesn't exist or cannot be claimed."}
+                </p>
+              </IonText>
+              <IonButton
+                className='mt-6'
+                onClick={() => navigate(backPath, 'back')}
+                style={{ '--background': 'var(--color-umak-blue)' }}
+              >
+                Go Back
+              </IonButton>
+            </div>
+          </div>
+        </IonContent>
+      </IonPage>
     )
   }
 
   return (
-    <IonContent>
-      <div className='fixed w-full top-0 z-10'>
-        <HeaderWithButtons
-          loading={isProcessing || isSubmitting}
-          onCancel={() => {
-            console.log(hasUnsavedChanges)
-            if (hasUnsavedChanges) {
-              setShowCancelModal(true)
-            } else {
-              navigate('/staff/post-records', 'back')
-            }
-          }}
-          onSubmit={() => setShowConfirmModal(true)}
-          withSubmit={true}
-        />
-      </div>
+    <IonPage data-testid={pageTestId}>
+      <IonContent>
+        <div className='fixed top-0 z-10 w-full'>
+          <HeaderWithButtons
+            loading={isProcessing || isSubmitting}
+            onCancel={() => {
+              if (hasUnsavedChanges) {
+                setShowCancelModal(true)
+              } else {
+                navigate(backPath, 'back')
+              }
+            }}
+            onSubmit={() => setShowConfirmModal(true)}
+            withSubmit={true}
+          />
+        </div>
 
       <div className='ion-padding mt-15'>
         <CardHeader
-          title='Confirm Claim Status'
+          title={isGuardMode ? 'Process Guard Claim' : 'Process Claim'}
           icon={checkmarkCircle}
           hasLineBelow
         />
@@ -618,23 +868,43 @@ export default function ClaimItem () {
           />
         </div>
 
-        {/* Claimer Email Field */}
-        <ClaimerEmailSearch
-          searchText={searchText}
-          onSearchChange={handleSearchChange}
-          searchResults={results}
-          searchLoading={searchLoading}
-          searchError={searchError}
-          onUserSelect={handleUserSelect}
+        <ClaimVerificationPanel
+          mode={mode}
+          isVerifying={isVerifyingClaimer}
+          isScannerSupported={claimQrScanner.isSupported}
+          manualClaimCode={manualClaimCode}
+          scannerState={claimQrScanner.state}
+          videoRef={claimQrScanner.videoRef}
+          isResolvingClaimCode={isResolvingClaimCode}
+          onCloseCamera={claimQrScanner.closeCamera}
+          onManualClaimCodeChange={value => {
+            setManualClaimCode(normalizeClaimCodeInput(value))
+          }}
+          onOpenCamera={() => {
+            void claimQrScanner.openCamera()
+          }}
+          onResolveClaimCode={() => {
+            void handleResolveClaimCode()
+          }}
         />
 
-        {/* Selected User Card */}
-        {selectedUser && (
-          <SelectedUserCard user={selectedUser} onRemove={handleRemoveUser} />
-        )}
+        {!isGuardMode ? (
+          <ClaimerEmailSearch
+            searchText={searchText}
+            onSearchChange={handleSearchChange}
+            searchResults={results}
+            searchLoading={searchLoading}
+            searchError={searchError}
+            onUserSelect={handleUserSelect}
+          />
+        ) : null}
 
-        {/* Claim Form Fields */}
+        {selectedUser ? (
+          <SelectedUserCard user={selectedUser} onRemove={handleRemoveUser} />
+        ) : null}
+
         <ClaimFormFields
+          mode={mode}
           contactNumber={formData.contactNumber}
           onContactNumberChange={value =>
             handleFormChange('contactNumber', value)
@@ -649,21 +919,19 @@ export default function ClaimItem () {
           lostItemPostError={lostItemPostError}
         />
 
-        {/* Submit Button */}
         <IonButton
           expand='block'
-          className='mt-6 mb-4'
+          className='mb-4 mt-6'
           style={{ '--background': 'var(--color-umak-blue)' }}
           onClick={() => setShowConfirmModal(true)}
           disabled={
-            !selectedUser ||
+            !claimerForSubmission ||
             !formData.contactNumber ||
             isProcessing ||
             isSubmitting ||
-            // disable if contact format clearly invalid (use normalization)
+            isVerifyingClaimer ||
             !normalizeToLocal(formData.contactNumber) ||
-            // if an item ID is entered but no matching lost post found, disable
-            (!!formData.itemId && !lostItemPost)
+            (!isGuardMode && !!formData.itemId && !lostItemPost)
           }
         >
           {isProcessing || isSubmitting ? (
@@ -671,39 +939,43 @@ export default function ClaimItem () {
               <IonSpinner name='crescent' className='mr-2' />
             </>
           ) : (
-            'Claim Item'
+            'Complete Claim'
           )}
         </IonButton>
       </div>
 
-      {/* Submit Confirmation Modal */}
       <ConfirmationModal
         isOpen={showConfirmModal}
-        heading='Confirm claim?'
-        subheading='Are you sure you want to claim this item?'
+        heading='Complete claim?'
+        subheading={
+          claimerForSubmission
+            ? `Are you sure you want to complete this claim for ${claimerForSubmission.name}?`
+            : 'Are you sure you want to complete this claim?'
+        }
         onSubmit={handleSubmit}
         onCancel={() => setShowConfirmModal(false)}
         submitLabel='Confirm'
         cancelLabel='Cancel'
       />
 
-      {/* Overwrite Claim Confirmation Modal */}
       <ConfirmationModal
         isOpen={showOverwriteModal}
         heading='Overwrite existing claim?'
         subheading={
           existingClaim
-            ? `This item has been already claimed by ${
+            ? `This item has already been claimed by ${
                 existingClaim.claimer_name
-              } (${existingClaim.claimer_school_email}) on ${new Date(
+              } (${existingClaim.claimer_school_email})${
                 existingClaim.claimed_at
-              ).toLocaleDateString('en-US', {
-                month: 'long',
-                day: 'numeric',
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-              })}. Do you want to overwrite this claim?`
+                  ? ` on ${new Date(existingClaim.claimed_at).toLocaleDateString('en-US', {
+                      month: 'long',
+                      day: 'numeric',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}`
+                  : ''
+              }. Do you want to overwrite this claim?`
             : 'Do you want to overwrite the existing claim?'
         }
         onSubmit={handleOverwriteClaim}
@@ -715,30 +987,24 @@ export default function ClaimItem () {
         cancelLabel='Cancel'
       />
 
-      {/* Cancel Confirmation Modal */}
       <ConfirmationModal
         isOpen={showCancelModal}
         heading='Discard changes?'
         subheading='You have unsaved changes. Are you sure you want to discard them?'
-        onSubmit={() => {
-          setShowCancelModal(false)
-          navigate('/staff/post-records', 'back')
-        }}
+        onSubmit={() => navigate(backPath, 'back')}
         onCancel={() => setShowCancelModal(false)}
         submitLabel='Discard'
-        cancelLabel='Keep editing'
+        cancelLabel='Keep Editing'
       />
 
-      {/* Toast */}
       <IonToast
         isOpen={toast.show}
-        onDidDismiss={() => setToast(prev => ({ ...prev, show: false }))}
         message={toast.message}
-        duration={3000}
-        position='top'
+        duration={2000}
         color={toast.color}
-        icon={toast.color === 'success' ? checkmarkCircle : alertCircle}
+        onDidDismiss={() => setToast(prev => ({ ...prev, show: false }))}
       />
-    </IonContent>
+      </IonContent>
+    </IonPage>
   )
 }

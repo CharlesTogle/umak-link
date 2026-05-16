@@ -1,3 +1,5 @@
+import type { NotificationPayloadData } from '@/shared/lib/api-types'
+
 // types/notifications.ts
 export type NotificationType =
   | 'match'
@@ -22,7 +24,7 @@ export interface NotificationData {
   description?: string | null
   is_read?: boolean | null
   created_at?: string | null
-  data?: any
+  data?: NotificationPayloadData | null
   sent_to?: string | null
   sent_by?: string | null
   image_url?: string | null

@@ -20,9 +20,13 @@ import { clearPostsCache } from '@/features/posts/data/postsCache'
 import CardHeader from './CardHeader'
 import { Camera } from '@capacitor/camera'
 import { PushNotifications } from '@capacitor/push-notifications'
+import api from '@/shared/lib/api'
+import { useUser } from '@/features/auth/contexts/UserContext'
+import { registerForPushNotifications } from '@/features/auth/services/registerForPushNotifications'
 // Filesystem permission UI removed — do not import Filesystem here
 
 export default function SettingsList () {
+  const { getUser, refreshUser } = useUser()
   const [toastOpen, setToastOpen] = useState(false)
   const [toastMessage, setToastMessage] = useState('')
   const [confirmOpen, setConfirmOpen] = useState(false)
@@ -32,6 +36,26 @@ export default function SettingsList () {
     camera: '',
     notifications: ''
   })
+
+  const persistNotificationToken = useCallback(
+    async (deviceToken: string) => {
+      const currentUser = await getUser()
+      if (!currentUser) return
+      if (currentUser.notification_token === deviceToken) return
+
+      await api.auth.updateProfile({ notification_token: deviceToken })
+      await refreshUser(currentUser.user_id)
+    },
+    [getUser, refreshUser]
+  )
+
+  const syncNotificationRegistration = useCallback(async () => {
+    const deviceToken = await registerForPushNotifications()
+    if (!deviceToken) return null
+
+    await persistNotificationToken(deviceToken)
+    return deviceToken
+  }, [persistNotificationToken])
 
   const handleClearPostsCache = async () => {
     try {
@@ -101,11 +125,16 @@ export default function SettingsList () {
 
   const handleRequestNotificationsPermission = async () => {
     try {
-      await PushNotifications.requestPermissions()
+      const deviceToken = await syncNotificationRegistration().catch(error => {
+        console.error('Push registration failed after granting permission', error)
+        return null
+      })
 
       // Check actual permission status after request
-      const permResult = await PushNotifications.checkPermissions()
-      const granted = permResult.receive === 'granted'
+      const permResult = await PushNotifications.checkPermissions().catch(() => ({
+        receive: deviceToken ? 'granted' : 'denied'
+      }))
+      const granted = permResult.receive === 'granted' || deviceToken !== null
 
       setPermState(prev => ({
         ...prev,
@@ -116,8 +145,6 @@ export default function SettingsList () {
           ? 'Notifications permission granted'
           : 'Notifications permission denied'
       )
-
-      if (granted) await PushNotifications.register()
     } catch (e) {
       console.error(e)
       setToastMessage('Notifications permission request failed')
@@ -138,49 +165,55 @@ export default function SettingsList () {
   // Accept an external permissions snapshot (e.g., from native layer).
   // Re-check authoritative native permissions to avoid marking any
   // permission as granted prematurely.
-  const handlePermissionSnapshot = async (snapshot: any) => {
-    try {
-      console.log(
-        'Applying external permission snapshot (rechecking native)',
-        snapshot
-      )
+  const handlePermissionSnapshot = useCallback(
+    async (snapshot: unknown) => {
+      try {
+        console.log(
+          'Applying external permission snapshot (rechecking native)',
+          snapshot
+        )
 
-      // Perform authoritative permission checks and fall back safely
+        // Perform authoritative permission checks and fall back safely
+        const [cameraStatus, notifsStatus] = await Promise.all([
+          Camera.checkPermissions().catch(() => ({
+            camera: 'denied',
+            photos: 'denied'
+          })),
+          PushNotifications.checkPermissions().catch(() => ({
+            receive: 'denied'
+          }))
+        ])
 
-      const [cameraStatus, notifsStatus] = await Promise.all([
-        Camera.checkPermissions().catch(() => ({
-          camera: 'denied',
-          photos: 'denied'
-        })),
-        PushNotifications.checkPermissions().catch(() => ({
-          receive: 'denied'
-        }))
-      ])
+        const cameraGranted =
+          cameraStatus?.camera === 'granted' &&
+          cameraStatus?.photos === 'granted'
+        const notifsGranted = notifsStatus?.receive === 'granted'
 
-      const cameraGranted =
-        cameraStatus?.camera === 'granted' && cameraStatus?.photos === 'granted'
-      const notifsGranted = notifsStatus?.receive === 'granted'
+        setPermState({
+          camera: cameraGranted ? 'granted' : 'denied',
+          notifications: notifsGranted ? 'granted' : 'denied'
+        })
 
-      setPermState({
-        camera: cameraGranted ? 'granted' : 'denied',
-        notifications: notifsGranted ? 'granted' : 'denied'
-      })
-
-      // If notifications are truly granted, ensure registration
-      if (notifsGranted) {
-        try {
-          await PushNotifications.register()
-        } catch (e) {
-          console.warn('Push registration failed after permissions snapshot', e)
+        // If notifications are truly granted, ensure registration
+        if (notifsGranted) {
+          try {
+            await syncNotificationRegistration()
+          } catch (e) {
+            console.warn(
+              'Push registration failed after permissions snapshot',
+              e
+            )
+          }
         }
-      }
 
-      setToastMessage('Permissions synced')
-      setToastOpen(true)
-    } catch (err) {
-      console.error('Failed to apply permission snapshot', err)
-    }
-  }
+        setToastMessage('Permissions synced')
+        setToastOpen(true)
+      } catch (err) {
+        console.error('Failed to apply permission snapshot', err)
+      }
+    },
+    [syncNotificationRegistration]
+  )
 
   const checkPermissions = useCallback(async () => {
     try {
@@ -204,10 +237,16 @@ export default function SettingsList () {
             : 'denied',
         notifications: notifsStatus.receive === 'granted' ? 'granted' : 'denied'
       })
+
+      if (notifsStatus.receive === 'granted') {
+        void syncNotificationRegistration().catch(error => {
+          console.warn('Failed to sync push registration from settings', error)
+        })
+      }
     } catch (err) {
       console.error('Error checking permissions:', err)
     }
-  }, [])
+  }, [syncNotificationRegistration])
 
   useEffect(() => {
     let active = true
@@ -222,9 +261,10 @@ export default function SettingsList () {
 
   // Listen for external permission snapshots (useful for native bridges)
   useEffect(() => {
-    const handler = (e: any) => {
-      if (!e?.detail) return
-      void handlePermissionSnapshot(e.detail)
+    const handler = (event: Event) => {
+      const customEvent = event as CustomEvent<unknown>
+      if (customEvent.detail == null) return
+      void handlePermissionSnapshot(customEvent.detail)
     }
     window.addEventListener('permissionsSnapshot', handler as EventListener)
     return () =>
@@ -232,7 +272,7 @@ export default function SettingsList () {
         'permissionsSnapshot',
         handler as EventListener
       )
-  }, [])
+  }, [handlePermissionSnapshot])
 
   return (
     <>

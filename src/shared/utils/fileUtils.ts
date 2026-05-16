@@ -1,5 +1,18 @@
 import { Filesystem, Directory } from '@capacitor/filesystem'
 
+async function blobToBase64 (blob: Blob): Promise<string> {
+  return await new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      const result = reader.result as string
+      const base64 = result.split(',')[1]
+      resolve(base64)
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(blob)
+  })
+}
+
 /**
  * Retrieves a cached image from the specified directory
  * @param fileName - The name of the file to retrieve (e.g., 'profilePicture.png')
@@ -84,16 +97,7 @@ export async function saveCachedImage (
     }
 
     // Convert blob to base64
-    const reader = new FileReader()
-    const base64Data = await new Promise<string>((resolve, reject) => {
-      reader.onloadend = () => {
-        const result = reader.result as string
-        const base64 = result.split(',')[1]
-        resolve(base64)
-      }
-      reader.onerror = reject
-      reader.readAsDataURL(blob)
-    })
+    const base64Data = await blobToBase64(blob)
 
     // Ensure the directory exists
     try {
@@ -120,6 +124,37 @@ export async function saveCachedImage (
     return fullFileName
   } catch (error) {
     console.error('Error saving cached image:', error)
+    return null
+  }
+}
+
+export async function saveCachedBlob (
+  blob: Blob,
+  fileName: string,
+  folder: string = 'cache/images'
+): Promise<string | null> {
+  try {
+    const base64Data = await blobToBase64(blob)
+
+    try {
+      await Filesystem.mkdir({
+        path: folder,
+        directory: Directory.Data,
+        recursive: true
+      })
+    } catch (mkdirError) {
+      console.log('Directory creation info:', mkdirError)
+    }
+
+    await Filesystem.writeFile({
+      path: `${folder}/${fileName}`,
+      data: base64Data,
+      directory: Directory.Data
+    })
+
+    return fileName
+  } catch (error) {
+    console.error('Error saving cached blob:', error)
     return null
   }
 }

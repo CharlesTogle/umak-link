@@ -142,8 +142,10 @@ export default function ExpandedPost () {
             imageUrl={post?.item_image_url ?? ''}
             itemName={post?.is_anonymous ? 'Anonymous' : post?.item_name ?? ''}
             itemStatus={post?.item_status ?? ''}
+            claimedAt={post?.claimed_at ?? null}
             lastSeen={post?.last_seen_at ?? ''}
             locationLastSeenAt={post?.last_seen_location ?? ''}
+            submittedOn={post?.submission_date ?? null}
             showSecurityQuestionDetails={false}
             user_profile_picture_url={
               post?.is_anonymous ? null : post?.profilepicture_url ?? ''

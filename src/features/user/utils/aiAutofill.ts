@@ -1,18 +1,7 @@
 import { Capacitor } from '@capacitor/core'
 import { Preferences } from '@capacitor/preferences'
-import { generateItemContent } from '@/shared/lib/geminiApi'
-
-/**
- * Convert image File to base64 data URL
- */
-const fileToDataUrl = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onloadend = () => resolve(reader.result as string)
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
-}
+import api, { ApiError } from '@/shared/lib/api'
+import { makeAiDataUrl } from '@/shared/utils/imageUtils'
 
 /**
  * Rate limit configuration
@@ -115,13 +104,19 @@ export async function generateAndAutofillFields (
   )
 
   try {
-    const base64 = await fileToDataUrl(imageFile)
+    const base64 = await makeAiDataUrl(imageFile)
 
-    const aiPromise = generateItemContent({
-      itemName: titleEmpty ? '' : currentTitle.trim(),
-      itemDescription: descEmpty ? '' : currentDesc.trim(),
-      image: base64
-    })
+    const aiPromise = api.ai.createPostAutofill(
+      {
+        image_data_url: base64,
+        current_title: titleEmpty ? '' : currentTitle.trim(),
+        current_description: descEmpty ? '' : currentDesc.trim(),
+        current_category: categoryEmpty ? '' : currentCategory?.trim()
+      },
+      {
+        timeout: 15000
+      }
+    )
 
     console.log('[AI Autofill] Awaiting AI response with timeout...')
     const aiResult = (await Promise.race([aiPromise, timeoutPromise])) as any
@@ -156,6 +151,16 @@ export async function generateAndAutofillFields (
     return { success: false, error: 'No content returned from AI' }
   } catch (err: any) {
     console.error('[AI Autofill] Failed:', err)
+
+    if (err instanceof ApiError) {
+      if (err.code === 'RATE_LIMITED' || err.statusCode === 429) {
+        return { success: false, rateLimitExceeded: true }
+      }
+
+      if (err.code === 'REQUEST_TIMEOUT' || err.statusCode === 408 || err.statusCode === 504) {
+        return { success: false, error: 'ai_timeout' }
+      }
+    }
 
     if (err?.message === 'ai_timeout') {
       return { success: false, error: 'ai_timeout' }

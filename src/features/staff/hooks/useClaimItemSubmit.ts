@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { claimApiService } from '@/shared/services'
 import { useNavigation } from '@/shared/hooks/useNavigation'
-import { useAuditLogs } from '@/shared/hooks/useAuditLogs'
 import { isConnected } from '@/shared/utils/networkCheck'
+import { ApiError } from '@/shared/lib/api'
 import type { ExistingClaimDetails } from './useExistingClaimCheck'
 
 interface ClaimItemSubmitParams {
@@ -10,10 +10,16 @@ interface ClaimItemSubmitParams {
   claimerName: string
   claimerEmail: string
   claimerContactNumber: string
+  claimedAt: string | null
   posterName: string
   staffId: string
   staffName: string
   missingPostId: string | null
+  claimVerification?: {
+    claim_verification_session_id: string
+    verification_method: 'staff_qr' | 'guard_qr'
+  }
+  redirectPath?: string
   existingClaim?: ExistingClaimDetails | null
   isOverwrite?: boolean
 }
@@ -21,7 +27,6 @@ interface ClaimItemSubmitParams {
 export function useClaimItemSubmit () {
   const [isProcessing, setIsProcessing] = useState(false)
   const { navigate } = useNavigation()
-  const { insertAuditLog } = useAuditLogs()
 
   const submit = async (
     params: ClaimItemSubmitParams,
@@ -33,12 +38,13 @@ export function useClaimItemSubmit () {
       claimerName,
       claimerEmail,
       claimerContactNumber,
+      claimedAt,
       posterName,
       staffId,
       staffName,
       missingPostId,
-      existingClaim,
-      isOverwrite
+      claimVerification,
+      redirectPath
     } = params
 
     // Validation
@@ -63,32 +69,6 @@ export function useClaimItemSubmit () {
         return
       }
 
-      // If overwriting an existing claim, log the audit trail first
-      if (isOverwrite && existingClaim) {
-        await insertAuditLog({
-          user_id: staffId,
-          action_type: 'claim_overwritten',
-          details: {
-            message: `Claim overwritten by ${staffName}`,
-            item_id: existingClaim.item_id,
-            old_claim: {
-              claim_id: existingClaim.claim_id,
-              claimer_name: existingClaim.claimer_name,
-              claimer_email: existingClaim.claimer_school_email,
-              claimer_contact: existingClaim.claimer_contact_num,
-              claimed_at: existingClaim.claimed_at,
-              processed_by_staff: existingClaim.staff_name || 'Unknown'
-            },
-            new_claim: {
-              claimer_name: claimerName,
-              claimer_email: claimerEmail,
-              claimer_contact: claimerContactNumber,
-              processed_by_staff: staffName
-            }
-          }
-        })
-      }
-
       // Call process_claim API
       await claimApiService.processClaim({
         foundPostId: Number(foundPostId),
@@ -96,22 +76,30 @@ export function useClaimItemSubmit () {
           claimer_name: claimerName,
           claimer_school_email: claimerEmail,
           claimer_contact_num: claimerContactNumber,
+          claimed_at: claimedAt,
           poster_name: posterName,
           staff_id: staffId,
           staff_name: staffName
         },
-        missingPostId: missingPostId ? Number(missingPostId) : null
+        missingPostId: missingPostId ? Number(missingPostId) : null,
+        claimVerification
       })
 
       onSuccess('Item claimed successfully!')
 
       // Navigate back after success
       setTimeout(() => {
-        navigate('/staff/post-records', 'back')
+        navigate(redirectPath || '/staff/post-records', 'back')
       }, 1000)
     } catch (error) {
       console.error('Error claiming item:', error)
-      onError('Failed to claim item')
+      if (error instanceof ApiError) {
+        onError(error.message)
+      } else if (error instanceof Error && error.message) {
+        onError(error.message)
+      } else {
+        onError('Failed to claim item')
+      }
     } finally {
       setIsProcessing(false)
     }

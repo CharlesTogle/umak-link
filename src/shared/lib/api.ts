@@ -5,9 +5,18 @@
  * It handles authentication tokens, error handling, and request/response formatting.
  */
 
+import { getE2eAccessToken } from './e2eAuth';
+import {
+  getApiErrorMessageFromPayload,
+  getDefaultErrorCode,
+  type ApiErrorContext,
+  type ApiErrorPayload,
+} from './errorHandling';
 import { supabase } from './supabase';
 import type {
   AuthMeResponse,
+  CreatePostAutofillRequest,
+  CreatePostAutofillResponse,
   CreatePostRequest,
   EditPostRequest,
   PostListResponse,
@@ -22,6 +31,8 @@ import type {
   FraudReportListResponse,
   FraudReportResolveRequest,
   SearchItemsRequest,
+  SearchImageQueryRequest,
+  SearchImageQueryResponse,
   SearchItemsStaffRequest,
   SendNotificationRequest,
   NotificationRecord,
@@ -29,9 +40,40 @@ import type {
   SendGlobalAnnouncementResponse,
   AnnouncementRecord,
   DashboardStats,
+  GuardPostListResponse,
+  CreateCustodyAttemptRequest,
+  CreateCustodyAttemptResponse,
+  CustodySessionStatusResponse,
+  RetryCustodySessionRequest,
+  RetryCustodySessionResponse,
+  CreateClaimVerificationSessionRequest,
+  CreateClaimVerificationSessionResponse,
+  JoinClaimVerificationSessionRequest,
+  JoinClaimVerificationSessionResponse,
+  ClaimVerificationSessionStatusResponse,
+  RetryClaimVerificationSessionRequest,
+  RetryClaimVerificationSessionResponse,
+  ScanClaimVerificationRequest,
+  ScanClaimVerificationResponse,
+  CancelClaimVerificationSessionResponse,
+  GuardActiveClaimReviewsResponse,
+  CancelCustodySessionResponse,
+  StudentCustodyHistoryResponse,
+  GuardDecisionRequest,
+  GuardDecisionResponse,
+  SecurityOfficeReceiptResponse,
+  OpenCustodyInvestigationResponse,
+  NotifyGuardResponse,
+  UpdateClaimedCustodyStatusResponse,
+  GuardScanRequest,
+  GuardScanResponse,
   UserProfile,
+  UserClaimCodeResponse,
   UserSearchResponse,
 } from './api-types';
+
+type ApiRecord = Record<string, unknown>;
+type ApiRecordList = ApiRecord[];
 
 const configuredApiUrl = import.meta.env.VITE_API_URL;
 if (!configuredApiUrl) {
@@ -39,13 +81,47 @@ if (!configuredApiUrl) {
 }
 
 class ApiError extends Error {
+  public code: string;
+  public errorTitle: string;
+  public requestId?: string;
+  public retryAfterSeconds?: number;
+
   constructor(
     public statusCode: number,
-    message: string,
-    public data?: unknown
+    params: {
+      code?: string
+      errorTitle?: string
+      data?: unknown
+      context?: ApiErrorContext
+      fallbackMessage?: string
+    }
   ) {
+    const payload = (params.data as ApiErrorPayload | undefined) ?? undefined;
+    const code = params.code ?? payload?.code ?? getDefaultErrorCode(statusCode);
+    const errorTitle = params.errorTitle ?? payload?.error ?? `HTTP ${statusCode}`;
+    const message = getApiErrorMessageFromPayload({
+      statusCode,
+      code,
+      retryAfterSeconds: payload?.retryAfterSeconds
+    }, params.context ?? 'action', params.fallbackMessage);
+
     super(message);
     this.name = 'ApiError';
+    this.code = code;
+    this.errorTitle = errorTitle;
+    this.data = params.data;
+    this.requestId = payload?.requestId;
+    this.retryAfterSeconds = payload?.retryAfterSeconds;
+  }
+
+  public data?: unknown;
+
+  toContextMessage (context: ApiErrorContext, fallbackMessage?: string): string {
+    return getApiErrorMessageFromPayload({
+      statusCode: this.statusCode,
+      code: this.code,
+      retryAfterSeconds: this.retryAfterSeconds
+    }, context, fallbackMessage)
   }
 }
 
@@ -57,6 +133,11 @@ class ApiClient {
   }
 
   private async getAccessToken(): Promise<string | null> {
+    const e2eToken = getE2eAccessToken();
+    if (e2eToken) {
+      return e2eToken;
+    }
+
     const { data } = await supabase.auth.getSession();
     return data.session?.access_token ?? null;
   }
@@ -67,10 +148,14 @@ class ApiClient {
     body?: unknown,
     options?: RequestInit & { timeout?: number }
   ): Promise<T> {
+    const hasBody = typeof body !== 'undefined';
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
       ...((options?.headers as Record<string, string>) || {}),
     };
+
+    if (hasBody) {
+      headers['Content-Type'] = headers['Content-Type'] ?? 'application/json';
+    }
 
     const token = await this.getAccessToken();
     if (token) {
@@ -84,7 +169,7 @@ class ApiClient {
       ...options,
     };
 
-    if (body) {
+    if (hasBody) {
       config.body = JSON.stringify(body);
     }
 
@@ -107,12 +192,17 @@ class ApiClient {
       if (timeoutId) clearTimeout(timeoutId);
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new ApiError(
-          response.status,
-          errorData.message || errorData.error || `HTTP ${response.status}`,
-          errorData
-        );
+        const errorData = await response.json().catch(() => ({} as ApiErrorPayload));
+        const statusCode =
+          typeof errorData.statusCode === 'number'
+            ? errorData.statusCode
+            : response.status;
+
+        throw new ApiError(statusCode, {
+          code: typeof errorData.code === 'string' ? errorData.code : undefined,
+          errorTitle: typeof errorData.error === 'string' ? errorData.error : undefined,
+          data: errorData
+        });
       }
 
       // Handle 204 No Content
@@ -127,9 +217,17 @@ class ApiClient {
       }
       // Handle timeout/abort errors
       if (error instanceof Error && error.name === 'AbortError') {
-        throw new ApiError(0, 'Request timeout', error);
+        throw new ApiError(504, {
+          code: 'REQUEST_TIMEOUT',
+          errorTitle: 'Gateway Timeout',
+          data: { code: 'REQUEST_TIMEOUT', statusCode: 504, error: 'Gateway Timeout' }
+        });
       }
-      throw new ApiError(0, 'Network error', error);
+      throw new ApiError(0, {
+        code: 'NETWORK_ERROR',
+        errorTitle: 'Network Error',
+        data: { code: 'NETWORK_ERROR', statusCode: 0, error: 'Network Error' }
+      });
     }
   }
 
@@ -162,6 +260,135 @@ class ApiClient {
       profile_picture_url?: string | null;
     }): Promise<{ user: UserProfile }> =>
       this.request<{ user: UserProfile }>('PATCH', '/auth/profile', updates),
+  };
+
+  // ============================================================================
+  // AI
+  // ============================================================================
+
+  ai = {
+    createPostAutofill: (
+      data: CreatePostAutofillRequest,
+      options?: RequestInit & { timeout?: number }
+    ): Promise<CreatePostAutofillResponse> =>
+      this.request<CreatePostAutofillResponse>(
+        'POST',
+        '/ai/create-post-autofill',
+        data,
+        options
+      ),
+  };
+
+  // ============================================================================
+  // Student Custody
+  // ============================================================================
+
+  custody = {
+    listGuardPosts: (): Promise<GuardPostListResponse> =>
+      this.request<GuardPostListResponse>('GET', '/custody/guard-posts'),
+
+    createAttempt: (
+      data: CreateCustodyAttemptRequest
+    ): Promise<CreateCustodyAttemptResponse> =>
+      this.request<CreateCustodyAttemptResponse>('POST', '/custody/attempts', data),
+
+    getSessionStatus: (
+      qrCodeSessionId: string
+    ): Promise<CustodySessionStatusResponse> =>
+      this.request<CustodySessionStatusResponse>(
+        'GET',
+        `/custody/sessions/${qrCodeSessionId}/status`
+      ),
+
+    retrySession: (
+      qrCodeSessionId: string,
+      data: RetryCustodySessionRequest
+    ): Promise<RetryCustodySessionResponse> =>
+      this.request<RetryCustodySessionResponse>(
+        'POST',
+        `/custody/sessions/${qrCodeSessionId}/retry`,
+        data
+      ),
+
+    cancelSession: (
+      qrCodeSessionId: string
+    ): Promise<CancelCustodySessionResponse> =>
+      this.request<CancelCustodySessionResponse>(
+        'POST',
+        `/custody/sessions/${qrCodeSessionId}/cancel`
+      ),
+
+    getPostHistory: (postId: number): Promise<StudentCustodyHistoryResponse> =>
+      this.request<StudentCustodyHistoryResponse>(
+        'GET',
+        `/custody/posts/${postId}/history`
+      ),
+  };
+
+  // ============================================================================
+  // Guard Custody
+  // ============================================================================
+
+  guardCustody = {
+    scan: (data: GuardScanRequest): Promise<GuardScanResponse> =>
+      this.request<GuardScanResponse>('POST', '/guard/custody/scan', data),
+
+    decide: (
+      custodyAttemptId: string,
+      data: GuardDecisionRequest
+    ): Promise<GuardDecisionResponse> =>
+      this.request<GuardDecisionResponse>(
+        'POST',
+        `/guard/custody/attempts/${custodyAttemptId}/decision`,
+        data
+      ),
+
+    listActiveClaimReviews: (): Promise<GuardActiveClaimReviewsResponse> =>
+      this.request<GuardActiveClaimReviewsResponse>('GET', '/guard/reviews/active'),
+  };
+
+  // ============================================================================
+  // Staff Custody
+  // ============================================================================
+
+  staffCustody = {
+    receiveInSecurityOffice: (
+      postId: number
+    ): Promise<SecurityOfficeReceiptResponse> =>
+      this.request<SecurityOfficeReceiptResponse>(
+        'POST',
+        '/staff/custody/security-office/receive',
+        { post_id: postId }
+      ),
+
+    openInvestigation: (
+      postId: number
+    ): Promise<OpenCustodyInvestigationResponse> =>
+      this.request<OpenCustodyInvestigationResponse>(
+        'POST',
+        '/staff/custody/investigations/open',
+        { post_id: postId }
+      ),
+
+    notifyGuard: (postId: number): Promise<NotifyGuardResponse> =>
+      this.request<NotifyGuardResponse>(
+        'POST',
+        '/staff/custody/guards/notify',
+        { post_id: postId }
+      ),
+
+    updateClaimedCustodyStatus: (
+      postId: number,
+      custodyStatus: 'in_security_office' | 'under_investigation' | 'claimed_by_student'
+    ): Promise<UpdateClaimedCustodyStatusResponse> =>
+      this.request<UpdateClaimedCustodyStatusResponse>(
+        'PUT',
+        '/staff/custody/status',
+        {
+          post_id: postId,
+          custody_status: custodyStatus,
+        }
+      ),
   };
 
   // ============================================================================
@@ -305,6 +532,65 @@ class ApiClient {
   };
 
   // ============================================================================
+  // Claim Verification
+  // ============================================================================
+
+  claimVerification = {
+    createSession: (
+      data: CreateClaimVerificationSessionRequest
+    ): Promise<CreateClaimVerificationSessionResponse> =>
+      this.request<CreateClaimVerificationSessionResponse>(
+        'POST',
+        '/claims/verification-sessions',
+        data
+      ),
+
+    joinSession: (
+      data: JoinClaimVerificationSessionRequest
+    ): Promise<JoinClaimVerificationSessionResponse> =>
+      this.request<JoinClaimVerificationSessionResponse>(
+        'POST',
+        '/claims/verification-sessions/join',
+        data
+      ),
+
+    getSessionStatus: (
+      claimVerificationSessionId: string
+    ): Promise<ClaimVerificationSessionStatusResponse> =>
+      this.request<ClaimVerificationSessionStatusResponse>(
+        'GET',
+        `/claims/verification-sessions/${claimVerificationSessionId}/status`
+      ),
+
+    retrySession: (
+      claimVerificationSessionId: string,
+      data: RetryClaimVerificationSessionRequest
+    ): Promise<RetryClaimVerificationSessionResponse> =>
+      this.request<RetryClaimVerificationSessionResponse>(
+        'POST',
+        `/claims/verification-sessions/${claimVerificationSessionId}/retry`,
+        data
+      ),
+
+    scanSession: (
+      data: ScanClaimVerificationRequest
+    ): Promise<ScanClaimVerificationResponse> =>
+      this.request<ScanClaimVerificationResponse>(
+        'POST',
+        '/claims/verification-sessions/scan',
+        data
+      ),
+
+    cancelSession: (
+      claimVerificationSessionId: string
+    ): Promise<CancelClaimVerificationSessionResponse> =>
+      this.request<CancelClaimVerificationSessionResponse>(
+        'POST',
+        `/claims/verification-sessions/${claimVerificationSessionId}/cancel`
+      ),
+  };
+
+  // ============================================================================
   // Fraud Reports
   // ============================================================================
 
@@ -381,16 +667,27 @@ class ApiClient {
     itemsStaff: (data: SearchItemsStaffRequest): Promise<{ results: PostRecord[] }> =>
       this.request<{ results: PostRecord[] }>('POST', '/search/items/staff', data),
 
+    imageQuery: (
+      data: SearchImageQueryRequest,
+      options?: RequestInit & { timeout?: number }
+    ): Promise<SearchImageQueryResponse> =>
+      this.request<SearchImageQueryResponse>(
+        'POST',
+        '/search/image-query',
+        data,
+        options
+      ),
+
     matchMissingItem: (postId: string): Promise<{
       success: boolean;
-      matches: any[];
-      missing_post?: any;
+      matches: ApiRecordList;
+      missing_post?: ApiRecord;
       total_matches?: number;
     }> =>
       this.request<{
         success: boolean;
-        matches: any[];
-        missing_post?: any;
+        matches: ApiRecordList;
+        missing_post?: ApiRecord;
         total_matches?: number;
       }>('POST', '/search/match-missing-item', { post_id: postId }),
   };
@@ -400,8 +697,8 @@ class ApiClient {
   // ============================================================================
 
   notifications = {
-    send: (data: SendNotificationRequest): Promise<{ success: boolean; notification_id: number }> =>
-      this.request<{ success: boolean; notification_id: number }>('POST', '/notifications/send', data),
+    send: (data: SendNotificationRequest): Promise<{ success: boolean; notification_id: string | number }> =>
+      this.request<{ success: boolean; notification_id: string | number }>('POST', '/notifications/send', data),
 
     list: (): Promise<{ notifications: NotificationRecord[] }> =>
       this.request<{ notifications: NotificationRecord[] }>('GET', '/notifications'),
@@ -409,10 +706,10 @@ class ApiClient {
     getCount: (): Promise<{ unread_count: number }> =>
       this.request<{ unread_count: number }>('GET', '/notifications/count'),
 
-    markAsRead: (id: number): Promise<{ success: boolean }> =>
+    markAsRead: (id: string | number): Promise<{ success: boolean }> =>
       this.request<{ success: boolean }>('PATCH', `/notifications/${id}/read`),
 
-    delete: (id: number): Promise<{ success: boolean }> =>
+    delete: (id: string | number): Promise<{ success: boolean }> =>
       this.request<{ success: boolean }>('DELETE', `/notifications/${id}`),
   };
 
@@ -467,10 +764,10 @@ class ApiClient {
   // ============================================================================
 
   items = {
-    get: (itemId: string): Promise<any> =>
-      this.request<any>('GET', `/items/${itemId}`),
+    get: (itemId: string): Promise<unknown> =>
+      this.request<unknown>('GET', `/items/${itemId}`),
 
-    updateMetadata: (itemId: string, metadata: Record<string, any>): Promise<{ success: boolean }> =>
+    updateMetadata: (itemId: string, metadata: ApiRecord): Promise<{ success: boolean }> =>
       this.request<{ success: boolean }>('PUT', `/items/${itemId}/metadata`, { item_metadata: metadata }),
   };
 
@@ -492,14 +789,14 @@ class ApiClient {
       limit?: number;
       offset?: number;
       status?: string;
-    }): Promise<{ pending_matches: any[]; count: number }> => {
+    }): Promise<{ pending_matches: ApiRecordList; count: number }> => {
       const queryParams = new URLSearchParams();
       if (params?.limit) queryParams.set('limit', params.limit.toString());
       if (params?.offset) queryParams.set('offset', params.offset.toString());
       if (params?.status) queryParams.set('status', params.status);
 
       const queryString = queryParams.toString();
-      return this.request<{ pending_matches: any[]; count: number }>(
+      return this.request<{ pending_matches: ApiRecordList; count: number }>(
         'GET',
         `/pending-matches${queryString ? `?${queryString}` : ''}`
       );
@@ -514,11 +811,33 @@ class ApiClient {
   // ============================================================================
 
   users = {
-    get: (userId: string): Promise<any> =>
-      this.request<any>('GET', `/users/${userId}`),
+    getMyClaimCode: (): Promise<UserClaimCodeResponse> =>
+      this.request<UserClaimCodeResponse>('GET', '/users/me/claim-code'),
+
+    get: (userId: string): Promise<UserProfile> =>
+      this.request<UserProfile>('GET', `/users/${userId}`),
 
     search: (query: string): Promise<UserSearchResponse> =>
       this.request<UserSearchResponse>('GET', `/users/search?query=${encodeURIComponent(query)}`),
+
+    resolveClaimCode: (
+      code: string,
+      options?: { foundPostId?: number }
+    ): Promise<UserProfile> => {
+      const queryParams = new URLSearchParams();
+      if (
+        typeof options?.foundPostId === 'number' &&
+        Number.isFinite(options.foundPostId)
+      ) {
+        queryParams.set('found_post_id', String(options.foundPostId));
+      }
+
+      const queryString = queryParams.toString();
+      return this.request<UserProfile>(
+        'GET',
+        `/users/claim-code/${encodeURIComponent(code)}${queryString ? `?${queryString}` : ''}`
+      );
+    },
   };
 
   // ============================================================================
@@ -531,12 +850,12 @@ class ApiClient {
 
     getUsers: (params?: {
       user_type?: string[];
-    }): Promise<{ users: any[] }> => {
+    }): Promise<{ users: Array<Partial<UserProfile>> }> => {
       const queryParams = new URLSearchParams();
       if (params?.user_type?.length) queryParams.set('user_type', params.user_type.join(','));
 
       const queryString = queryParams.toString();
-      return this.request<{ users: any[] }>(
+      return this.request<{ users: Array<Partial<UserProfile>> }>(
         'GET',
         `/admin/users${queryString ? `?${queryString}` : ''}`
       );
@@ -560,8 +879,8 @@ class ApiClient {
         `/admin/audit-logs?limit=${limit || 100}&offset=${offset || 0}`
       ),
 
-    getAuditLog: (id: string): Promise<any> =>
-      this.request<any>('GET', `/admin/audit-logs/${id}`),
+    getAuditLog: (id: string): Promise<ApiRecord> =>
+      this.request<ApiRecord>('GET', `/admin/audit-logs/${id}`),
 
     getAuditLogsByUser: (userId: string, limit?: number, offset?: number): Promise<{ logs: unknown[] }> =>
       this.request<{ logs: unknown[] }>(
@@ -580,7 +899,7 @@ class ApiClient {
       series: { missing: number[]; found: number[]; reports: number[]; pending: number[] };
     }> => this.request('GET', '/admin/stats/weekly'),
 
-    getExportData: (startDate: string, endDate: string): Promise<{ rows: any[] }> =>
+    getExportData: (startDate: string, endDate: string): Promise<{ rows: ApiRecordList }> =>
       this.request(
         'GET',
         `/admin/stats/export?start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}`

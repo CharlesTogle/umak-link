@@ -2,7 +2,7 @@ import { memo, useEffect, useState, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { useNavigation } from '@/shared/hooks/useNavigation'
 import { fraudReportApiService } from '@/shared/services'
-import { getPostRecordByItemId } from '@/features/posts/data/posts'
+import { getPostFull, getPostRecordByItemId } from '@/features/posts/data/posts'
 import type { PostRecordDetails } from '@/features/posts/data/posts'
 import type { PublicPost } from '@/features/posts/types/post'
 import {
@@ -19,7 +19,6 @@ import {
 import { personCircle, arrowBack } from 'ionicons/icons'
 import { useFraudReports } from '@/features/staff/hooks/useFraudReports'
 import type { FraudReportPublic } from '@/features/staff/hooks/useFraudReports'
-import LazyImage from '@/shared/components/LazyImage'
 import ExpandableImage from '@/shared/components/ExpandableImage'
 import { HeaderWithButtons } from '@/shared/components/HeaderVariants'
 import { ChoiceModal } from '@/shared/components/ChoiceModal'
@@ -30,7 +29,7 @@ import { useCallback } from 'react'
 import { useUser } from '@/features/auth/contexts/UserContext'
 import { type User } from '@/features/auth/contexts/UserContext'
 import PostSkeleton from '@/features/posts/components/PostSkeleton'
-import { sendFraudReportAcceptedEmail } from '@/shared/utils/emailService'
+import { sendFraudReportOpenedEmails } from '@/shared/utils/emailService'
 import PostCard from '@/features/posts/components/PostCard'
 
 type RejectReasonKey =
@@ -199,28 +198,28 @@ export default memo(function ExpandedFraudReport () {
         })
 
         if (result.success) {
-          // Send email notification to claimer
-          if (
-            user &&
-            report.claimer_school_email &&
-            report.claimer_name &&
-            report.reporter_name
-          ) {
-            const emailResult = await sendFraudReportAcceptedEmail({
+          const currentUser = user ?? (await getUser())
+          const postDetails = await getPostFull(report.post_id)
+
+          if (currentUser?.user_id) {
+            const emailResults = await sendFraudReportOpenedEmails({
               claimerEmail: report.claimer_school_email,
               claimerName: report.claimer_name,
+              claimProcessorEmail: report.claim_processed_by_email,
+              claimProcessorName: report.claim_processed_by_name,
+              guardEmail: postDetails?.accepted_by_guard_email ?? null,
+              guardName: postDetails?.accepted_by_guard_name ?? null,
               postTitle: report.item_name || 'Unknown Item',
-              reporterName: report.reporter_name,
-              staffName: user.user_name || 'Staff',
-              staffUuid: user.user_id
+              reporterName: report.reporter_name || 'the reporter',
+              staffName: currentUser.user_name || 'Staff',
+              staffUuid: currentUser.user_id
             })
 
-            if (!emailResult.success) {
-              console.error(
-                'Failed to send email notification:',
-                emailResult.error
-              )
-              // Don't fail the entire operation if email fails
+            const failedEmails = emailResults.filter(result => !result.success)
+            if (failedEmails.length > 0) {
+              console.error('Failed to send one or more fraud report emails', {
+                failedEmails
+              })
             }
           }
 
@@ -480,12 +479,12 @@ export default memo(function ExpandedFraudReport () {
               <IonCardContent className='p-7!'>
                 <div className='pb-2'>
                   <div className=' flex items-center flex-row p-0 -ml-1'>
-                    <IonAvatar slot='start' className='w-10 h-10'>
+                    <IonAvatar slot='start' className='w-10 h-10 overflow-hidden'>
                       {report.reporter_profile_picture_url ? (
-                        <LazyImage
+                        <img
                           src={report.reporter_profile_picture_url}
                           alt={`${report.reporter_name} profile`}
-                          className='w-full h-full object-cover rounded-full'
+                          className='w-full h-full object-cover'
                         />
                       ) : (
                         <div className='w-full h-full grid place-items-center bg-slate-100 text-slate-500 rounded-full'>
@@ -798,7 +797,7 @@ export default memo(function ExpandedFraudReport () {
       <ConfirmationModal
         isOpen={showAcceptConfirmModal}
         heading='Accept report?'
-        subheading="Once accepted by you, other staff won't be allowed to accept this report. An email will be sent to the claimer."
+        subheading="Once accepted by you, other staff won't be allowed to accept this report. Email notifications will be sent to the claimer and any staff or guard involved in the original handover."
         onSubmit={handleAccept}
         onCancel={() => setShowAcceptConfirmModal(false)}
         submitLabel='Accept'
