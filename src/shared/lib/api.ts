@@ -6,6 +6,12 @@
  */
 
 import { getE2eAccessToken } from './e2eAuth';
+import {
+  getApiErrorMessageFromPayload,
+  getDefaultErrorCode,
+  type ApiErrorContext,
+  type ApiErrorPayload,
+} from './errorHandling';
 import { supabase } from './supabase';
 import type {
   AuthMeResponse,
@@ -71,13 +77,47 @@ if (!configuredApiUrl) {
 }
 
 class ApiError extends Error {
+  public code: string;
+  public errorTitle: string;
+  public requestId?: string;
+  public retryAfterSeconds?: number;
+
   constructor(
     public statusCode: number,
-    message: string,
-    public data?: unknown
+    params: {
+      code?: string
+      errorTitle?: string
+      data?: unknown
+      context?: ApiErrorContext
+      fallbackMessage?: string
+    }
   ) {
+    const payload = (params.data as ApiErrorPayload | undefined) ?? undefined;
+    const code = params.code ?? payload?.code ?? getDefaultErrorCode(statusCode);
+    const errorTitle = params.errorTitle ?? payload?.error ?? `HTTP ${statusCode}`;
+    const message = getApiErrorMessageFromPayload({
+      statusCode,
+      code,
+      retryAfterSeconds: payload?.retryAfterSeconds
+    }, params.context ?? 'action', params.fallbackMessage);
+
     super(message);
     this.name = 'ApiError';
+    this.code = code;
+    this.errorTitle = errorTitle;
+    this.data = params.data;
+    this.requestId = payload?.requestId;
+    this.retryAfterSeconds = payload?.retryAfterSeconds;
+  }
+
+  public data?: unknown;
+
+  toContextMessage (context: ApiErrorContext, fallbackMessage?: string): string {
+    return getApiErrorMessageFromPayload({
+      statusCode: this.statusCode,
+      code: this.code,
+      retryAfterSeconds: this.retryAfterSeconds
+    }, context, fallbackMessage)
   }
 }
 
@@ -148,12 +188,17 @@ class ApiClient {
       if (timeoutId) clearTimeout(timeoutId);
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new ApiError(
-          response.status,
-          errorData.message || errorData.error || `HTTP ${response.status}`,
-          errorData
-        );
+        const errorData = await response.json().catch(() => ({} as ApiErrorPayload));
+        const statusCode =
+          typeof errorData.statusCode === 'number'
+            ? errorData.statusCode
+            : response.status;
+
+        throw new ApiError(statusCode, {
+          code: typeof errorData.code === 'string' ? errorData.code : undefined,
+          errorTitle: typeof errorData.error === 'string' ? errorData.error : undefined,
+          data: errorData
+        });
       }
 
       // Handle 204 No Content
@@ -168,9 +213,17 @@ class ApiClient {
       }
       // Handle timeout/abort errors
       if (error instanceof Error && error.name === 'AbortError') {
-        throw new ApiError(0, 'Request timeout', error);
+        throw new ApiError(504, {
+          code: 'REQUEST_TIMEOUT',
+          errorTitle: 'Gateway Timeout',
+          data: { code: 'REQUEST_TIMEOUT', statusCode: 504, error: 'Gateway Timeout' }
+        });
       }
-      throw new ApiError(0, 'Network error', error);
+      throw new ApiError(0, {
+        code: 'NETWORK_ERROR',
+        errorTitle: 'Network Error',
+        data: { code: 'NETWORK_ERROR', statusCode: 0, error: 'Network Error' }
+      });
     }
   }
 

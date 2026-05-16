@@ -131,16 +131,20 @@ export default function AdvancedSearch ({
     <div className=' bg-gray-50 mb-5 w-full'>
       <div className='mx-5 mt-3 rounded-xl shadow-md p-4 border border-gray-200'>
         <CardHeader title='Advanced Search' icon={searchOutline} />
-        <LastSeenModal
-          date={toISODate(date, time, meridian)}
-          handleDateChange={handleDateChange}
-          hasSelectedDate={hasSelectedDate}
-          onClear={handleClearDate}
-        />
-        <LocationDetailsSelector
-          locationDetails={locationDetails}
-          setLocationDetails={setLocationDetails}
-        />
+        {variant === 'staff' && (
+          <>
+            <LastSeenModal
+              date={toISODate(date, time, meridian)}
+              handleDateChange={handleDateChange}
+              hasSelectedDate={hasSelectedDate}
+              onClear={handleClearDate}
+            />
+            <LocationDetailsSelector
+              locationDetails={locationDetails}
+              setLocationDetails={setLocationDetails}
+            />
+          </>
+        )}
 
         {/* CATEGORY SELECTOR (Multi-select) */}
         <div className='mb-4'>

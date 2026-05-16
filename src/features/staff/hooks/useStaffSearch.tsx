@@ -45,7 +45,8 @@ export default function useStaffSearch () {
    */
   const toISODate = (date: string, time: string, meridian: 'AM' | 'PM') => {
     const [month, day, year] = date.split('/')
-    let [hours, minutes] = time.split(':').map(Number)
+    const [rawHours, minutes] = time.split(':').map(Number)
+    let hours = rawHours
     if (meridian === 'PM' && hours < 12) hours += 12
     if (meridian === 'AM' && hours === 12) hours = 0
     const paddedMonth = month.padStart(2, '0')
@@ -160,7 +161,7 @@ export default function useStaffSearch () {
         category:
           Array.isArray(searchResult.categories) &&
           searchResult.categories.length > 0
-            ? searchResult.categories[0]
+            ? searchResult.categories
             : null,
         claimFromDate: claimFromDate ?? null,
         claimToDate: claimToDate ?? null,
@@ -174,16 +175,13 @@ export default function useStaffSearch () {
         Array.isArray(selectedPostStatuses) &&
         selectedPostStatuses.length > 0
       ) {
-        data = (data ?? []).filter((row: any) =>
-          selectedPostStatuses.includes((row.post_status || '').toString())
+        data = (data ?? []).filter(row =>
+          selectedPostStatuses.includes(row.post_status)
         )
       }
 
       const postIds: string[] = Array.isArray(data)
-        ? data
-            .map((r: any) => r.id ?? r.post_id ?? r.postId ?? r.postID ?? null)
-            .filter(Boolean)
-            .map(String)
+        ? data.map(r => String(r.post_id))
         : []
 
       searchCtx.setSearchResults(postIds)
@@ -213,7 +211,7 @@ export default function useStaffSearch () {
     lastSeenDate?: Date | null
     limit?: number
     locationLastSeen?: string | null
-    category?: string | null
+    category?: string[] | null
     claimFromDate?: string | null
     claimToDate?: string | null
     selectedStatuses?: string[]
@@ -222,13 +220,13 @@ export default function useStaffSearch () {
       query: query,
       limit: limit,
       lastSeenDate: lastSeenDate ? lastSeenDate.toISOString().split('T')[0] : null,
-      category: category ? [category] : null,
+      category,
       locationLastSeen: locationLastSeen,
       claimFrom: claimFromDate ? claimFromDate : null,
       claimTo: claimToDate ? claimToDate : null,
       itemStatus:
         Array.isArray(selectedStatuses) && selectedStatuses.length > 0
-          ? (selectedStatuses as any)
+          ? selectedStatuses
           : null
     })
 
