@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { claimApiService } from '@/shared/services'
 import { useNavigation } from '@/shared/hooks/useNavigation'
 import { isConnected } from '@/shared/utils/networkCheck'
+import { ApiError } from '@/shared/lib/api'
 import type { ExistingClaimDetails } from './useExistingClaimCheck'
 
 interface ClaimItemSubmitParams {
@@ -92,7 +93,13 @@ export function useClaimItemSubmit () {
       }, 1000)
     } catch (error) {
       console.error('Error claiming item:', error)
-      onError('Failed to claim item')
+      if (error instanceof ApiError) {
+        onError(error.message)
+      } else if (error instanceof Error && error.message) {
+        onError(error.message)
+      } else {
+        onError('Failed to claim item')
+      }
     } finally {
       setIsProcessing(false)
     }
