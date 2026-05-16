@@ -615,6 +615,30 @@ export default function ClaimItem ({
             setIsSubmitting(false)
             return
           }
+
+          if (latestMissing.item_status === 'discarded') {
+            setToast({
+              show: true,
+              message: 'This item cannot be linked because it was discarded.',
+              color: 'danger'
+            })
+            setIsSubmitting(false)
+            return
+          }
+
+          if (
+            latestMissing.post_status !== 'accepted' &&
+            latestMissing.post_status !== 'pending'
+          ) {
+            setToast({
+              show: true,
+              message:
+                'This post cannot be linked unless it is pending or accepted.',
+              color: 'danger'
+            })
+            setIsSubmitting(false)
+            return
+          }
         } catch (error) {
           console.error('Error verifying missing post status:', error)
           setToast({
