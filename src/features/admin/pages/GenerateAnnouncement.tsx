@@ -1,4 +1,4 @@
-import { useReducer, useEffect, useRef, useMemo } from 'react'
+import { useReducer, useEffect, useRef, useMemo, useCallback, type CSSProperties } from 'react'
 import {
   IonContent,
   IonCard,
@@ -9,7 +9,6 @@ import {
 } from '@ionic/react'
 import Header from '@/shared/components/Header'
 import ImageUpload from '@/shared/components/ImageUpload'
-import { useAuditLogs } from '@/shared/hooks/useAuditLogs'
 import {
   generateAnnouncementAction,
   debounce
@@ -20,7 +19,6 @@ import { useNavigation } from '@/shared/hooks/useNavigation'
 import FormSectionHeader from '@/shared/components/FormSectionHeader'
 import CardHeader from '@/shared/components/CardHeader'
 import { megaphone } from 'ionicons/icons'
-import { useUser, type User } from '@/features/auth/contexts/UserContext'
 
 interface State {
   title: string
@@ -30,7 +28,6 @@ interface State {
   toast: { show: boolean; message: string }
   showConfirmPost: boolean
   showConfirmCancel: boolean
-  currentUser: User | null
 }
 
 type Action =
@@ -42,7 +39,6 @@ type Action =
   | { type: 'HIDE_TOAST' }
   | { type: 'SET_CONFIRM_POST'; payload: boolean }
   | { type: 'SET_CONFIRM_CANCEL'; payload: boolean }
-  | { type: 'SET_USER'; payload: User | null }
   | { type: 'RESET_FORM' }
 
 const initialState: State = {
@@ -52,8 +48,7 @@ const initialState: State = {
   loading: false,
   toast: { show: false, message: '' },
   showConfirmPost: false,
-  showConfirmCancel: false,
-  currentUser: null
+  showConfirmCancel: false
 }
 
 function reducer (state: State, action: Action): State {
@@ -74,8 +69,6 @@ function reducer (state: State, action: Action): State {
       return { ...state, showConfirmPost: action.payload }
     case 'SET_CONFIRM_CANCEL':
       return { ...state, showConfirmCancel: action.payload }
-    case 'SET_USER':
-      return { ...state, currentUser: action.payload }
     case 'RESET_FORM':
       return { ...state, title: '', description: '', image: null }
     default:
@@ -85,19 +78,9 @@ function reducer (state: State, action: Action): State {
 
 export default function GenerateAnnouncement () {
   const [state, dispatch] = useReducer(reducer, initialState)
-  const { title, description, image, loading, toast, showConfirmPost, showConfirmCancel, currentUser } = state
+  const { title, description, image, loading, toast, showConfirmPost, showConfirmCancel } = state
 
   const { navigate } = useNavigation()
-  const { insertAuditLog } = useAuditLogs()
-  const { getUser } = useUser()
-
-  useEffect(() => {
-    const fetchUser = async () => {
-      const u = await getUser()
-      dispatch({ type: 'SET_USER', payload: u })
-    }
-    fetchUser()
-  }, [getUser])
 
   const openConfirmPost = () => {
     if (title.trim() === '' && description.trim() === '') {
@@ -112,15 +95,13 @@ export default function GenerateAnnouncement () {
   }
 
   // Use a ref-backed callback so the debounced wrapper always calls the latest logic
-  const handlePostCall = async () => {
+  const handlePostCall = useCallback(async () => {
     dispatch({ type: 'SET_LOADING', payload: true })
     try {
       const res = await generateAnnouncementAction({
         title,
         description,
-        image,
-        insertAuditLog,
-        currentUser
+        image
       })
 
       dispatch({ type: 'SHOW_TOAST', payload: res.message })
@@ -134,7 +115,7 @@ export default function GenerateAnnouncement () {
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false })
     }
-  }
+  }, [description, image, navigate, title])
 
   // Keep a stable ref to the latest handler
   const handlePostRef = useRef(handlePostCall)
@@ -164,7 +145,7 @@ export default function GenerateAnnouncement () {
               {
                 '--background': 'var(--color-umak-red)',
                 '--box-shadow': 'none'
-              } as any
+              } as CSSProperties
             }
             onClick={openConfirmCancel}
           >
@@ -176,7 +157,7 @@ export default function GenerateAnnouncement () {
                 {
                   '--background': 'transparent',
                   '--box-shadow': 'none'
-                } as any
+                } as CSSProperties
               }
               onClick={openConfirmPost}
               disabled={loading}

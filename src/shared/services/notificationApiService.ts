@@ -78,14 +78,12 @@ export const notificationApiService = {
    * Send global announcement (staff only)
    */
   async sendAnnouncement(params: {
-    userId: string;
     message: string;
     description?: string | null;
     imageUrl?: string | null;
   }): Promise<SendGlobalAnnouncementResponse> {
     try {
       return await api.announcements.send({
-        user_id: params.userId,
         message: params.message,
         description: params.description,
         image_url: params.imageUrl,

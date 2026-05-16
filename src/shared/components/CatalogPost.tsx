@@ -366,7 +366,7 @@ const CatalogPost: React.FC<CatalogPostProps> = ({
                 : null}
             </span>
           </div>
-          <p className='text-gray-700 pb-2 leading-snug line-clamp-2'>
+          <p className='text-gray-700 mb-2 leading-snug line-clamp-2'>
             {description}
           </p>
           <React.Suspense
