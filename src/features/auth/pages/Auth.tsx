@@ -19,6 +19,7 @@ import { GoogleLogin } from '@react-oauth/google'
 import type { CredentialResponse } from '@react-oauth/google'
 import { jwtDecode } from 'jwt-decode'
 import { useAuth } from '@/features/auth/hooks/useAuth'
+import { getUiErrorMessage } from '@/shared/lib/errorHandling'
 import type { GoogleLoginResponse } from '@capgo/capacitor-social-login'
 import '@/features/auth/styles/auth.css'
 
@@ -192,7 +193,7 @@ const Auth: React.FC = () => {
 
           if (error || !user) {
             setToastMessage(
-              `Login Failed. ${error || 'Authentication with Google was unsuccessful. Please try again.'}`
+              error || 'Unable to complete sign in. Please try again.'
             )
             setShowToast(true)
             return
@@ -204,11 +205,12 @@ const Auth: React.FC = () => {
       }
     } catch (error) {
       console.error('Social login failed:', error)
-      const errorMessage =
-        error instanceof Error && error.message
-          ? error.message
-          : 'Authentication with Google was unsuccessful. Please try again.'
-      setToastMessage(`Sign-in failed. ${errorMessage}`)
+      setToastMessage(
+        getUiErrorMessage(error, {
+          context: 'auth',
+          fallback: 'Unable to complete sign in. Please try again.'
+        })
+      )
       setShowToast(true)
     } finally {
       setSocialLoginLoading(false)
@@ -247,7 +249,7 @@ const Auth: React.FC = () => {
       })
       if (error || !user) {
         setToastMessage(
-          `Login Failed. ${error || 'Authentication with Google was unsuccessful.'}`
+          error || 'Unable to complete sign in. Please try again.'
         )
         setShowToast(true)
         setGoogleLoading(false)
@@ -259,7 +261,10 @@ const Auth: React.FC = () => {
     } catch (error) {
       console.error('Google sign-in error:', error)
       setToastMessage(
-        `Sign-in failed. Please try again. ${JSON.stringify(error)}`
+        getUiErrorMessage(error, {
+          context: 'auth',
+          fallback: 'Unable to complete sign in. Please try again.'
+        })
       )
       setShowToast(true)
     } finally {

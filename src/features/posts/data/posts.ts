@@ -20,6 +20,8 @@ type PostRecordDetailsWithClaimDetails = ApiPostRecordDetails & {
   claim_processed_by_email?: string | null
   claim_processed_by_profile_picture_url?: string | null
   claim_processed_by_user_type?: 'User' | 'Staff' | 'Admin' | 'Guard' | null
+  accepted_by_guard_name?: string | null
+  accepted_by_guard_email?: string | null
 }
 
 export interface PostRecordDetails {
@@ -64,6 +66,8 @@ export interface PostRecordDetails {
   claim_processed_by_user_type: 'User' | 'Staff' | 'Admin' | 'Guard' | null
   linked_lost_item_id: string | null
   returned_at: string | null
+  accepted_by_guard_name: string | null
+  accepted_by_guard_email: string | null
 }
 
 function mapPostRecordToPublicPost (record: ApiPostRecord): PublicPost {
@@ -153,7 +157,9 @@ function mapApiPostRecordDetailsToFeaturePostRecordDetails (
     claim_processed_by_user_type:
       detailedRecord.claim_processed_by_user_type ?? null,
     linked_lost_item_id: record.linked_lost_item_id,
-    returned_at: record.returned_at_local
+    returned_at: record.returned_at_local,
+    accepted_by_guard_name: detailedRecord.accepted_by_guard_name ?? null,
+    accepted_by_guard_email: detailedRecord.accepted_by_guard_email ?? null
   }
 }
 
@@ -195,7 +201,9 @@ function mapPostRecordToFeaturePostRecordDetails (
     claim_processed_by_profile_picture_url: null,
     claim_processed_by_user_type: null,
     linked_lost_item_id: null,
-    returned_at: null
+    returned_at: null,
+    accepted_by_guard_name: null,
+    accepted_by_guard_email: null
   }
 }
 

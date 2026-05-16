@@ -15,6 +15,19 @@ interface EmailResponse {
   to?: string
 }
 
+interface FraudReportOpenedEmailsParams {
+  claimerEmail?: string | null
+  claimerName?: string | null
+  claimProcessorEmail?: string | null
+  claimProcessorName?: string | null
+  guardEmail?: string | null
+  guardName?: string | null
+  postTitle: string
+  reporterName: string
+  staffName: string
+  staffUuid: string
+}
+
 /**
  * Send an email via the backend API
  * @param params Email parameters
@@ -227,6 +240,128 @@ export function generateFraudReportAcceptedEmail (params: {
   `.trim()
 }
 
+function generateFraudReportInvolvedPartyEmail (params: {
+  recipientName: string
+  recipientRoles: string[]
+  claimerName?: string | null
+  postTitle: string
+  reporterName: string
+  staffName: string
+  acceptedDate: string
+}): string {
+  const {
+    recipientName,
+    recipientRoles,
+    claimerName,
+    postTitle,
+    reporterName,
+    staffName,
+    acceptedDate
+  } = params
+  const roleSummary = recipientRoles.join(' and ')
+  const claimerDisplay = claimerName || 'Unknown Claimer'
+
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fraud Report Opened</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background-color: #f5f5f5;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      background-color: #ffffff;
+    }
+    .header {
+      background-color: #1e2b87;
+      color: #ffffff;
+      padding: 30px 20px;
+      text-align: center;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 600;
+    }
+    .content {
+      padding: 40px 30px;
+      color: #333333;
+      line-height: 1.6;
+    }
+    .content h2 {
+      color: #1e2b87;
+      font-size: 20px;
+      margin-top: 0;
+      margin-bottom: 20px;
+    }
+    .info-box {
+      background-color: #f8f9fa;
+      border-left: 4px solid #1e2b87;
+      padding: 15px 20px;
+      margin: 20px 0;
+    }
+    .alert-box {
+      background-color: #fff3cd;
+      border-left: 4px solid #ffc107;
+      padding: 15px 20px;
+      margin: 20px 0;
+    }
+    .footer {
+      background-color: #f8f9fa;
+      padding: 20px 30px;
+      text-align: center;
+      font-size: 12px;
+      color: #6c757d;
+      border-top: 1px solid #dee2e6;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Fraud Report Opened</h1>
+    </div>
+    <div class="content">
+      <h2>Dear ${recipientName},</h2>
+      <p>A fraud report has been opened for a claim you were involved in as ${roleSummary}.</p>
+      <div class="info-box">
+        <p><strong>Claimed Item:</strong> ${postTitle}</p>
+        <p><strong>Claimer:</strong> ${claimerDisplay}</p>
+        <p><strong>Reported By:</strong> ${reporterName}</p>
+        <p><strong>Opened By:</strong> ${staffName}</p>
+        <p><strong>Date Opened:</strong> ${acceptedDate}</p>
+        <p><strong>Your Role:</strong> ${roleSummary}</p>
+      </div>
+      <div class="alert-box">
+        <p><strong>Action Needed:</strong></p>
+        <p>Please coordinate with the UMak Security Office and be ready to provide any details you have about the original claim or handover.</p>
+      </div>
+      <p style="margin-top: 30px;">UMak Security Office<br>University of Makati</p>
+    </div>
+    <div class="footer">
+      <p>This is an internal notification from UMak-LINK.</p>
+      <p>University of Makati</p>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim()
+}
+
+function normalizeEmail (email: string | null | undefined): string | null {
+  if (typeof email !== 'string') return null
+  const normalized = email.trim().toLowerCase()
+  return normalized.length > 0 ? normalized : null
+}
+
 /**
  * Send fraud report accepted notification email to the claimer
  */
@@ -270,4 +405,137 @@ export async function sendFraudReportAcceptedEmail (params: {
     html: htmlContent,
     senderUuid: staffUuid
   })
+}
+
+async function sendFraudReportInvolvedPartyEmail (params: {
+  recipientEmail: string
+  recipientName: string
+  recipientRoles: string[]
+  claimerName?: string | null
+  postTitle: string
+  reporterName: string
+  staffName: string
+  staffUuid: string
+}): Promise<EmailResponse> {
+  const {
+    recipientEmail,
+    recipientName,
+    recipientRoles,
+    claimerName,
+    postTitle,
+    reporterName,
+    staffName,
+    staffUuid
+  } = params
+
+  const acceptedDate = new Date().toLocaleString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'Asia/Manila'
+  })
+
+  return await sendEmail({
+    to: recipientEmail,
+    subject: `Fraud Report Opened - ${postTitle}`,
+    html: generateFraudReportInvolvedPartyEmail({
+      recipientName,
+      recipientRoles,
+      claimerName,
+      postTitle,
+      reporterName,
+      staffName,
+      acceptedDate
+    }),
+    senderUuid: staffUuid
+  })
+}
+
+export async function sendFraudReportOpenedEmails (
+  params: FraudReportOpenedEmailsParams
+): Promise<EmailResponse[]> {
+  const {
+    claimerEmail,
+    claimerName,
+    claimProcessorEmail,
+    claimProcessorName,
+    guardEmail,
+    guardName,
+    postTitle,
+    reporterName,
+    staffName,
+    staffUuid
+  } = params
+
+  const emailTasks: Array<Promise<EmailResponse>> = []
+
+  if (claimerEmail && claimerName) {
+    emailTasks.push(
+      sendFraudReportAcceptedEmail({
+        claimerEmail,
+        claimerName,
+        postTitle,
+        reporterName,
+        staffName,
+        staffUuid
+      })
+    )
+  }
+
+  const internalRecipients = new Map<
+    string,
+    { recipientEmail: string; recipientName: string; recipientRoles: string[] }
+  >()
+
+  const addInternalRecipient = (
+    email: string | null | undefined,
+    name: string | null | undefined,
+    role: string
+  ) => {
+    const normalizedEmail = normalizeEmail(email)
+    if (!normalizedEmail) return
+
+    const existing = internalRecipients.get(normalizedEmail)
+    if (existing) {
+      if (!existing.recipientRoles.includes(role)) {
+        existing.recipientRoles.push(role)
+      }
+      if (!existing.recipientName && name) {
+        existing.recipientName = name
+      }
+      return
+    }
+
+    internalRecipients.set(normalizedEmail, {
+      recipientEmail: normalizedEmail,
+      recipientName: name?.trim() || 'UMak Team Member',
+      recipientRoles: [role]
+    })
+  }
+
+  addInternalRecipient(
+    claimProcessorEmail,
+    claimProcessorName,
+    'the claim processor'
+  )
+  addInternalRecipient(guardEmail, guardName, 'the handover guard')
+
+  internalRecipients.forEach(recipient => {
+    emailTasks.push(
+      sendFraudReportInvolvedPartyEmail({
+        recipientEmail: recipient.recipientEmail,
+        recipientName: recipient.recipientName,
+        recipientRoles: recipient.recipientRoles,
+        claimerName,
+        postTitle,
+        reporterName,
+        staffName,
+        staffUuid
+      })
+    )
+  })
+
+  return await Promise.all(emailTasks)
 }

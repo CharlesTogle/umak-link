@@ -2,6 +2,7 @@ import { googleLogout } from '@react-oauth/google';
 import { SocialLogin } from '@capgo/capacitor-social-login';
 import api from '@/shared/lib/api';
 import { clearE2eAuthOverride } from '@/shared/lib/e2eAuth';
+import { getUiErrorMessage } from '@/shared/lib/errorHandling';
 import { supabase } from '@/shared/lib/supabase';
 import type { UserProfile } from '@/shared/lib/api-types';
 import type { User } from '@/features/auth/contexts/UserContext';
@@ -21,11 +22,10 @@ interface LoginResponse {
 }
 
 function getErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message.trim()) {
-    return error.message;
-  }
-
-  return 'Registration failed';
+  return getUiErrorMessage(error, {
+    context: 'auth',
+    fallback: 'Unable to complete sign in. Please try again.'
+  });
 }
 
 function mapUserProfileToUser(profile: UserProfile): User {
@@ -55,7 +55,7 @@ export const authServices = {
 
       if (signInError) {
         console.error('[authServices] Supabase signInWithIdToken failed:', signInError);
-        return { user: null, error: signInError.message };
+        return { user: null, error: getErrorMessage(signInError) };
       }
 
       // Fetch user profile from backend (backend resolves via supabase token)
