@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { claimApiService } from '@/shared/services'
 import { useNavigation } from '@/shared/hooks/useNavigation'
-import { useAuditLogs } from '@/shared/hooks/useAuditLogs'
 import { isConnected } from '@/shared/utils/networkCheck'
 import type { ExistingClaimDetails } from './useExistingClaimCheck'
 
@@ -27,7 +26,6 @@ interface ClaimItemSubmitParams {
 export function useClaimItemSubmit () {
   const [isProcessing, setIsProcessing] = useState(false)
   const { navigate } = useNavigation()
-  const { insertAuditLog } = useAuditLogs()
 
   const submit = async (
     params: ClaimItemSubmitParams,
@@ -45,9 +43,7 @@ export function useClaimItemSubmit () {
       staffName,
       missingPostId,
       claimVerification,
-      redirectPath,
-      existingClaim,
-      isOverwrite
+      redirectPath
     } = params
 
     // Validation
@@ -70,32 +66,6 @@ export function useClaimItemSubmit () {
         onError('No internet connection. Please check your network.')
         setIsProcessing(false)
         return
-      }
-
-      // If overwriting an existing claim, log the audit trail first
-      if (isOverwrite && existingClaim) {
-        await insertAuditLog({
-          user_id: staffId,
-          action_type: 'claim_overwritten',
-          details: {
-            message: `Claim overwritten by ${staffName}`,
-            item_id: existingClaim.item_id,
-            old_claim: {
-              claim_id: existingClaim.claim_id,
-              claimer_name: existingClaim.claimer_name,
-              claimer_email: existingClaim.claimer_school_email,
-              claimer_contact: existingClaim.claimer_contact_num,
-              claimed_at: existingClaim.claimed_at,
-              processed_by_staff: existingClaim.staff_name || 'Unknown'
-            },
-            new_claim: {
-              claimer_name: claimerName,
-              claimer_email: claimerEmail,
-              claimer_contact: claimerContactNumber,
-              processed_by_staff: staffName
-            }
-          }
-        })
       }
 
       // Call process_claim API

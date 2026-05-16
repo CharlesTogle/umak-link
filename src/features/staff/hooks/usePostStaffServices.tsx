@@ -108,27 +108,6 @@ export function usePostActionsStaffServices () {
     newStatus: 'accepted' | 'rejected' | 'pending'
   ): Promise<boolean> => {
     try {
-      let currentUser = user
-
-      if (!user) {
-        currentUser = await getUser()
-        setUser(currentUser)
-      }
-
-      // Fetch post and item details before update
-      let postData: PostRecordDetails
-      let itemData: StaffItemDetails
-      try {
-        postData = await postApiService.getFullPost(parseInt(postId))
-        itemData = (await api.items.get(postData.item_id)) as StaffItemDetails
-      } catch (error) {
-        console.error('Error fetching post/item data:', error)
-        return false
-      }
-
-      const oldStatus = postData?.post_status
-      const itemName = itemData?.item_name || 'Unknown Item'
-
       // Update post status via API
       const updateResult = await postApiService.updatePostStatus(
         parseInt(postId),
@@ -139,22 +118,6 @@ export function usePostActionsStaffServices () {
         console.error('Error changing post status')
         return false
       }
-
-      // Log the action with correct structure
-      await insertAuditLog({
-        user_id: currentUser?.user_id || 'unknown',
-        action_type: 'post_status_updated',
-        details: {
-          message: `${
-            currentUser?.user_name || 'Staff'
-          } set the status of ${itemName} as ${
-            newStatus.charAt(0).toUpperCase() + newStatus.slice(1)
-          }`,
-          post_title: itemName,
-          old_status: oldStatus,
-          new_status: newStatus
-        }
-      })
 
       return true
     } catch (error) {
@@ -316,27 +279,6 @@ export function usePostActionsStaffServices () {
         console.error('Error updating item status')
         return { success: false, error: 'Failed to update item status' }
       }
-
-      // Log the action
-      await insertAuditLog({
-        user_id: currentUser?.user_id || 'unknown',
-        action_type: newItemStatus === 'discarded' ? 'item_discarded' : 'item_status_updated',
-        details: {
-          message:
-            newItemStatus === 'discarded' && normalizedDiscardReason
-              ? `${
-                  currentUser?.user_name || 'Staff'
-                } changed item status of ${itemName} from ${oldStatus} to ${newItemStatus}. Disposition: ${normalizedDiscardReason}`
-              : `${
-                  currentUser?.user_name || 'Staff'
-                } changed item status of ${itemName} from ${oldStatus} to ${newItemStatus}`,
-          item_id: itemId,
-          post_id: postId,
-          old_status: oldStatus,
-          new_status: newItemStatus,
-          discard_reason: normalizedDiscardReason || null
-        }
-      })
 
       // Send notification only if item is discarded
       if (newItemStatus === 'discarded' && posterId) {

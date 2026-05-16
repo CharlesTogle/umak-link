@@ -1,10 +1,8 @@
 import { useState, useRef, useCallback } from 'react'
 import { Network } from '@capacitor/network'
 import createCache from '@/shared/lib/cache'
-import { useAuditLogs } from '@/shared/hooks/useAuditLogs'
 import useNotifications from '@/features/user/hooks/useNotifications'
 import { fraudReportApiService, postApiService } from '@/shared/services'
-import api from '@/shared/lib/api'
 import { useUser } from '@/features/auth/contexts/UserContext'
 import type {
   FraudReportPublic as ApiFraudReportPublic,
@@ -172,7 +170,6 @@ export function useFraudReports ({
   const isFetchingRef = useRef(false)
   const loadedIdsRef = useRef<Set<string>>(new Set())
   const hasRefreshedCacheRef = useRef(false)
-  const { insertAuditLog } = useAuditLogs()
   const { sendNotification } = useNotifications()
   const { user } = useUser()
 
@@ -470,7 +467,9 @@ export function useFraudReports ({
           ;(async () => {
             try {
               await cache.saveCache(updated)
-            } catch (e) {}
+            } catch (error) {
+              console.error('Failed to update cache while loading report:', error)
+            }
           })()
           return updated
         })
@@ -496,23 +495,6 @@ export function useFraudReports ({
     try {
       if (!user?.user_id) throw new Error('User not authenticated')
 
-      // Get user details for audit log
-      let userData = null
-      try {
-        const userInfo = await api.users.get(user.user_id)
-        userData = { user_name: userInfo.user_name }
-      } catch (error) {
-        console.error('Error fetching user data:', error)
-      }
-
-      // Get old report status before update
-      let oldStatus = 'under_review'
-      try {
-        oldStatus = await fraudReportApiService.getReportStatus(reportId)
-      } catch (error) {
-        console.error('Error fetching report status:', error)
-      }
-
       // Update report status
       const updateResult = await fraudReportApiService.updateStatus(
         reportId,
@@ -521,20 +503,6 @@ export function useFraudReports ({
       )
 
       if (!updateResult.success) throw new Error('Failed to update report status')
-
-      // Add audit trail with correct structure
-      await insertAuditLog({
-        user_id: user.user_id,
-        action_type: 'verified_report',
-        details: {
-          message: `${
-            userData?.user_name || 'Staff'
-          } set the status of report on ${postTitle} as Open`,
-          post_title: postTitle,
-          old_status: oldStatus,
-          new_status: 'open'
-        }
-      })
 
       // Send notification to reporter if reporter ID is provided
       if (reporterId) {
@@ -589,23 +557,6 @@ export function useFraudReports ({
     try {
       if (!user?.user_id) throw new Error('User not authenticated')
 
-      // Get user details for audit log
-      let userData = null
-      try {
-        const userInfo = await api.users.get(user.user_id)
-        userData = { user_name: userInfo.user_name }
-      } catch (error) {
-        console.error('Error fetching user data:', error)
-      }
-
-      // Get old report status before update
-      let oldStatus = 'under_review'
-      try {
-        oldStatus = await fraudReportApiService.getReportStatus(reportId)
-      } catch (error) {
-        console.error('Error fetching report status:', error)
-      }
-
       // Update report status to rejected
       const reportUpdateResult = await fraudReportApiService.updateStatus(
         reportId,
@@ -622,21 +573,6 @@ export function useFraudReports ({
       )
 
       if (!postUpdateResult.success) throw new Error('Failed to update post status')
-
-      // Add audit trail with correct structure
-      await insertAuditLog({
-        user_id: user.user_id,
-        action_type: 'rejected_report',
-        details: {
-          message: `${
-            userData?.user_name || 'Staff'
-          } set the status of report on ${postTitle} as Rejected`,
-          post_title: postTitle,
-          old_status: oldStatus,
-          new_status: 'rejected',
-          reason_for_rejecting: reason
-        }
-      })
 
       console.log('Reporter ID:', reporterId)
       if (reporterId) {
@@ -688,33 +624,9 @@ export function useFraudReports ({
     try {
       if (!user?.user_id) throw new Error('User not authenticated')
 
-      // Get user details for audit log
-      let userData = null
-      try {
-        const userInfo = await api.users.get(user.user_id)
-        userData = { user_name: userInfo.user_name }
-      } catch (error) {
-        console.error('Error fetching user data:', error)
-      }
-
       // Call API to resolve the fraud report
       // This handles: report status, post status, claim deletion, item status updates, and linked missing item cleanup
       await fraudReportApiService.resolveReport(reportId, deleteClaim)
-
-      // Add audit trail
-      await insertAuditLog({
-        user_id: user.user_id,
-        action_type: 'closed_report',
-        details: {
-          message: `${
-            userData?.user_name || 'Staff'
-          } closed the report on ${postTitle}`,
-          post_title: postTitle,
-          old_status: 'verified',
-          new_status: 'resolved',
-          claim_deleted: deleteClaim
-        }
-      })
 
       // Send notification to reporter based on whether claim was deleted
       if (reporterId) {
