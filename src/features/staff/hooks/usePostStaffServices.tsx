@@ -101,17 +101,20 @@ export function usePostActionsStaffServices () {
    * Change the status of a post (accepted/rejected/pending)
    * @param postId - The ID of the post
    * @param newStatus - The new status for the post
+   * @param rejectionReason - Optional rejection reason for rejected posts
    * @returns True if successful, false otherwise
    */
   const changePostStatus = async (
     postId: string,
-    newStatus: 'accepted' | 'rejected' | 'pending'
+    newStatus: 'accepted' | 'rejected' | 'pending',
+    rejectionReason?: string
   ): Promise<boolean> => {
     try {
       // Update post status via API
       const updateResult = await postApiService.updatePostStatus(
         parseInt(postId),
-        newStatus
+        newStatus,
+        rejectionReason
       )
 
       if (!updateResult.success) {
@@ -156,25 +159,11 @@ export function usePostActionsStaffServices () {
       const itemName = itemData?.item_name || 'Unknown Item'
       const posterId = postData?.poster_id
 
-      // Use changePostStatus to update the status (handles audit log)
-      const success = await changePostStatus(postId, newStatus)
+      // Use changePostStatus as the single write path for the status update
+      const success = await changePostStatus(postId, newStatus, rejectionReason)
 
       if (!success) {
         return { success: false, error: 'Failed to update post status' }
-      }
-
-      // Update with rejection reason if status is rejected (handled by API)
-      if (newStatus === 'rejected' && rejectionReason) {
-        const updateResult = await postApiService.updatePostStatus(
-          parseInt(postId),
-          newStatus,
-          rejectionReason
-        )
-
-        if (!updateResult.success) {
-          console.error('Error updating rejection reason')
-          return { success: false, error: 'Failed to update rejection reason' }
-        }
       }
 
       // Send notification to poster
