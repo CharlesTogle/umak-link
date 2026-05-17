@@ -1,7 +1,5 @@
-// components/ProtectedRoute.tsx
-import type { ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useIonRouter } from '@ionic/react'
-import { useEffect, useState } from 'react'
 import type { User } from '@/features/auth/contexts/UserContext'
 import { useUser } from '@/features/auth/contexts/UserContext'
 
@@ -15,31 +13,33 @@ export default function ProtectedRoute ({
   user?: User | null
 }) {
   const router = useIonRouter()
-  const { getUser } = useUser()
+  const { user: contextUser, loading } = useUser()
   const [isChecking, setIsChecking] = useState(true)
-  const [user, setUser] = useState<User | null>(
-    (propUser ?? null) as User | null
-  )
+  const user = propUser ?? contextUser
 
-  // Fetch user if not provided (handles direct navigation/refresh)
   useEffect(() => {
-    const checkAuth = async () => {
-      if (!propUser) {
-        try {
-          const fetchedUser = await getUser()
-          setUser(fetchedUser)
-        } catch (error) {
-          console.error('[ProtectedRoute] Error fetching user:', error)
-          setUser(null)
-        }
-      } else {
-        setUser(propUser)
-      }
-      setIsChecking(false)
+    if (loading && !propUser && !contextUser) {
+      setIsChecking(true)
+      return
     }
 
-    checkAuth()
-  }, [propUser, getUser])
+    setIsChecking(false)
+  }, [loading, propUser, contextUser])
+
+  useEffect(() => {
+    if (isChecking) {
+      return
+    }
+
+    if (!user) {
+      router.push('/auth', 'forward', 'replace')
+      return
+    }
+
+    if (!allowedRoles.includes(user.user_type.toLowerCase())) {
+      router.push('/unauthorized', 'forward', 'replace')
+    }
+  }, [allowedRoles, isChecking, router, user])
 
   if (isChecking) {
     return (
@@ -52,15 +52,11 @@ export default function ProtectedRoute ({
     )
   }
 
-  // Redirect to auth if no user
   if (!user) {
-    router.push('/auth', 'forward', 'replace')
     return null
   }
 
-  // Redirect to unauthorized if wrong role
   if (!allowedRoles.includes(user.user_type.toLowerCase())) {
-    router.push('/unauthorized', 'forward', 'replace')
     return null
   }
 

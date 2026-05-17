@@ -96,9 +96,12 @@ export const authServices = {
     try {
       console.log('[authServices] Logout called');
       const isWeb = Capacitor.getPlatform() === 'web';
+      clearE2eAuthOverride();
 
-      // Sign out from Supabase (clears session)
-      await supabase.auth.signOut();
+      const { error: signOutError } = await supabase.auth.signOut();
+      if (signOutError) {
+        throw signOutError;
+      }
 
       // Google logout for web
       if (isWeb) {
@@ -111,19 +114,19 @@ export const authServices = {
 
       // SocialLogin logout for native
       if (!isWeb) {
-        try {
-          const googleWebClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? '';
-          await SocialLogin.initialize({
-            google: { webClientId: googleWebClientId, mode: 'online' },
-          });
-          await SocialLogin.logout({ provider: 'google' });
-          console.log('[authServices] Social logout successful');
-        } catch (socialError) {
-          console.log('[authServices] Social logout not needed or failed:', socialError);
-        }
+        const googleWebClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? '';
+        void (async () => {
+          try {
+            await SocialLogin.initialize({
+              google: { webClientId: googleWebClientId, mode: 'online' },
+            });
+            await SocialLogin.logout({ provider: 'google' });
+            console.log('[authServices] Social logout successful');
+          } catch (socialError) {
+            console.log('[authServices] Social logout not needed or failed:', socialError);
+          }
+        })();
       }
-
-      clearE2eAuthOverride();
 
       return { error: null };
     } catch (error) {

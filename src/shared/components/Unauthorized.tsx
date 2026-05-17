@@ -1,15 +1,18 @@
-import { IonButton, IonContent, IonPage } from '@ionic/react'
+import { IonButton, IonContent, IonPage, useIonRouter } from '@ionic/react'
 import { useAuth } from '@/features/auth/hooks/useAuth'
-import { useUser } from '@/features/auth/contexts/UserContext'
 
 export default function Unauthorized () {
+  const router = useIonRouter()
   const { logout } = useAuth()
-  const { clearUser } = useUser()
 
   const handleGoBack = async () => {
-    await clearUser()
-    await logout()
-    window.location.href = '/auth'
+    const { error } = await logout()
+    if (error) {
+      console.error('[Unauthorized] Logout failed:', error)
+      return
+    }
+
+    router.push('/auth', 'none', 'replace')
   }
 
   return (

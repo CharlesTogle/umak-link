@@ -204,11 +204,8 @@ async function syncMissingProfileFieldsFromSession (
 
 export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUserState] = useState<User | null>(null);
-  const [loading, setLoading] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(true);
 
-  // Store setUserState in a ref
-  const setUserStateRef = useRef(setUserState);
-  setUserStateRef.current = setUserState;
   const hasHydratedPersistedSessionRef = useRef(false);
 
   const fetchUser = useCallback(async () => {
@@ -291,6 +288,28 @@ export function UserProvider({ children }: { children: ReactNode }) {
     void hydratePersistedSession();
   }, [hydratePersistedSession]);
 
+  useEffect(() => {
+    const {
+      data: { subscription }
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'INITIAL_SESSION') {
+        return;
+      }
+
+      if (event === 'SIGNED_OUT' || !session) {
+        setUserState(null);
+        setLoading(false);
+        return;
+      }
+
+      void hydratePersistedSession();
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [hydratePersistedSession]);
+
   const refreshUser = useCallback(
     async (userId: string) => {
       void userId;
@@ -337,8 +356,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   );
 
   const clearUser = useCallback(async () => {
-    setUserStateRef.current(null);
-    await supabase.auth.signOut();
+    setUserState(null);
     return true;
   }, []);
 

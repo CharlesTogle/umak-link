@@ -69,7 +69,14 @@ const App: React.FC = () => {
                 />
                 <Route exact path='/' render={() => <Redirect to='/auth' />} />
                 <Route path='/auth' render={() => <Auth />} />
-                <Route path='/account' render={() => <AccountPage />} />
+                <Route
+                  path='/account'
+                  render={() => (
+                    <ProtectedRoute allowedRoles={['user', 'admin', 'staff', 'guard']}>
+                      <AccountPage />
+                    </ProtectedRoute>
+                  )}
+                />
                 <Route
                   path='/user/*'
                   render={() => (
