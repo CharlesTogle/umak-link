@@ -30,6 +30,58 @@ function arrayBufferToBase64(buffer) {
   }
   return btoa(binary);
 }
+
+function normalizeOptionalString(value) {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().replace(/\s+/g, ' ');
+  return normalized.length > 0 ? normalized : null;
+}
+
+function normalizeStringArray(value) {
+  if (typeof value === 'string') {
+    const normalized = normalizeOptionalString(value);
+    return normalized ? [normalized] : [];
+  }
+
+  if (!Array.isArray(value)) return [];
+
+  const seen = new Set();
+  const results = [];
+
+  for (const entry of value){
+    const normalized = normalizeOptionalString(entry);
+    if (!normalized) continue;
+
+    const lowered = normalized.toLowerCase();
+    if (seen.has(lowered)) continue;
+
+    seen.add(lowered);
+    results.push(normalized);
+  }
+
+  return results;
+}
+
+function mergeUniqueTerms(...values) {
+  const seen = new Set();
+  const results = [];
+
+  for (const value of values){
+    const entries = Array.isArray(value) ? value : [value];
+    for (const entry of entries){
+      const normalized = normalizeOptionalString(entry);
+      if (!normalized) continue;
+
+      const lowered = normalized.toLowerCase();
+      if (seen.has(lowered)) continue;
+
+      seen.add(lowered);
+      results.push(normalized);
+    }
+  }
+
+  return results;
+}
 // =====================================================
 // Gemini API Helper
 // =====================================================
@@ -39,27 +91,42 @@ async function generateMetadataWithGemini(itemName, itemDescription, base64Image
     model: 'gemini-2.5-flash'
   });
   const prompt = `
-You are an AI vision model. Return only valid JSON describing the image.
+Analyze this lost/found item and generate metadata for search matching.
 
-Required JSON keys:
-- "caption": concise sentence (max 100 chars) describing the image
-- "main_objects": array of 5–10 primary visible objects (nouns/noun phrases)
-- "synonyms": array of 5–10 alternative terms for main_objects
-- "descriptive_words": array of 15–20 adjectives describing texture, color, material, shape, condition
-- "potential_brands": array of 1–5 brand names detected or inferred from visuals/context (empty array if none)
-
-Context:
 Item Name: ${itemName}
-Item Description: ${itemDescription}
+Description: ${itemDescription || 'No description provided'}
+
+Generate the following:
+1. Keywords (5-10 relevant search terms)
+2. Color (primary color if discernible)
+3. Brand (if mentioned or identifiable)
+4. Condition (good/fair/poor/unknown)
+5. Estimated value range (low/medium/high/unknown)
+6. Caption (short literal description of the item)
+7. Main objects (1-3 core object labels)
+8. Synonyms (0-5 alternative search words)
+9. Descriptive words (2-6 visible physical descriptors)
+10. Potential brands (0-3 likely or mentioned brands)
 
 Rules:
-- Lowercase only
-- No duplicates
-- Short, general terms
-- No markdown, comments, or text outside JSON
-- Must be valid, parsable JSON
+- Infer only what is reasonably visible from the image and the provided item context.
+- Return valid JSON only. No markdown. No explanation.
+- Keep terms practical for lost-and-found search.
+- Use empty arrays when an attribute is not available.
 
-Return only the JSON object.
+Respond in JSON format:
+{
+  "keywords": ["keyword1", "keyword2"],
+  "color": "color or null",
+  "brand": "brand or null",
+  "condition": "condition",
+  "value_range": "range",
+  "caption": "short caption or null",
+  "main_objects": ["object1"],
+  "synonyms": ["synonym1"],
+  "descriptive_words": ["descriptor1"],
+  "potential_brands": ["brand1"]
+}
 `;
   try {
     const result = await model.generateContent([
@@ -78,11 +145,19 @@ Return only the JSON object.
     cleanedText = cleanedText.replace(/```json\n?/g, '');
     cleanedText = cleanedText.replace(/```\n?/g, '');
     cleanedText = cleanedText.trim();
-    const metadata = JSON.parse(cleanedText);
-    // Validate structure
-    if (typeof metadata.caption !== 'string' || !Array.isArray(metadata.main_objects) || !Array.isArray(metadata.descriptive_words) || !Array.isArray(metadata.potential_brands)) {
-      throw new Error('Invalid metadata structure');
-    }
+    const parsed = JSON.parse(cleanedText);
+    const metadata = {
+      keywords: normalizeStringArray(parsed.keywords),
+      color: normalizeOptionalString(parsed.color),
+      brand: normalizeOptionalString(parsed.brand),
+      condition: normalizeOptionalString(parsed.condition) || 'unknown',
+      value_range: normalizeOptionalString(parsed.value_range) || 'unknown',
+      caption: normalizeOptionalString(parsed.caption),
+      main_objects: normalizeStringArray(parsed.main_objects),
+      synonyms: normalizeStringArray(parsed.synonyms),
+      descriptive_words: normalizeStringArray(parsed.descriptive_words),
+      potential_brands: mergeUniqueTerms(parsed.potential_brands, parsed.brand)
+    };
     return {
       success: true,
       metadata
