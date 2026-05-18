@@ -150,11 +150,13 @@ test.describe('Guard custody flow', () => {
     page,
     mockGuardEmptyActiveClaimReviews,
     mockGuardDecisionSuccess,
+    mockGuardLatestDecisionPostRefresh,
     mockGuardScanSuccess
   }) => {
     await mockGuardEmptyActiveClaimReviews()
     await mockGuardScanSuccess()
     await mockGuardDecisionSuccess('accepted')
+    await mockGuardLatestDecisionPostRefresh('with_guard')
     await page.goto('/guard/scan')
 
     await page
@@ -176,15 +178,17 @@ test.describe('Guard custody flow', () => {
     )
   })
 
-  test('guard can reject a custody handover and see the rejected result on home', async ({
+  test('guard can reject a custody handover and return home without a persisted custody banner', async ({
     page,
     mockGuardEmptyActiveClaimReviews,
     mockGuardDecisionSuccess,
+    mockGuardLatestDecisionPostRefresh,
     mockGuardScanSuccess
   }) => {
     await mockGuardEmptyActiveClaimReviews()
     await mockGuardScanSuccess()
     await mockGuardDecisionSuccess('rejected')
+    await mockGuardLatestDecisionPostRefresh('with_reporter')
     await page.goto('/guard/scan')
 
     await page
@@ -201,8 +205,6 @@ test.describe('Guard custody flow', () => {
     await page.getByTestId('guard-reject-button').click()
 
     await expect(page).toHaveURL('/guard/home')
-    await expect(page.getByTestId('guard-decision-banner')).toContainText(
-      'Handover rejected'
-    )
+    await expect(page.getByTestId('guard-decision-banner')).toHaveCount(0)
   })
 })

@@ -18,6 +18,9 @@ type GuardFixtures = {
   mockGuardScanSuccess: () => Promise<void>
   mockGuardCameraScanSuccess: () => Promise<void>
   mockGuardDecisionSuccess: (decision: 'accepted' | 'rejected') => Promise<void>
+  mockGuardLatestDecisionPostRefresh: (
+    custodyStatus: 'with_guard' | 'with_reporter'
+  ) => Promise<void>
   mockGuardEmptyActiveClaimReviews: () => Promise<void>
   mockGuardActiveClaimReviews: () => Promise<void>
   mockGuardPostRecordFallback: () => Promise<void>
@@ -130,6 +133,45 @@ export const test = base.extend<GuardFixtures>({
             qr_status: decision,
             custody_status: decision === 'accepted' ? 'with_guard' : 'with_reporter',
             decision_at: '2026-05-14T08:10:00.000Z'
+          })
+        })
+      })
+    })
+  },
+
+  mockGuardLatestDecisionPostRefresh: async ({ page }, applyFixture) => {
+    await applyFixture(async custodyStatus => {
+      await page.route('**/posts/123/full', async route => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            post_id: 123,
+            item_id: 'item-001',
+            poster_name: 'Student One',
+            poster_id: 'user-001',
+            item_name: 'Black Wallet',
+            item_description:
+              'A black leather wallet with school ID and folded receipts.',
+            item_type: 'found',
+            item_image_url: 'https://example.com/item.jpg',
+            category: 'Accessories',
+            last_seen_at: '2026-05-14T06:00:00.000Z',
+            last_seen_location: 'Main Gate',
+            submission_date: '2026-05-14T07:30:00.000Z',
+            post_status: 'pending',
+            item_status: 'unclaimed',
+            custody_status: custodyStatus,
+            accepted_by_staff_name: 'Staff One',
+            accepted_by_staff_email: 'staff.one@umak.edu.ph',
+            claim_id: null,
+            claimed_by_name: null,
+            claimed_by_email: null,
+            claim_processed_by_staff_id: null,
+            accepted_on_date: '2026-05-14T07:45:00.000Z',
+            is_anonymous: false,
+            linked_lost_item_id: null,
+            returned_at_local: null
           })
         })
       })
