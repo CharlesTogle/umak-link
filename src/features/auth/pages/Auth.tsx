@@ -75,7 +75,7 @@ const hasUmakEmailSuffix = (email: string | null | undefined) =>
 const Auth: React.FC = () => {
   const [showAuth, setShowAuth] = useState(false)
   const { navigate } = useNavigation()
-  const { refreshUser, getUser } = useUser()
+  const { user, loading, setUser } = useUser()
 
   // Auth-related state
   const [showToast, setShowToast] = useState(false)
@@ -199,7 +199,7 @@ const Auth: React.FC = () => {
             return
           }
 
-          await refreshUser(user.user_id)
+          setUser(user)
           navigateAfterAuth(user.user_type)
         }
       }
@@ -221,6 +221,10 @@ const Auth: React.FC = () => {
   const handleGoogleSuccess = async (
     credentialResponse: CredentialResponse
   ) => {
+    if (googleLoading) {
+      return
+    }
+
     // Check rate limit
     if (!checkRateLimit()) {
       return
@@ -255,8 +259,7 @@ const Auth: React.FC = () => {
         setGoogleLoading(false)
         return
       }
-      await refreshUser(user.user_id)
-
+      setUser(user)
       navigateAfterAuth(user.user_type)
     } catch (error) {
       console.error('Google sign-in error:', error)
@@ -281,23 +284,18 @@ const Auth: React.FC = () => {
 
   // Check auth state on mount
   useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const currentUser = await getUser()
-        if (currentUser) {
-          console.log('[Auth] User is authenticated:', currentUser)
-          navigateAfterAuth(currentUser.user_type)
-        } else {
-          setShowAuth(true)
-        }
-      } catch (error) {
-        console.error(error)
-        setShowAuth(true)
-      }
+    if (loading) {
+      return
     }
 
-    checkAuth()
-  }, [getUser, navigateAfterAuth])
+    if (user) {
+      console.log('[Auth] User is authenticated:', user)
+      navigateAfterAuth(user.user_type)
+      return
+    }
+
+    setShowAuth(true)
+  }, [loading, navigateAfterAuth, user])
 
   return (
     <IonPage className='relative h-full'>

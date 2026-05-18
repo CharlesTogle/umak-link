@@ -207,34 +207,46 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState<boolean>(true);
 
   const hasHydratedPersistedSessionRef = useRef(false);
+  const inFlightUserRequestRef = useRef<Promise<User | null> | null>(null);
 
   const fetchUser = useCallback(async () => {
-    try {
-      const e2eUser = getE2EAuthUser();
-      if (e2eUser) {
-        return mapUserProfileToUser(e2eUser);
-      }
-
-      // Check if we have a Supabase session
-      const { data } = await supabase.auth.getSession();
-      if (!data.session) {
-        return null;
-      }
-
-      // Fetch user from backend API
-      const response = await api.auth.getMe();
-      const syncedProfile = await syncMissingProfileFieldsFromSession(
-        response.user,
-        data.session.user.user_metadata
-      );
-      return mapUserProfileToUser(syncedProfile);
-    } catch (error) {
-      console.error('[UserContext] Error fetching user:', error);
-      if (hasStatusCode(error, 401)) {
-        await supabase.auth.signOut();
-      }
-      return null;
+    if (inFlightUserRequestRef.current) {
+      return inFlightUserRequestRef.current;
     }
+
+    const request = (async () => {
+      try {
+        const e2eUser = getE2EAuthUser();
+        if (e2eUser) {
+          return mapUserProfileToUser(e2eUser);
+        }
+
+        // Check if we have a Supabase session
+        const { data } = await supabase.auth.getSession();
+        if (!data.session) {
+          return null;
+        }
+
+        // Fetch user from backend API
+        const response = await api.auth.getMe();
+        const syncedProfile = await syncMissingProfileFieldsFromSession(
+          response.user,
+          data.session.user.user_metadata
+        );
+        return mapUserProfileToUser(syncedProfile);
+      } catch (error) {
+        console.error('[UserContext] Error fetching user:', error);
+        if (hasStatusCode(error, 401)) {
+          await supabase.auth.signOut();
+        }
+        return null;
+      } finally {
+        inFlightUserRequestRef.current = null;
+      }
+    })();
+
+    inFlightUserRequestRef.current = request;
+    return request;
   }, []);
 
   const setUser = useCallback((newUser: User | null) => {
@@ -292,7 +304,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     const {
       data: { subscription }
     } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'INITIAL_SESSION') {
+      if (event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') {
         return;
       }
 

@@ -26,7 +26,7 @@ import { postApiService } from '@/shared/services'
 import { usePostActionsStaffServices } from '@/features/staff/hooks/usePostStaffServices'
 import { ChoiceModal } from '@/shared/components/ChoiceModal'
 import { rejectReasons } from '@/features/staff/utils/catalogPostHandlers'
-import { useUser, type User } from '@/features/auth/contexts/UserContext'
+import { useUser } from '@/features/auth/contexts/UserContext'
 import { readResumableUserCustodySession } from '@/features/user/custody/state/userCustodySessionStorage'
 
 interface PostListProps {
@@ -92,7 +92,7 @@ export default function PostList ({
   const [isDeleting, setIsDeleting] = useState(false)
 
   const { navigate } = useNavigation()
-  const { getUser } = useUser()
+  const { user } = useUser()
 
   const { updatePostStatusWithNotification, updateItemStatus } =
     usePostActionsStaffServices()
@@ -108,21 +108,6 @@ export default function PostList ({
   const statusChangeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   )
-  const [user, setUser] = useState<User | null>(null)
-
-  useEffect(() => {
-    const fetchUser = async () => {
-      if (!user) {
-        const currUser = await getUser()
-        if (currUser) {
-          setUser(currUser)
-        } else {
-          window.location.href = '/auth'
-        }
-      }
-    }
-    fetchUser()
-  }, [])
 
   const handleActionSheetClick = (postId: string) => {
     console.log('Handling action sheet click for post ID:', postId)

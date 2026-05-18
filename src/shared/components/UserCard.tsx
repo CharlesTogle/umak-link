@@ -1,63 +1,40 @@
 import { IonCard, IonCardContent, IonAvatar, IonIcon } from '@ionic/react'
 import { personCircle } from 'ionicons/icons'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState } from 'react'
 import { getCachedImage, cachedFileExists } from '@/shared/utils/fileUtils'
 import { useUser } from '@/features/auth/contexts/UserContext'
 
 export default function UserCard ({ className }: { className?: string }) {
-  const [loading, setLoading] = useState<boolean>(true)
   const [profilePicUrl, setProfilePicUrl] = useState<string | null>(null)
-  const [user, setUser] = useState<any | null>(null)
-  const { getUser } = useUser()
-
-  const loadData = useCallback(async () => {
-    // Return gathered data; avoid setting state inside here so caller can guard with mounted
-    const result: { url?: string | null; user?: any | null } = {}
-
-    try {
-      const exists = await cachedFileExists(
-        'profilePicture.webp',
-        'cache/images'
-      )
-      if (exists) {
-        const url = await getCachedImage('profilePicture.webp', 'cache/images')
-        result.url = url
-      }
-    } catch (err) {
-      console.error('Error checking cached profile picture', err)
-    }
-
-    try {
-      const currentUser = await getUser()
-      result.user = currentUser
-    } catch (err) {
-      console.error('Error loading user', err)
-      result.user = null
-    }
-
-    return result
-  }, [getUser])
+  const { user, loading } = useUser()
 
   useEffect(() => {
     let mounted = true
 
-    loadData()
-      .then(({ url, user: currentUser }) => {
-        if (!mounted) return
-        if (url) setProfilePicUrl(url)
-        setUser(currentUser ?? null)
-      })
-      .catch(err => {
-        console.error('Failed to load user card data', err)
-      })
-      .finally(() => {
-        if (mounted) setLoading(false)
-      })
+    const loadCachedProfilePicture = async () => {
+      try {
+        const exists = await cachedFileExists(
+          'profilePicture.webp',
+          'cache/images'
+        )
+        if (!exists || !mounted) return
+
+        const url = await getCachedImage('profilePicture.webp', 'cache/images')
+        if (mounted) {
+          setProfilePicUrl(url)
+        }
+      } catch (err) {
+        console.error('Error checking cached profile picture', err)
+      }
+    }
+
+    void loadCachedProfilePicture()
 
     return () => {
       mounted = false
     }
-  }, [loadData])
+  }, [])
+
   return (
     <IonCard
       className={`shadow-md mt-4 border-t-3 border-gray-200 ion-padding ${className}`}

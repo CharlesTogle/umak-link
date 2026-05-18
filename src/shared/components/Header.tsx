@@ -14,7 +14,6 @@ import { useNavigation } from '../hooks/useNavigation'
 import { notifications, personCircle } from 'ionicons/icons'
 import { useUser } from '@/features/auth/contexts/UserContext'
 import { useUnreadNotificationCount } from '@/features/user/hooks/useUnreadNotificationCount'
-import type { User } from '@/features/auth/contexts/UserContext'
 
 const toolbarStyle = {
   ['--background']: 'var(--color-umak-blue, #1D2981)'
@@ -33,18 +32,9 @@ function Header ({
   isNotificationPage?: boolean
 }) {
   const [profilePicUrl, setProfilePicUrl] = useState<string | null>(null)
-  const [user, setUser] = useState<User | null>(null)
   const profilePicRef = useRef<string | null>(null)
   const { navigate } = useNavigation()
-  const { getUser } = useUser()
-
-  useEffect(() => {
-    if (!user) {
-      getUser().then(currentUser => {
-        setUser(currentUser)
-      })
-    }
-  }, [getUser, user])
+  const { user } = useUser()
 
   const { unreadCount, error } = useUnreadNotificationCount(user?.user_id)
   useEffect(() => {
