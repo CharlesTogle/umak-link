@@ -87,41 +87,43 @@ export default function UserCustodyQrCard ({
         </div>
       </div>
 
-      <div
-        className='mt-4 rounded-2xl border border-white/15 bg-white/10 px-4 py-3'
-        data-testid='user-custody-countdown-card'
-      >
-        <div className='flex items-center justify-between gap-4'>
-          <div>
-            <p className='text-xs font-semibold uppercase tracking-[0.18em] text-white/70'>
-              Time Remaining
-            </p>
-            <p
-              className='mt-1.5 font-mono text-2xl font-bold tracking-[0.16em] text-white'
-              data-testid='user-custody-countdown'
-            >
-              {countdownText}
-            </p>
-          </div>
-          <div className='flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10'>
-            <IonIcon icon={timerOutline} className='text-xl text-white' />
-          </div>
-        </div>
-
-        <div className='mt-3 h-1.5 overflow-hidden rounded-full bg-white/10'>
-          <div
-            className='h-full rounded-full bg-white transition-[width] duration-1000'
-            style={{ width: `${countdownProgress}%` }}
-          />
-        </div>
-
-        <p
-          className='mt-2 text-xs leading-5 text-white/75'
-          data-testid='user-custody-countdown-note'
+      {!hasBeenScanned && (
+        <div
+          className='mt-4 rounded-2xl border border-white/15 bg-white/10 px-4 py-3'
+          data-testid='user-custody-countdown-card'
         >
-          {countdownNote}
-        </p>
-      </div>
+          <div className='flex items-center justify-between gap-4'>
+            <div>
+              <p className='text-xs font-semibold uppercase tracking-[0.18em] text-white/70'>
+                Time Remaining
+              </p>
+              <p
+                className='mt-1.5 font-mono text-2xl font-bold tracking-[0.16em] text-white'
+                data-testid='user-custody-countdown'
+              >
+                {countdownText}
+              </p>
+            </div>
+            <div className='flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10'>
+              <IonIcon icon={timerOutline} className='text-xl text-white' />
+            </div>
+          </div>
+
+          <div className='mt-3 h-1.5 overflow-hidden rounded-full bg-white/10'>
+            <div
+              className='h-full rounded-full bg-white transition-[width] duration-1000'
+              style={{ width: `${countdownProgress}%` }}
+            />
+          </div>
+
+          <p
+            className='mt-2 text-xs leading-5 text-white/75'
+            data-testid='user-custody-countdown-note'
+          >
+            {countdownNote}
+          </p>
+        </div>
+      )}
 
       <div className='mt-5 flex flex-col items-center gap-4'>
         <div className='relative'>

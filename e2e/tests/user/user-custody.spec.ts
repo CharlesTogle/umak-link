@@ -572,6 +572,7 @@ test.describe('User custody flow', () => {
     await expect(page.getByTestId('user-custody-qr-card')).toBeVisible()
     await page.waitForTimeout(5200)
     await expect(page.getByTestId('user-custody-qr-overlay')).toBeVisible()
+    await expect(page.getByTestId('user-custody-countdown-card')).toHaveCount(0)
     await expect(page.getByTestId('user-custody-manual-entry-code')).toHaveText(
       '• • • • • •'
     )
@@ -651,6 +652,7 @@ test.describe('User custody flow', () => {
     await expect(page.getByTestId('user-custody-status-message')).toContainText(
       'The guard scanned your QR. Wait for the decision while polling continues.'
     )
+    await expect(page.getByTestId('user-custody-countdown-card')).toHaveCount(0)
     await expect(page.getByTestId('user-custody-retry')).toHaveCount(0)
   })
 

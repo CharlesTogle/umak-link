@@ -146,6 +146,44 @@ test.describe('Guard custody flow', () => {
     )
   })
 
+  test('guard sees refresh instructions when a manual code is stale', async ({
+    page,
+    mockGuardScanExpired
+  }) => {
+    await mockGuardScanExpired()
+    await page.goto('/guard/scan')
+
+    await page
+      .getByTestId('guard-manual-entry-code-input')
+      .locator('input')
+      .fill('AB2C3D')
+    await page.getByTestId('guard-scan-submit').click()
+
+    await expect(page).toHaveURL(/\/guard\/scan$/)
+    await expect(page.getByTestId('guard-stale-scan-banner')).toContainText(
+      'QR expired. Ask the student to refresh and present a new QR.'
+    )
+    await expect(page.getByTestId('guard-review-page')).toHaveCount(0)
+  })
+
+  test('guard sees refresh instructions when the scanned QR is stale', async ({
+    page,
+    mockGuardCameraScanSuccess,
+    mockGuardScanExpired
+  }) => {
+    await mockGuardScanExpired()
+    await mockGuardCameraScanSuccess()
+    await page.goto('/guard/scan')
+
+    await page.getByTestId('guard-open-camera').click()
+
+    await expect(page).toHaveURL(/\/guard\/scan$/)
+    await expect(page.getByTestId('guard-stale-scan-banner')).toContainText(
+      'QR expired. Ask the student to refresh and present a new QR.'
+    )
+    await expect(page.getByTestId('guard-review-page')).toHaveCount(0)
+  })
+
   test('guard can accept a custody handover and see the recorded result on home', async ({
     page,
     mockGuardEmptyActiveClaimReviews,

@@ -16,6 +16,7 @@ export const guardUser = {
 type GuardFixtures = {
   authenticateGuard: () => Promise<void>
   mockNotificationCount: (count?: number) => Promise<void>
+  mockGuardScanExpired: () => Promise<void>
   mockGuardScanSuccess: () => Promise<void>
   mockGuardCameraScanSuccess: () => Promise<void>
   mockGuardDecisionSuccess: (decision: 'accepted' | 'rejected') => Promise<void>
@@ -60,6 +61,23 @@ export const test = base.extend<GuardFixtures>({
           status: 200,
           contentType: 'application/json',
           body: JSON.stringify({ unread_count: count })
+        })
+      })
+    })
+  },
+
+  mockGuardScanExpired: async ({ page }, applyFixture) => {
+    await applyFixture(async () => {
+      await page.route('**/guard/custody/scan', async route => {
+        await route.fulfill({
+          status: 409,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            statusCode: 409,
+            error: 'Conflict',
+            code: 'CONFLICT',
+            message: 'Conflict'
+          })
         })
       })
     })
