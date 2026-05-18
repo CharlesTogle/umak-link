@@ -21,6 +21,10 @@ import { jwtDecode } from 'jwt-decode'
 import { useAuth } from '@/features/auth/hooks/useAuth'
 import { getUiErrorMessage } from '@/shared/lib/errorHandling'
 import type { GoogleLoginResponse } from '@capgo/capacitor-social-login'
+import {
+  canAccessRedirectPathForUserType,
+  getHomeRouteForUserType
+} from '@/features/auth/utils/userRole'
 import '@/features/auth/styles/auth.css'
 
 interface GoogleJwtPayload {
@@ -122,27 +126,18 @@ const Auth: React.FC = () => {
     return true
   }
 
-  const getRouteByUserType = (userType: string): string => {
-    const type = userType.toLowerCase()
-    const routeMap: Record<string, string> = {
-      admin: '/admin/dashboard',
-      staff: '/staff/home',
-      guard: '/guard/home'
-    }
-    return routeMap[type] || '/user/home'
-  }
-
   const navigateAfterAuth = useCallback(
     (userType: string) => {
       const redirect = sessionStorage.getItem('redirect_after_login')
 
-      if (redirect) {
+      if (redirect && canAccessRedirectPathForUserType(redirect, userType)) {
         sessionStorage.removeItem('redirect_after_login')
         navigate(redirect, 'auth')
         return
       }
 
-      navigate(getRouteByUserType(userType), 'auth')
+      sessionStorage.removeItem('redirect_after_login')
+      navigate(getHomeRouteForUserType(userType), 'auth')
     },
     [navigate]
   )

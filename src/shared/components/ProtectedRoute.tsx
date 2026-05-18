@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { useIonRouter } from '@ionic/react'
 import type { User } from '@/features/auth/contexts/UserContext'
 import { useUser } from '@/features/auth/contexts/UserContext'
+import { getNormalizedRoleKey } from '@/features/auth/utils/userRole'
 
 export default function ProtectedRoute ({
   allowedRoles,
@@ -16,6 +17,7 @@ export default function ProtectedRoute ({
   const { user: contextUser, loading } = useUser()
   const [isChecking, setIsChecking] = useState(true)
   const user = propUser ?? contextUser
+  const normalizedRole = getNormalizedRoleKey(user?.user_type)
 
   useEffect(() => {
     if (loading && !propUser && !contextUser) {
@@ -36,10 +38,10 @@ export default function ProtectedRoute ({
       return
     }
 
-    if (!allowedRoles.includes(user.user_type.toLowerCase())) {
+    if (!normalizedRole || !allowedRoles.includes(normalizedRole)) {
       router.push('/unauthorized', 'forward', 'replace')
     }
-  }, [allowedRoles, isChecking, router, user])
+  }, [allowedRoles, isChecking, normalizedRole, router, user])
 
   if (isChecking) {
     return (
@@ -56,7 +58,7 @@ export default function ProtectedRoute ({
     return null
   }
 
-  if (!allowedRoles.includes(user.user_type.toLowerCase())) {
+  if (!normalizedRole || !allowedRoles.includes(normalizedRole)) {
     return null
   }
 

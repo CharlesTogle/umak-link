@@ -8,6 +8,10 @@ import type { UserProfile } from '@/shared/lib/api-types';
 import type { User } from '@/features/auth/contexts/UserContext';
 import { Capacitor } from '@capacitor/core';
 import { registerForPushNotifications } from '@/features/auth/services/registerForPushNotifications';
+import { deleteCachedFile } from '@/shared/utils/fileUtils';
+import { normalizeUserType } from '@/features/auth/utils/userRole';
+
+const PROFILE_PICTURE_CACHE_FILE_NAME = 'profilePicture.webp';
 
 export interface GoogleProfile {
   googleIdToken: string;
@@ -29,12 +33,14 @@ function getErrorMessage(error: unknown): string {
 }
 
 function mapUserProfileToUser(profile: UserProfile): User {
+  const normalizedUserType = normalizeUserType(profile.user_type) ?? 'User';
+
   return {
     user_id: profile.user_id,
     user_name: profile.user_name ?? profile.email ?? 'Unknown User',
     email: profile.email ?? '',
     profile_picture_url: profile.profile_picture_url,
-    user_type: profile.user_type,
+    user_type: normalizedUserType,
     notification_token: profile.notification_token,
   };
 }
@@ -126,6 +132,14 @@ export const authServices = {
             console.log('[authServices] Social logout not needed or failed:', socialError);
           }
         })();
+      }
+
+      const didDeleteCachedProfilePicture = await deleteCachedFile(
+        PROFILE_PICTURE_CACHE_FILE_NAME,
+        'cache/images'
+      );
+      if (!didDeleteCachedProfilePicture) {
+        console.warn('[authServices] Cached profile picture was already missing or could not be deleted');
       }
 
       return { error: null };

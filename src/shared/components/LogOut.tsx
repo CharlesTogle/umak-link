@@ -1,19 +1,22 @@
-import { IonIcon, useIonRouter } from '@ionic/react'
+import { IonIcon } from '@ionic/react'
 import { logOut } from 'ionicons/icons'
 import { useAuth } from '@/features/auth/hooks/useAuth'
+import { useUser } from '@/features/auth/contexts/UserContext'
 
 export default function Logout () {
-  const router = useIonRouter()
   const { logout } = useAuth()
+  const { clearUser } = useUser()
 
   const handleLogout = async () => {
+    await clearUser()
     const { error } = await logout()
     if (error) {
       console.error('[Logout] Logout failed:', error)
       return
     }
 
-    router.push('/auth', 'none', 'replace')
+    sessionStorage.removeItem('redirect_after_login')
+    window.location.replace('/auth')
   }
   return (
     <div className='px-4 pb-20 pt-3'>

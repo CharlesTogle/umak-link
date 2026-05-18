@@ -7,6 +7,7 @@ import { supabase } from '@/shared/lib/supabase';
 import type { UserProfile } from '@/shared/lib/api-types';
 import { makeDisplay } from '@/shared/utils/imageUtils';
 import { saveCachedBlob } from '@/shared/utils/fileUtils';
+import { normalizeUserType } from '@/features/auth/utils/userRole';
 
 // User type enum
 export type UserType = 'User' | 'Staff' | 'Admin' | 'Guard';
@@ -43,12 +44,14 @@ function hasStatusCode(error: unknown, statusCode: number): boolean {
 }
 
 function mapUserProfileToUser(profile: UserProfile): User {
+  const normalizedUserType = normalizeUserType(profile.user_type) ?? 'User';
+
   return {
     user_id: profile.user_id,
     user_name: profile.user_name ?? profile.email ?? 'Unknown User',
     email: profile.email ?? '',
     profile_picture_url: profile.profile_picture_url,
-    user_type: profile.user_type,
+    user_type: normalizedUserType,
     notification_token: profile.notification_token,
   };
 }
