@@ -2,15 +2,18 @@ import { IonIcon } from '@ionic/react'
 import { logOut } from 'ionicons/icons'
 import { useAuth } from '@/features/auth/hooks/useAuth'
 import { useUser } from '@/features/auth/contexts/UserContext'
+import { LOGOUT_REDIRECT_IN_PROGRESS_KEY } from '@/features/auth/utils/authSessionFlags'
 
 export default function Logout () {
   const { logout } = useAuth()
   const { clearUser } = useUser()
 
   const handleLogout = async () => {
+    sessionStorage.setItem(LOGOUT_REDIRECT_IN_PROGRESS_KEY, '1')
     await clearUser()
     const { error } = await logout()
     if (error) {
+      sessionStorage.removeItem(LOGOUT_REDIRECT_IN_PROGRESS_KEY)
       console.error('[Logout] Logout failed:', error)
       return
     }

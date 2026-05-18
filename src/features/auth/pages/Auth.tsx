@@ -25,6 +25,7 @@ import {
   canAccessRedirectPathForUserType,
   getHomeRouteForUserType
 } from '@/features/auth/utils/userRole'
+import { LOGOUT_REDIRECT_IN_PROGRESS_KEY } from '@/features/auth/utils/authSessionFlags'
 import '@/features/auth/styles/auth.css'
 
 interface GoogleJwtPayload {
@@ -95,6 +96,8 @@ const Auth: React.FC = () => {
   const { getOrRegisterAccount } = useAuth()
 
   useEffect(() => {
+    sessionStorage.removeItem(LOGOUT_REDIRECT_IN_PROGRESS_KEY)
+
     const images = [AdminBuilding, UmakSeal, OhsoLogo]
     images.forEach(src => {
       const img = new Image()

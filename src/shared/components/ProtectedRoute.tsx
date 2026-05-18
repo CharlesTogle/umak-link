@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { useIonRouter } from '@ionic/react'
 import type { User } from '@/features/auth/contexts/UserContext'
 import { useUser } from '@/features/auth/contexts/UserContext'
+import { isLogoutRedirectInProgress } from '@/features/auth/utils/authSessionFlags'
 import { getNormalizedRoleKey } from '@/features/auth/utils/userRole'
 
 export default function ProtectedRoute ({
@@ -34,6 +35,10 @@ export default function ProtectedRoute ({
     }
 
     if (!user) {
+      if (isLogoutRedirectInProgress()) {
+        return
+      }
+
       router.push('/auth', 'forward', 'replace')
       return
     }

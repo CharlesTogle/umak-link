@@ -1,15 +1,18 @@
 import { IonButton, IonContent, IonPage } from '@ionic/react'
 import { useAuth } from '@/features/auth/hooks/useAuth'
 import { useUser } from '@/features/auth/contexts/UserContext'
+import { LOGOUT_REDIRECT_IN_PROGRESS_KEY } from '@/features/auth/utils/authSessionFlags'
 
 export default function Unauthorized () {
   const { logout } = useAuth()
   const { clearUser } = useUser()
 
   const handleGoBack = async () => {
+    sessionStorage.setItem(LOGOUT_REDIRECT_IN_PROGRESS_KEY, '1')
     await clearUser()
     const { error } = await logout()
     if (error) {
+      sessionStorage.removeItem(LOGOUT_REDIRECT_IN_PROGRESS_KEY)
       console.error('[Unauthorized] Logout failed:', error)
       return
     }
