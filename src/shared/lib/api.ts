@@ -75,6 +75,32 @@ import type {
 type ApiRecord = Record<string, unknown>;
 type ApiRecordList = ApiRecord[];
 
+function sortCustodyHistoryEntries (
+  entries: StudentCustodyHistoryResponse['history']
+): StudentCustodyHistoryResponse['history'] {
+  return entries
+    .map((entry, index) => ({
+      entry,
+      index,
+      occurredAtMs: Date.parse(entry.occurred_at)
+    }))
+    .sort((left, right) => {
+      const leftTime = Number.isNaN(left.occurredAtMs)
+        ? Number.MAX_SAFE_INTEGER
+        : left.occurredAtMs
+      const rightTime = Number.isNaN(right.occurredAtMs)
+        ? Number.MAX_SAFE_INTEGER
+        : right.occurredAtMs
+
+      if (leftTime !== rightTime) {
+        return leftTime - rightTime
+      }
+
+      return left.index - right.index
+    })
+    .map(({ entry }) => entry)
+}
+
 const configuredApiUrl = import.meta.env.VITE_API_URL;
 if (!configuredApiUrl) {
   console.warn('[config] Missing VITE_API_URL. Using default http://localhost:8080.');
@@ -321,11 +347,17 @@ class ApiClient {
         `/custody/sessions/${qrCodeSessionId}/cancel`
       ),
 
-    getPostHistory: (postId: number): Promise<StudentCustodyHistoryResponse> =>
-      this.request<StudentCustodyHistoryResponse>(
+    getPostHistory: async (postId: number): Promise<StudentCustodyHistoryResponse> => {
+      const response = await this.request<StudentCustodyHistoryResponse>(
         'GET',
         `/custody/posts/${postId}/history`
-      ),
+      )
+
+      return {
+        ...response,
+        history: sortCustodyHistoryEntries(response.history)
+      }
+    },
   };
 
   // ============================================================================

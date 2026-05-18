@@ -367,6 +367,88 @@ test.describe('User custody flow', () => {
     await expect(page.getByText('Handover to Guard')).toBeVisible()
   })
 
+  test('custody history renders in chronological order when the API response is unsorted', async ({
+    page
+  }) => {
+    await page.route('**/custody/posts/123/history', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          post_id: 123,
+          item_id: 'item-123',
+          post_status: 'accepted',
+          custody_status: 'with_guard',
+          history: [
+            {
+              history_id: 'accepted-001',
+              event_type: 'guard_accepted',
+              source_record_type: 'guard_accepted',
+              message: 'Guard Stefanie Gabion has accepted handover',
+              occurred_at: '2026-05-19T03:08:00.000Z',
+              custody_attempt_id: 'attempt-001',
+              qr_code_session_id: 'qr-session-001',
+              attempt_number: 1,
+              guard_post_id: 'guard-post-001',
+              guard_post_name: 'Security Desk',
+              full_location_name: 'Admin Building > Lobby > Security Desk',
+              handover_image_url: 'https://example.com/custody-handover.webp',
+              actor_user_id: 'guard-001',
+              actor_name: 'Stefanie Gabion'
+            },
+            {
+              history_id: 'attempted-001',
+              event_type: 'handover_attempted',
+              source_record_type: 'attempt_started',
+              message: 'Guard handover attempted at Admin Building > Lobby > Security Desk',
+              occurred_at: '2026-05-19T03:05:00.000Z',
+              custody_attempt_id: 'attempt-001',
+              qr_code_session_id: 'qr-session-001',
+              attempt_number: 1,
+              guard_post_id: 'guard-post-001',
+              guard_post_name: 'Security Desk',
+              full_location_name: 'Admin Building > Lobby > Security Desk',
+              handover_image_url: 'https://example.com/custody-handover.webp',
+              actor_user_id: 'user-001',
+              actor_name: 'Student One'
+            },
+            {
+              history_id: 'reported-001',
+              event_type: 'item_reported',
+              source_record_type: null,
+              message: 'Item reported in Umak Link',
+              occurred_at: '2026-05-19T03:03:00.000Z',
+              custody_attempt_id: null,
+              qr_code_session_id: null,
+              attempt_number: null,
+              guard_post_id: null,
+              guard_post_name: null,
+              full_location_name: null,
+              handover_image_url: null,
+              actor_user_id: 'user-001',
+              actor_name: 'Student One'
+            }
+          ]
+        })
+      })
+    })
+
+    await page.goto('/user/post/history/view/123')
+
+    const historyEntries = page.locator(
+      '[data-testid^="user-custody-history-"]:not([data-testid="user-custody-history-card"])'
+    )
+
+    await expect(historyEntries).toHaveCount(3)
+    await expect(historyEntries.nth(0)).toContainText('Item reported in Umak Link')
+    await expect(historyEntries.nth(1)).toContainText(
+      'Guard handover attempted at Admin Building > Lobby > Security Desk'
+    )
+    await expect(historyEntries.nth(2)).toContainText(
+      'Guard Stefanie Gabion has accepted handover'
+    )
+  })
+
   test('history actions show resume handover when a session is already open', async ({
     page
   }) => {
