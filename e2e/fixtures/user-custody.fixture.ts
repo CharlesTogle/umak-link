@@ -8,6 +8,7 @@ import type {
 
 const E2E_AUTH_USER_STORAGE_KEY = 'umak-link:e2e-auth-user'
 const E2E_AUTH_TOKEN_STORAGE_KEY = 'umak-link:e2e-auth-token'
+const E2E_AUTH_PAGE_SEEDED_KEY = 'umak-link:e2e-auth-seeded'
 
 export const userAccount = {
   user_id: 'user-001',
@@ -114,15 +115,21 @@ export const test = base.extend<UserCustodyFixtures>({
   authenticateUser: async ({ page }, applyFixture) => {
     await applyFixture(async () => {
       await page.addInitScript(
-        ({ token, user, tokenKey, userKey }) => {
+        ({ token, user, tokenKey, userKey, seededKey }) => {
+          if (window.sessionStorage.getItem(seededKey) === '1') {
+            return
+          }
+
           window.localStorage.setItem(userKey, JSON.stringify(user))
           window.localStorage.setItem(tokenKey, token)
+          window.sessionStorage.setItem(seededKey, '1')
         },
         {
           user: userAccount,
           token: 'e2e-user-token',
           userKey: E2E_AUTH_USER_STORAGE_KEY,
-          tokenKey: E2E_AUTH_TOKEN_STORAGE_KEY
+          tokenKey: E2E_AUTH_TOKEN_STORAGE_KEY,
+          seededKey: E2E_AUTH_PAGE_SEEDED_KEY
         }
       )
     })

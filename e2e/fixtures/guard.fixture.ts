@@ -2,6 +2,7 @@ import { test as base } from '../playwright'
 
 const E2E_AUTH_USER_STORAGE_KEY = 'umak-link:e2e-auth-user'
 const E2E_AUTH_TOKEN_STORAGE_KEY = 'umak-link:e2e-auth-token'
+const E2E_AUTH_PAGE_SEEDED_KEY = 'umak-link:e2e-auth-seeded'
 
 export const guardUser = {
   user_id: 'guard-001',
@@ -32,15 +33,21 @@ export const test = base.extend<GuardFixtures>({
   authenticateGuard: async ({ page }, applyFixture) => {
     await applyFixture(async () => {
       await page.addInitScript(
-        ({ user, token, userKey, tokenKey }) => {
+        ({ user, token, userKey, tokenKey, seededKey }) => {
+          if (window.sessionStorage.getItem(seededKey) === '1') {
+            return
+          }
+
           window.localStorage.setItem(userKey, JSON.stringify(user))
           window.localStorage.setItem(tokenKey, token)
+          window.sessionStorage.setItem(seededKey, '1')
         },
         {
           user: guardUser,
           token: 'e2e-guard-token',
           userKey: E2E_AUTH_USER_STORAGE_KEY,
-          tokenKey: E2E_AUTH_TOKEN_STORAGE_KEY
+          tokenKey: E2E_AUTH_TOKEN_STORAGE_KEY,
+          seededKey: E2E_AUTH_PAGE_SEEDED_KEY
         }
       )
     })
