@@ -49,7 +49,7 @@ export function getApiErrorMessageFromPayload (
 
   if (code === 'REQUEST_TIMEOUT' || statusCode === 408 || statusCode === 504) {
     return context === 'auth'
-      ? 'Unable to complete sign in. Please try again.'
+      ? 'Request timed out. Please check your internet connection and try again.'
       : 'The request took too long. Please try again.'
   }
 
