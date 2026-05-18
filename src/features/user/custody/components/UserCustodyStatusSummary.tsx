@@ -19,6 +19,11 @@ function getStatusMessage (
   sessionStatus: UserCustodyStatusSummaryProps['sessionStatus']
 ): string {
   if (!sessionStatus) return 'Preparing live session details.'
+  const canRetry = Boolean(
+    sessionStatus.current_window_expired &&
+    sessionStatus.can_retry &&
+    !sessionStatus.scanned_at
+  )
   if (sessionStatus.attempt_status === 'accepted') {
     return 'The guard accepted the handover. Give the item to the guard now.'
   }
@@ -28,7 +33,7 @@ function getStatusMessage (
   if (sessionStatus.attempt_status === 'timed_out') {
     return 'The handover session timed out. Start a new handover session if you still need to continue.'
   }
-  if (sessionStatus.current_window_expired && sessionStatus.can_retry) {
+  if (canRetry) {
     return 'The current QR window expired. Generate a fresh QR to continue the same session.'
   }
   if (sessionStatus.scanned_at) {
@@ -46,7 +51,11 @@ export default function UserCustodyStatusSummary ({
   isCancelling,
   isRetrying
 }: UserCustodyStatusSummaryProps) {
-  const canRetry = Boolean(sessionStatus?.current_window_expired && sessionStatus.can_retry)
+  const canRetry = Boolean(
+    sessionStatus?.current_window_expired &&
+    sessionStatus.can_retry &&
+    !sessionStatus.scanned_at
+  )
   const canCancel = sessionStatus?.attempt_status === 'open'
 
   return (
@@ -115,7 +124,7 @@ export default function UserCustodyStatusSummary ({
               } as CSSProperties
             }
           >
-            {isRetrying ? <IonSpinner name='crescent' /> : 'Open Fresh QR'}
+            {isRetrying ? <IonSpinner name='crescent' /> : 'Get Fresh QR'}
           </IonButton>
         )}
         {canCancel && (

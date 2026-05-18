@@ -1,7 +1,7 @@
 import type { Page } from '../../../../umak-link-web/node_modules/@playwright/test'
 import { test, expect } from '../../fixtures/user.fixture'
 
-type FlowMode = 'accepted' | 'rejected' | 'retry' | 'timed_out'
+type FlowMode = 'accepted' | 'rejected' | 'retry' | 'scanned_expired' | 'timed_out'
 
 async function attachHandoverImage (page: Page) {
   await page
@@ -38,6 +38,11 @@ async function mockCustodyFlow (
   let currentAttemptNumber = 1
   let statusPollCount = 0
   let finalEventRecorded = false
+  let currentWindowExpiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString()
+
+  const refreshCurrentWindow = () => {
+    currentWindowExpiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString()
+  }
 
   const history = [
     {
@@ -73,6 +78,7 @@ async function mockCustodyFlow (
   })
 
   await page.route('**/custody/attempts', async route => {
+    refreshCurrentWindow()
     history.push({
       history_id: `handover-attempted-${history.length + 1}`,
       event_type: 'handover_attempted',
@@ -101,7 +107,7 @@ async function mockCustodyFlow (
         attempt_status: 'open',
         qr_status: 'active',
         custody_status: 'handover_in_progress',
-        expires_at: '2026-05-14T08:05:00.000Z',
+        expires_at: currentWindowExpiresAt,
         number_of_attempts: 1,
         max_number_of_attempts: 5,
         retries_remaining: 4
@@ -125,8 +131,34 @@ async function mockCustodyFlow (
           qr_status: 'expired',
           attempt_status: 'open',
           custody_status: 'handover_in_progress',
-          expires_at: '2026-05-14T08:05:00.000Z',
+          expires_at: currentWindowExpiresAt,
           scanned_at: null,
+          decision_at: null,
+          current_window_expired: true,
+          can_retry: true,
+          number_of_attempts: 1,
+          max_number_of_attempts: 5,
+          retries_remaining: 4
+        })
+      })
+      return
+    }
+
+    if (mode === 'scanned_expired' && statusPollCount >= 1) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          qr_code_session_id: 'qr-session-123',
+          custody_attempt_id: 'attempt-123',
+          post_id: 123,
+          item_id: 'item-123',
+          manual_entry_code: 'AB2C3D',
+          qr_status: 'expired',
+          attempt_status: 'open',
+          custody_status: 'handover_in_progress',
+          expires_at: currentWindowExpiresAt,
+          scanned_at: '2026-05-14T08:01:00.000Z',
           decision_at: null,
           current_window_expired: true,
           can_retry: true,
@@ -151,7 +183,7 @@ async function mockCustodyFlow (
           qr_status: 'active',
           attempt_status: 'open',
           custody_status: 'handover_in_progress',
-          expires_at: '2026-05-14T08:05:00.000Z',
+          expires_at: currentWindowExpiresAt,
           scanned_at: '2026-05-14T08:01:00.000Z',
           decision_at: null,
           current_window_expired: false,
@@ -201,7 +233,7 @@ async function mockCustodyFlow (
           qr_status: mode,
           attempt_status: mode,
           custody_status: mode === 'accepted' ? 'with_guard' : 'with_reporter',
-          expires_at: '2026-05-14T08:05:00.000Z',
+          expires_at: currentWindowExpiresAt,
           scanned_at: '2026-05-14T08:01:00.000Z',
           decision_at: '2026-05-14T08:02:00.000Z',
           current_window_expired: false,
@@ -248,7 +280,7 @@ async function mockCustodyFlow (
           qr_status: 'expired',
           attempt_status: 'timed_out',
           custody_status: 'with_reporter',
-          expires_at: '2026-05-14T08:15:00.000Z',
+          expires_at: currentWindowExpiresAt,
           scanned_at: null,
           decision_at: null,
           current_window_expired: false,
@@ -273,7 +305,7 @@ async function mockCustodyFlow (
         qr_status: 'active',
         attempt_status: 'open',
         custody_status: 'handover_in_progress',
-        expires_at: '2026-05-14T08:05:00.000Z',
+        expires_at: currentWindowExpiresAt,
         scanned_at: null,
         decision_at: null,
         current_window_expired: false,
@@ -288,6 +320,7 @@ async function mockCustodyFlow (
   await page.route('**/custody/sessions/qr-session-123/retry', async route => {
     currentAttemptNumber = 2
     statusPollCount = 1
+    refreshCurrentWindow()
 
     await route.fulfill({
       status: 200,
@@ -299,7 +332,7 @@ async function mockCustodyFlow (
         attempt_status: 'open',
         qr_status: 'active',
         custody_status: 'handover_in_progress',
-        expires_at: '2026-05-14T08:10:00.000Z',
+        expires_at: currentWindowExpiresAt,
         number_of_attempts: 2,
         max_number_of_attempts: 5,
         retries_remaining: 3
@@ -486,7 +519,11 @@ test.describe('User custody flow', () => {
 
     await expect(page.getByTestId('user-custody-qr-card')).toBeVisible()
     await expect(page.getByTestId('user-custody-qr-image')).toBeVisible()
-    await expect(page.getByText('This QR code is valid for the whole session.')).toBeVisible()
+    await expect(page.getByTestId('user-custody-countdown-card')).toBeVisible()
+    await expect(page.getByTestId('user-custody-countdown')).toHaveText(/\d{2}:\d{2}/)
+    await expect(
+      page.getByText('This QR code stays live until the current handover window expires.')
+    ).toBeVisible()
     await expect(page.getByTestId('user-custody-manual-entry-details')).toBeVisible()
     await expect(page.getByTestId('user-custody-manual-entry-code')).toHaveText(
       'AB2 C3D'
@@ -579,6 +616,12 @@ test.describe('User custody flow', () => {
     await clickIonButtonByTestId(page, 'user-custody-open-qr')
 
     await expect(page.getByTestId('user-custody-retry')).toBeVisible()
+    await expect(page.getByTestId('user-custody-qr-overlay')).toContainText(
+      'QR Expired. Click Get Fresh QR to get a new one.'
+    )
+    await expect(page.getByTestId('user-custody-manual-entry-overlay')).toContainText(
+      'QR Expired. Click Get Fresh QR to get a new one.'
+    )
     await clickIonButtonByTestId(page, 'user-custody-retry')
     await expect(page.getByTestId('user-custody-attempt-counter')).toContainText(
       '2 / 5'
@@ -592,6 +635,23 @@ test.describe('User custody flow', () => {
     await expect(
       page.getByTestId('user-custody-history-attempt_cancelled').first()
     ).toBeVisible()
+  })
+
+  test('expired QR window does not expose retry after the guard has already scanned it', async ({
+    page
+  }) => {
+    await mockCustodyFlow(page, 'scanned_expired')
+    await goToHandoverPage(page)
+    await completeHandoverForm(page)
+    await clickIonButtonByTestId(page, 'user-custody-open-qr')
+
+    await expect(page.getByTestId('user-custody-qr-overlay')).toContainText(
+      'Guard scanned your QR. Waiting for acceptance or rejection.'
+    )
+    await expect(page.getByTestId('user-custody-status-message')).toContainText(
+      'The guard scanned your QR. Wait for the decision while polling continues.'
+    )
+    await expect(page.getByTestId('user-custody-retry')).toHaveCount(0)
   })
 
   test('timed out session clears the live handover view and restores the handover action', async ({

@@ -98,7 +98,8 @@ export function mapRetryResultToStoredSession (
     expiresAt: result.expires_at,
     numberOfAttempts: result.number_of_attempts,
     maxNumberOfAttempts: result.max_number_of_attempts,
-    retriesRemaining: result.retries_remaining
+    retriesRemaining: result.retries_remaining,
+    createdAt: new Date().toISOString()
   }
 }
 
