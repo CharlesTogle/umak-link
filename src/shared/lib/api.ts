@@ -254,6 +254,9 @@ class ApiClient {
     getMe: (): Promise<AuthMeResponse> =>
       this.request<AuthMeResponse>('GET', '/auth/me'),
 
+    appLoginAudit: (): Promise<{ success: boolean }> =>
+      this.request<{ success: boolean }>('POST', '/auth/app-login-audit'),
+
     updateProfile: (updates: {
       notification_token?: string | null;
       user_name?: string | null;

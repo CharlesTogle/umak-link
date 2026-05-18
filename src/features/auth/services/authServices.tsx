@@ -73,6 +73,12 @@ export const authServices = {
 
       const user = mapUserProfileToUser(response.user);
 
+      if (user.user_type === 'Staff' || user.user_type === 'Admin' || user.user_type === 'Guard') {
+        void api.auth.appLoginAudit().catch((error) => {
+          console.error('[authServices] App login audit failed:', error)
+        })
+      }
+
       // Register for push notifications
       const deviceToken = await registerForPushNotifications().catch((err) => {
         console.error('[authServices] Push notification registration failed:', err);
