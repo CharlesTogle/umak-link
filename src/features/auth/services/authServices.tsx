@@ -9,9 +9,11 @@ import type { User } from '@/features/auth/contexts/UserContext';
 import { Capacitor } from '@capacitor/core';
 import { registerForPushNotifications } from '@/features/auth/services/registerForPushNotifications';
 import { deleteCachedFile } from '@/shared/utils/fileUtils';
+import {
+  PROFILE_PICTURE_CACHE_FILE_NAME,
+  syncMissingProfileFields,
+} from '@/features/auth/utils/profileSync';
 import { normalizeUserType } from '@/features/auth/utils/userRole';
-
-const PROFILE_PICTURE_CACHE_FILE_NAME = 'profilePicture.webp';
 
 export interface GoogleProfile {
   googleIdToken: string;
@@ -54,7 +56,7 @@ export const authServices = {
       console.log('[authServices] GetOrRegisterAccount called with:', profile.email);
 
       // Exchange Google ID token for a Supabase session
-      const { error: signInError } = await supabase.auth.signInWithIdToken({
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithIdToken({
         provider: 'google',
         token: profile.googleIdToken,
       });
@@ -71,7 +73,19 @@ export const authServices = {
         return { user: null, error: 'Failed to fetch user profile' };
       }
 
-      const user = mapUserProfileToUser(response.user);
+      const sessionMetadata =
+        signInData.session?.user?.user_metadata ??
+        (await supabase.auth.getSession()).data.session?.user.user_metadata ??
+        null;
+      const syncedProfile = await syncMissingProfileFields(
+        response.user,
+        sessionMetadata,
+        {
+          userName: profile.user_name,
+          profilePictureUrl: profile.profile_picture_url ?? null,
+        }
+      );
+      const user = mapUserProfileToUser(syncedProfile);
 
       if (user.user_type === 'Staff' || user.user_type === 'Admin' || user.user_type === 'Guard') {
         void api.auth.appLoginAudit().catch((error) => {
