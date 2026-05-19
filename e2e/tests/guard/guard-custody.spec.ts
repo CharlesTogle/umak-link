@@ -160,7 +160,8 @@ test.describe('Guard custody flow', () => {
     await page.getByTestId('guard-scan-submit').click()
 
     await expect(page).toHaveURL(/\/guard\/scan$/)
-    await expect(page.getByTestId('guard-stale-scan-banner')).toContainText(
+    await expect(page.getByTestId('guard-scan-toast')).toHaveAttribute(
+      'message',
       'QR expired. Ask the student to refresh and present a new QR.'
     )
     await expect(page.getByTestId('guard-review-page')).toHaveCount(0)
@@ -178,7 +179,8 @@ test.describe('Guard custody flow', () => {
     await page.getByTestId('guard-open-camera').click()
 
     await expect(page).toHaveURL(/\/guard\/scan$/)
-    await expect(page.getByTestId('guard-stale-scan-banner')).toContainText(
+    await expect(page.getByTestId('guard-scan-toast')).toHaveAttribute(
+      'message',
       'QR expired. Ask the student to refresh and present a new QR.'
     )
     await expect(page.getByTestId('guard-review-page')).toHaveCount(0)

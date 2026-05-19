@@ -5,7 +5,6 @@ import Header from '@/shared/components/Header'
 import { useNavigation } from '@/shared/hooks/useNavigation'
 import GuardManualEntryForm from '@/features/guard/components/GuardManualEntryForm'
 import GuardPageSectionHeader from '@/features/guard/components/GuardPageSectionHeader'
-import GuardStatusBanner from '@/features/guard/components/GuardStatusBanner'
 import { useGuardScanMutation } from '@/features/guard/hooks/useGuardCustodyMutations'
 import GuardCameraScannerCard from '@/features/guard/components/GuardCameraScannerCard'
 import GuardSurfaceCard from '@/features/guard/components/GuardSurfaceCard'
@@ -23,7 +22,7 @@ const STALE_SCAN_MESSAGE =
 function isStaleGuardScanError (error: unknown): boolean {
   return (
     error instanceof GuardCustodyError &&
-    (error.statusCode === 404 || error.statusCode === 409)
+    error.statusCode === 409
   )
 }
 
@@ -32,7 +31,6 @@ export default function GuardScan () {
   const [toastMessage, setToastMessage] = useState('')
   const [toastColor, setToastColor] = useState<'danger' | 'success'>('danger')
   const [showToast, setShowToast] = useState(false)
-  const [scanWarning, setScanWarning] = useState<string | null>(null)
   const activeSession = readActiveGuardScanSession()
   const guardScanMutation = useGuardScanMutation()
 
@@ -52,13 +50,11 @@ export default function GuardScan () {
   }
 
   const handleLoadReview = async (payload: GuardScanPayload) => {
-    setScanWarning(null)
-
     try {
       await loadReview(payload)
     } catch (error) {
       if (isStaleGuardScanError(error)) {
-        setScanWarning(STALE_SCAN_MESSAGE)
+        openToast(STALE_SCAN_MESSAGE)
         return
       }
 
@@ -99,15 +95,6 @@ export default function GuardScan () {
                 </div>
               </div>
             </GuardSurfaceCard>
-
-            {scanWarning ? (
-              <GuardStatusBanner
-                tone='warning'
-                title='Refresh Student QR'
-                description={scanWarning}
-                testId='guard-stale-scan-banner'
-              />
-            ) : null}
 
             {activeSession ? (
               <GuardSurfaceCard
@@ -168,6 +155,7 @@ export default function GuardScan () {
         </div>
       </IonContent>
       <IonToast
+        data-testid='guard-scan-toast'
         isOpen={showToast}
         onDidDismiss={() => setShowToast(false)}
         message={toastMessage}
