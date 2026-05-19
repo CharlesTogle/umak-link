@@ -36,12 +36,13 @@ function formatRateLimitedMessage (retryAfterSeconds?: number): string {
 }
 
 export function getApiErrorMessageFromPayload (
-  payload: Pick<ApiErrorPayload, 'statusCode' | 'code' | 'retryAfterSeconds'>,
+  payload: Pick<ApiErrorPayload, 'statusCode' | 'code' | 'message' | 'retryAfterSeconds'>,
   context: ApiErrorContext = 'action',
   fallback?: string
 ): string {
   const statusCode = payload.statusCode ?? 500
   const code = payload.code ?? getDefaultErrorCode(statusCode)
+  const message = typeof payload.message === 'string' ? payload.message.trim() : ''
 
   if (code === 'NETWORK_ERROR' || statusCode === 0) {
     return 'Please check your internet connection and try again.'
@@ -51,6 +52,10 @@ export function getApiErrorMessageFromPayload (
     return context === 'auth'
       ? 'Request timed out. Please check your internet connection and try again.'
       : 'The request took too long. Please try again.'
+  }
+
+  if (code === 'CUSTODY_HANDOVER_LIMIT_REACHED') {
+    return message || fallback || 'You can only attempt handover a limited number of times in 1 hour. Please try again later.'
   }
 
   if (code === 'RATE_LIMITED' || statusCode === 429) {
@@ -121,6 +126,7 @@ export function getUiErrorMessage (
       return getApiErrorMessageFromPayload({
         statusCode: typed.statusCode,
         code: typed.code,
+        message: typed.message,
         retryAfterSeconds: typed.retryAfterSeconds
       }, context, fallback)
     }

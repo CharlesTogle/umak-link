@@ -128,6 +128,7 @@ class ApiError extends Error {
     const message = getApiErrorMessageFromPayload({
       statusCode,
       code,
+      message: payload?.message,
       retryAfterSeconds: payload?.retryAfterSeconds
     }, params.context ?? 'action', params.fallbackMessage);
 
@@ -146,6 +147,7 @@ class ApiError extends Error {
     return getApiErrorMessageFromPayload({
       statusCode: this.statusCode,
       code: this.code,
+      message: this.message,
       retryAfterSeconds: this.retryAfterSeconds
     }, context, fallbackMessage)
   }
